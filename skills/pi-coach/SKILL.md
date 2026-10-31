@@ -102,8 +102,8 @@ Keep the global file neutral and put project rules into the project. A one-off e
 `~/.pi/agent/AGENTS.md` reaches every lane of every project and contradicts most of them.
 
 **The coding block.** Every project carries the same block at the top of its `AGENTS.md`: ask only on
-architectural decisions, the smallest complete change, the project's own check, no commits, and two last
-lines with what was skipped and which risk remains. The canonical text is this skill's
+architectural decisions, the smallest complete change, no commits, and two last lines with what was
+skipped and which risk remains. The canonical text is this skill's
 `templates/ponytail-block.md`; a project copy opens with
 `<!-- ponytail v1 — generated block. Edit the template, not this copy. -->`. Change the template and copy
 it again — never edit a project copy in place, or the copies drift. The `demo` project carries the block

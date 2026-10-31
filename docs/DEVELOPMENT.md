@@ -57,8 +57,8 @@ The backend module is imported once, at `hermes-serve` start. An edit reaches th
 ## The coding block
 
 Every project carries the same block at the top of its `AGENTS.md`. It sets the working rules for a lane:
-ask only on architectural decisions, take the smallest complete change, run the project's own check,
-leave the change uncommitted, and end with what was skipped and which risk remains.
+ask only on architectural decisions, take the smallest complete change, leave the change uncommitted,
+and end with what was skipped and which risk remains.
 
 The canonical text is `skills/pi-coach/templates/ponytail-block.md`. A project copy opens with
 `<!-- ponytail v1 — generated block. Edit the template, not this copy. -->`. Change the template, then
