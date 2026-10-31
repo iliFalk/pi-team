@@ -47,6 +47,8 @@ Never cut: validation at trust boundaries, error handling that prevents data los
 
 ## Levels
 
+These rules hold for the whole session. If the task names a level, apply that row; without a level, full applies.
+
 | Level | Behavior |
 |-------|----------|
 | **lite** | Build what was asked. Name the smaller option in one line and let the user pick. |
