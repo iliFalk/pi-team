@@ -54,3 +54,5 @@ These rules hold for the whole session. If the task names a level, apply that ro
 | **lite** | Build what was asked. Name the smaller option in one line and let the user pick. |
 | **full** | The rules above. Default. |
 | **ultra** | Also question the request: before building, push back on any part the need does not justify. |
+
+<!-- /ponytail -->

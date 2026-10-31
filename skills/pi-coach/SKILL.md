@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 2.1.0
+version: 2.2.0
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -82,10 +82,20 @@ pi-lane <lane> "<task>" --project <project> --feature <feature>
 `pi-project list` shows projects and their features; `pi-feature list <project>` shows one project's
 features. A lane for a thrown-away experiment can still run outside the registry with `--repo <path>`.
 
+**The coding block travels with the project.** `pi-project agents [<project>…] [--check]` writes the
+block from this skill's `templates/ponytail-block.md` into `<repo>/AGENTS.md`, or refreshes the copy already
+there. The block spans from `<!-- ponytail v1` to `<!-- /ponytail -->`; anything after the end marker is
+the project's own rules and survives. A copy written before the end marker existed ends at its last level
+row and is updated on the legacy rule. `--check` prints `current`, `outdated`, `missing`, `identical` or
+`no markers` per project and changes nothing. A project whose `AGENTS.md` carries its own rules and no
+block is refused as `no markers` — merge that file by hand. Run `--check` after any template change.
+
 **Feature ↔ session link.** Ilja links his current chat session to a feature from the panel: the feature
 header carries `+` (link) and `✓` (linked, click to remove). The link lives in the registry, under the
 feature's `sessions` list, so one session can serve several features and one feature several sessions.
-The right pane lists a lane's feature sessions and jumps to one with `host.openSession`. The API is
+The right pane lists a lane's feature sessions and jumps to one with `host.openSession`. Titles come from
+`host.request('session.title', {session_id})`, which answers `pending` while the session row does not
+exist yet — render the id until it does. The API is
 `POST /api/plugins/pi-team/link` and `/unlink` with `{project, feature, session}`; an unknown project or
 feature answers 404. Automatic attribution is impossible from the agent side — the shell wrapper strips
 `HERMES_SESSION_*` — so the link is always a deliberate click.
@@ -107,7 +117,15 @@ skipped and which risk remains. The canonical text is this skill's
 `templates/ponytail-block.md`; a project copy opens with
 `<!-- ponytail v1 — generated block. Edit the template, not this copy. -->`. Change the template and copy
 it again — never edit a project copy in place, or the copies drift. The `demo` project carries the block
-and is the sample to compare against.
+and is the sample to compare against. The levels (`lite`, `full`, `ultra`) are chosen by naming one in
+the task; `full` applies when the task names none, and no slash command switches them.
+
+**Ilja's text is his text.** When he hands over prose for the block — or for any file — apply only the
+edits he asked for and keep his wording, order and emphasis verbatim. Do not restructure, rename
+sections or "improve" a sentence on the way in: a rewritten block loses the intent he encoded, and he
+rejects it. Mark every addition (`<!-- +ADDED … -->`, `<!-- ~CHANGED: was … -->`) and show the marked
+text in chat before writing the file. Deleting or rewriting a line he wrote needs his explicit word,
+even when the line looks dead in the target context — name the reason and let him decide.
 
 ## Lane: open
 
@@ -157,8 +175,20 @@ arrives, and the pane shows the question with one button per option.
 - The runner writes `$HERMES_HOME/lanes/<lane>/question.json`: `id`, `method`, `title`, `message`,
   `options`. pi sends `Other…` and `Chat about this` as the last two options itself; render them like the
   rest.
-- The pane posts the pick to the plugin backend, which writes `answer.json` as
-  `{"id": …, "value": "<option string>"}`, or `{"id": …, "cancelled": true}` to skip.
+- **The pane answers it.** The backend reads `question.json` into the lane payload while the state is
+  `waiting`; `POST /api/plugins/pi-team/lanes/<lane>/answer` writes `answer.json` for the runner, and
+  `plugin.js` draws the title with one button per option plus `dismiss`. A value that is not one of the
+  options is refused with `422`, a lane with no open question with `409`.
+- Without a signed-in pane the route needs a session ticket, so write the file yourself:
+
+```sh
+printf '{"id": "<id from question.json>", "value": "<option string exactly as pi sent it>"}' \
+  > ~/.hermes/lanes/<lane>/answer.json
+```
+
+  Use `{"id": …, "cancelled": true}` to skip the question.
+- `Other…` asks for typed text, so a click on it relays the bare label. Ask Ilja to put the text in the
+  chat, then run the follow-up lane with it.
 - Send the option string exactly as pi sent it — that is the form the dialog matches.
 - The runner replies `{"type":"extension_ui_response","id":…,"value":…}` on stdin, deletes both files
   and returns the state to `running`.
@@ -319,6 +349,12 @@ mv ~/src/thinkrail/packages/spec-graph/node_modules/package \
 - **The lane dies with the gateway.** The process is a child of it; the `pi` session survives, so a
   follow-up run continues the conversation. Use `setsid` or `systemd-run --user` when a lane must outlive
   a gateway restart.
+- **A panel feature exists only when three layers are present.** The runner writes an artifact, the
+  backend exposes it in the lane payload, the pane renders it and posts the answer back. Check each
+  layer before reporting a feature as working or writing it into this skill: the runner half alone
+  leaves a lane parked and invisible to Ilja. Search the artifact name in `dashboard/plugin_api.py` and
+  in `plugin.js` — a route list without the field, or a field without the handler, is a half-built flow,
+  not a fault in the lane.
 - **The pane holds no privilege.** It only reads files and git; every action goes through the runner.
 
 ## Verification
@@ -326,5 +362,7 @@ mv ~/src/thinkrail/packages/spec-graph/node_modules/package \
 - `~/.hermes/lanes/<lane>/lane.json` names state `done` or `failed`, never `running` after the run.
 - A lane that asked shows `waiting` with a `question.json`, and returns to `running` when `answer.json`
   lands. Left `waiting` after the run, the answer channel is broken, not the task.
+- `POST /lanes/<lane>/answer` answers `422` for a value outside the options and `409` when no question is
+  open; an accepted answer carries the question `id` back.
 - `git -C <worktree> status --porcelain` reports the lane work.
 - The project gates ran as commands, and the output is attached to the report.
