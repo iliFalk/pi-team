@@ -46,6 +46,17 @@ them before the run.
 Defaults: provider `nvidia`, model `nvidia/nemotron-3.5-super-vl-120b-a12b`, thinking `medium`.
 Override with `--provider`, `--model`, `--thinking`.
 
+**Context files reach a lane from two places.** The worktree's `AGENTS.md` (and the copies above it in
+the repository) and the global `~/.pi/agent/AGENTS.md` both load, and both load without `--approve` —
+that flag gates only `.pi/mcp.json` and `.pi/prompts/`. Hermes keeps its own `~/.hermes/AGENTS.md`,
+which `pi` never reads. Run `cat ~/.pi/agent/AGENTS.md` before a run: anything left there applies to
+every lane in every project.
+
+To prove the chain works, put `Always answer with the single word MANGO.` in a scratch repo's
+`AGENTS.md`, open a lane with `--repo <scratch>` asking which word it must answer with, and expect
+`MANGO`. Project rules that do not appear in the answer mean the file was not read; rules from a
+stale global file mean the global file is the problem, not the project.
+
 Web access needs no setup: `pi-web-access` (nicobailon) is installed as `npm:pi-web-access` in
 `~/.pi/agent/settings.json`. Workflow skills for lanes live in `~/.pi/agent/skills/`:
 `writing-specs`, `brainstorming`, `shipping-a-pr`, `setting-up-a-project`, `importing-a-codebase`,
@@ -78,6 +89,25 @@ The right pane lists a lane's feature sessions and jumps to one with `host.openS
 `POST /api/plugins/pi-team/link` and `/unlink` with `{project, feature, session}`; an unknown project or
 feature answers 404. Automatic attribution is impossible from the agent side — the shell wrapper strips
 `HERMES_SESSION_*` — so the link is always a deliberate click.
+
+## Which instructions a lane obeys
+
+| File | Read by a lane | Note |
+|---|---|---|
+| `<repo>/AGENTS.md`, and the same file upward | yes | loads without `--approve`; the project file wins |
+| `~/.pi/agent/AGENTS.md` | yes | global rules for every lane |
+| `~/.hermes/AGENTS.md` | no | Hermes rules; `pi` never reads them |
+
+Keep the global file neutral and put project rules into the project. A one-off experiment left in
+`~/.pi/agent/AGENTS.md` reaches every lane of every project and contradicts most of them.
+
+**The coding block.** Every project carries the same block at the top of its `AGENTS.md`: ask only on
+architectural decisions, the smallest complete change, the project's own check, no commits, and two last
+lines with what was skipped and which risk remains. The canonical text is this skill's
+`templates/ponytail-block.md`; a project copy opens with
+`<!-- ponytail v1 — generated block. Edit the template, not this copy. -->`. Change the template and copy
+it again — never edit a project copy in place, or the copies drift. The `demo` project carries the block
+and is the sample to compare against.
 
 ## Lane: open
 
@@ -278,6 +308,13 @@ mv ~/src/thinkrail/packages/spec-graph/node_modules/package \
   `failed`; trust that state, not the exit code.
 - **A new directory brings a trust dialog that a headless run cannot answer.** Project-local
   `.pi/mcp.json` and `.pi/prompts/` load only with `--approve`; without it they are ignored, not broken.
+  `AGENTS.md` is the exception — it loads in both cases, so instructions from the repository apply
+  even when nothing was approved.
+- **A stale `~/.pi/agent/AGENTS.md` overrides every project.** The global file is read by every lane
+  and every interactive `pi` session, so a leftover experiment there ("write one file `index.html`,
+  create nothing else") contradicts the task of an unrelated lane and looks like the lane disobeying.
+  Keep project rules in the project's own `AGENTS.md` and the global file neutral. `--no-context-files`
+  silences the repository's rules too, so repair the file instead of passing that flag.
 - **A silent MCP server prints in the header on start.** It does not block the lane.
 - **The lane dies with the gateway.** The process is a child of it; the `pi` session survives, so a
   follow-up run continues the conversation. Use `setsid` or `systemd-run --user` when a lane must outlive

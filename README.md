@@ -50,4 +50,5 @@ Nothing to configure. The plugin reads the gateway it is attached to and the lan
 
 - `docs/DEVELOPMENT.md` — architecture, backend routes, registry, update and removal
 - `skills/pi-coach/SKILL.md` — the procedure the agent follows
+- `skills/pi-coach/templates/ponytail-block.md` — the coding block every project carries
 - `LICENSE` — MIT
