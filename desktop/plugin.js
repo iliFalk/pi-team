@@ -398,6 +398,51 @@ function RenameSession() {
   })
 }
 
+function QuestionBlock({ ctx, lane, question, onDone }) {
+  const send = body =>
+    ctx
+      .rest(`/lanes/${encodeURIComponent(lane)}/answer`, {
+        method: 'POST',
+        body,
+        timeoutMs: 8000
+      })
+      .then(() => onDone && onDone())
+
+  const options = (question.options || []).filter(Boolean)
+
+  return jsxs('div', {
+    className: 'border-b border-(--ui-stroke-secondary) px-2.5 py-1.5',
+    children: [
+      jsx('div', {
+        className: 'text-[0.625rem] font-medium text-(--ui-accent)',
+        children: 'the lane asks'
+      }),
+      jsx('div', {
+        className: 'mt-0.5 text-[0.6875rem] leading-relaxed text-(--ui-text-primary)',
+        children: question.title || question.message || 'a question without text'
+      }),
+      ...options.map(option =>
+        jsx(
+          'button',
+          {
+            className:
+              'mt-1 mr-1 rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.625rem] text-(--ui-text-primary) hover:bg-(--ui-fill-tertiary)',
+            onClick: () => send({ value: option }),
+            children: option
+          },
+          option
+        )
+      ),
+      jsx('button', {
+        className:
+          'mt-1 rounded px-1.5 py-0.5 text-[0.625rem] text-(--ui-text-quaternary) hover:text-(--ui-text-secondary)',
+        onClick: () => send({ cancelled: true }),
+        children: 'dismiss'
+      })
+    ]
+  })
+}
+
 function LaneStatus({ ctx }) {
   const laneName = useValue(selectedLane)
   const query = useQuery({
@@ -440,6 +485,14 @@ function LaneStatus({ ctx }) {
           'border-b border-(--ui-stroke-secondary) px-2.5 py-1.5 font-mono text-[0.6875rem] text-(--ui-text-secondary)',
         children: lane.lane
       }),
+      lane.question
+        ? jsx(QuestionBlock, {
+            ctx,
+            lane: lane.lane,
+            question: lane.question,
+            onDone: () => query.refetch()
+          })
+        : null,
       jsx(Row, { label: 'state', value: lane.state }),
       lane.shelved ? jsx(Row, { label: 'shelf', value: lane.shelved_reason }) : null,
       jsx(Row, { label: 'branch', value: lane.branch || '—' }),
@@ -538,7 +591,12 @@ export default {
       id: 'lanes',
       area: 'panes',
       title: 'pi lanes',
-      data: { placement: 'left', dock: { pane: 'workspace', pos: 'left' }, width: '230px' },
+      data: {
+        placement: 'right',
+        dock: { pane: 'workspace', pos: 'right', enforce: true },
+        width: '250px',
+        minWidth: '180px'
+      },
       render: () => jsx(LaneList, { ctx })
     })
 
@@ -546,7 +604,12 @@ export default {
       id: 'status',
       area: 'panes',
       title: 'pi lane status',
-      data: { placement: 'right', dock: { pane: 'workspace', pos: 'right' }, width: '290px' },
+      data: {
+        placement: 'right',
+        dock: { pane: 'pi-team:lanes', pos: 'right', enforce: true },
+        width: '320px',
+        minWidth: '220px'
+      },
       render: () => jsx(LaneStatus, { ctx })
     })
   }
