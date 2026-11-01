@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 2.2.0
+version: 2.4.0
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -212,6 +212,11 @@ PY
 
 The `pi-team` right pane shows the same fields: last text, last tool call, turns, tokens and cost.
 
+**Where the panes live.** Both sit on the right edge, `pi lanes` left of `pi lane status`, each docked
+with `enforce: true` so the arrangement survives every app start — the layout is part of the plugin, not
+something Ilja rebuilds per machine. Moving them means editing the dock hints in `plugin.js`
+(§ Pane placement in `hermes-desktop-plugins`) and shipping the file to the machine that shows it.
+
 ## Lane: verify
 
 A lane report is not evidence. The orchestrator verifies with commands:
@@ -236,6 +241,23 @@ rm -rf ~/.hermes/lanes/<lane>
 
 A dirty worktree: `git worktree remove --force`, then `git worktree prune`. Keep the lane record while the
 branch is alive: it holds the task and the last text.
+
+## Where the panes live
+
+The desktop plugin registers two panes and tiles them into the right sidebar, side by side: `pi lanes`
+docked right of the workspace and `pi lane status` docked right of `pi-team:lanes`. Both carry
+`dock.enforce: true`, so the arrangement is the plugin's default on every start even after a drag.
+
+Settle this before rearranging them again:
+
+- The right sidebar is **one unit with the core `Files` pane**. Closing `Files` collapses that side and
+  the plugin panes go with it. Ilja reads that as "closing Files closes the whole right sidebar".
+- A plugin **cannot close or hide a core pane**: the SDK exposes `revealPane`, `undismissPane` and the
+  read-only `paneVisibility`; `dismissTreePane` stays inside the app's store.
+- A single floating card (`placement: 'floating'`) was built and reverted: it leaves the sidebar but
+  covers the conversation. Do not switch back without asking.
+- `pi-team:` prefixes every contributed id (`pi-team:lanes`), which is what a sibling pane names as its
+  dock anchor.
 
 ## Lane status (what the `pi-team` panes read)
 
@@ -324,7 +346,10 @@ mv ~/src/thinkrail/packages/spec-graph/node_modules/package \
   reconnects.
 - **The app may run on another machine.** The panes are read from
   `$HERMES_HOME/desktop-plugins/pi-team/plugin.js` on the machine that shows them, not from the agent
-  machine. Copy the file there and compare sha256.
+  machine. Copy the file there and compare sha256. That machine reaches the backend through the `url` in
+  its own `connection.json` (`mode: remote`) — the desktop backend, not the gateway port the routes were
+  tested on — so a replaced machine joins the tailnet first and the copy waits for SSH to work. Steps:
+  `hermes-desktop-plugins` § Ship to another machine.
 - **`ask_user_question` asks only under `--mode rpc`.** With `pi -p` or JSON mode it answers "UI not
   available" and the agent states its assumptions in text instead. That is a property of the mode, not a
   broken extension — switch the mode before concluding the tool is unusable.
@@ -355,6 +380,12 @@ mv ~/src/thinkrail/packages/spec-graph/node_modules/package \
   leaves a lane parked and invisible to Ilja. Search the artifact name in `dashboard/plugin_api.py` and
   in `plugin.js` — a route list without the field, or a field without the handler, is a half-built flow,
   not a fault in the lane.
+- **A probe lane is a live row in Ilja's panel.** A test run (`hello`, `ask2`, a throwaway theme probe)
+  leaves `~/.hermes/lanes/<lane>`, a worktree and a branch behind, and the pane draws it as real work; a
+  hand-written `sessions` entry in the registry then looks like a link Ilja added himself. After every
+  probe: `git -C <repo> worktree remove --force .worktrees/<lane>`, `git -C <repo> worktree prune`,
+  `rm -rf ~/.hermes/lanes/<lane>`, drop the session from `projects.json`, and confirm the lane count is
+  zero before calling the panel ready.
 - **The pane holds no privilege.** It only reads files and git; every action goes through the runner.
 
 ## Verification
@@ -364,5 +395,9 @@ mv ~/src/thinkrail/packages/spec-graph/node_modules/package \
   lands. Left `waiting` after the run, the answer channel is broken, not the task.
 - `POST /lanes/<lane>/answer` answers `422` for a value outside the options and `409` when no question is
   open; an accepted answer carries the question `id` back.
+- The lane and registry scripts carry no `.py` suffix, so
+  `importlib.util.spec_from_file_location` returns `None` for them. Test a function from one by loading it
+  with `SourceFileLoader(name, path)` plus `spec_from_loader` and calling it — that exercises the shipped
+  file instead of a wrapper copy that can drift from it.
 - `git -C <worktree> status --porcelain` reports the lane work.
 - The project gates ran as commands, and the output is attached to the report.
