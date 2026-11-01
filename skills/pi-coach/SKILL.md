@@ -93,7 +93,7 @@ block is refused as `no markers` — merge that file by hand. Run `--check` afte
 **Feature ↔ session link.** Ilja links his current chat session to a feature from the panel: the feature
 header carries `+` (link) and `✓` (linked, click to remove). The link lives in the registry, under the
 feature's `sessions` list, so one session can serve several features and one feature several sessions.
-The right pane lists a lane's feature sessions and jumps to one with `host.openSession`. Titles come from
+The right panel lists a lane's feature sessions and jumps to one with `host.openSession`. Titles come from
 `host.request('session.title', {session_id})`, which answers `pending` while the session row does not
 exist yet — render the id until it does. The API is
 `POST /api/plugins/pi-team/link` and `/unlink` with `{project, feature, session}`; an unknown project or
@@ -170,16 +170,16 @@ The runner reuses the existing worktree and branch. It does not reset the sessio
 ## Questions from a lane
 
 RPC mode turns an extension dialog into a request the runner can park: the lane blocks until the answer
-arrives, and the pane shows the question with one button per option.
+arrives, and the panel shows the question with one button per option.
 
 - The runner writes `$HERMES_HOME/lanes/<lane>/question.json`: `id`, `method`, `title`, `message`,
   `options`. pi sends `Other…` and `Chat about this` as the last two options itself; render them like the
   rest.
-- **The pane answers it.** The backend reads `question.json` into the lane payload while the state is
+- **The panel answers it.** The backend reads `question.json` into the lane payload while the state is
   `waiting`; `POST /api/plugins/pi-team/lanes/<lane>/answer` writes `answer.json` for the runner, and
   `plugin.js` draws the title with one button per option plus `dismiss`. A value that is not one of the
   options is refused with `422`, a lane with no open question with `409`.
-- Without a signed-in pane the route needs a session ticket, so write the file yourself:
+- Without a signed-in panel the route needs a session ticket, so write the file yourself:
 
 ```sh
 printf '{"id": "<id from question.json>", "value": "<option string exactly as pi sent it>"}' \
@@ -210,12 +210,10 @@ for line in p.read_text().splitlines():
 PY
 ```
 
-The `pi-team` right pane shows the same fields: last text, last tool call, turns, tokens and cost.
+The `pi-team` right panel shows the same fields: last text, last tool call, turns, tokens and cost.
 
-**Where the panes live.** Both sit on the right edge, `pi lanes` left of `pi lane status`, each docked
-with `enforce: true` so the arrangement survives every app start — the layout is part of the plugin, not
-something Ilja rebuilds per machine. Moving them means editing the dock hints in `plugin.js`
-(§ Pane placement in `hermes-desktop-plugins`) and shipping the file to the machine that shows it.
+**Where the panels live.** Both sit on the right edge with `enforce: true`; the constraint behind that
+choice is in § Where the panels live. Moving them means editing the dock hints in `plugin.js`.
 
 ## Lane: verify
 
@@ -242,29 +240,32 @@ rm -rf ~/.hermes/lanes/<lane>
 A dirty worktree: `git worktree remove --force`, then `git worktree prune`. Keep the lane record while the
 branch is alive: it holds the task and the last text.
 
-## Where the panes live
+## Where the panels live
 
-The desktop plugin registers two panes and tiles them into the right sidebar, side by side: `pi lanes`
+The app's SDK calls these tiles `panes`; this file writes `panel` for the thing Ilja sees and keeps
+`pane` for the API (`area: 'panes'`, `dock`, `placement`).
+
+The desktop plugin registers two panels and tiles them into the right sidebar, side by side: `pi lanes`
 docked right of the workspace and `pi lane status` docked right of `pi-team:lanes`. Both carry
 `dock.enforce: true`, so the arrangement is the plugin's default on every start even after a drag.
 
 Settle this before rearranging them again:
 
-- The right sidebar is **one unit with the core `Files` pane**. Closing `Files` collapses that side and
-  the plugin panes go with it. Ilja reads that as "closing Files closes the whole right sidebar".
-- A plugin **cannot close or hide a core pane**: the SDK exposes `revealPane`, `undismissPane` and the
+- The right sidebar is **one unit with the core `Files` panel**. Closing `Files` collapses that side and
+  the plugin panels go with it. Ilja reads that as "closing Files closes the whole right sidebar".
+- A plugin **cannot close or hide a core panel**: the SDK exposes `revealPane`, `undismissPane` and the
   read-only `paneVisibility`; `dismissTreePane` stays inside the app's store.
 - A single floating card (`placement: 'floating'`) was built and reverted: it leaves the sidebar but
   covers the conversation. Do not switch back without asking.
-- `pi-team:` prefixes every contributed id (`pi-team:lanes`), which is what a sibling pane names as its
+- `pi-team:` prefixes every contributed id (`pi-team:lanes`), which is what a sibling panel names as its
   dock anchor.
 
-## Lane status (what the `pi-team` panes read)
+## Lane status (what the `pi-team` panels read)
 
 | Field | Source |
 |---|---|
 | state | `lane.json`: `running`, `waiting` (a question is open), `done`, `failed`, `stopped` |
-| question | `question.json`: `id`, `method`, `title`, `options`; the pane draws one button per option |
+| question | `question.json`: `id`, `method`, `title`, `options`; the panel draws one button per option |
 | last text | last `message_end` with `role: assistant` and a text part |
 | last tool | `tool_use` part: name plus the command or path |
 | turns, tokens, cost | the same events: `usage.input`, `usage.output`, `usage.cost.total` |
@@ -273,7 +274,7 @@ Settle this before rearranging them again:
 | specs | every `SPEC.md` of the worktree with `id` and `type`, ordered by the `parent` chain; a dot marks a spec the lane touched |
 | shelf | why the lane left the active list: merged, quiet, or worktree gone |
 
-The backend reads the last 1 MB of `events.jsonl`. Older events do not reach the pane.
+The backend reads the last 1 MB of `events.jsonl`. Older events do not reach the panel.
 
 ## Shelf
 
@@ -284,7 +285,7 @@ A finished lane leaves the active list and sits on the shelf when one of these i
   count — nothing was merged);
 - it stayed quiet for 7 days.
 
-The left pane shows the shelf as a separate group. The record stays until the lane is closed, so the
+The left panel shows the shelf as a separate group. The record stays until the lane is closed, so the
 task and the last text survive. Close a shelved lane with the merge, worktree removal and record
 deletion from the section above.
 
@@ -329,7 +330,7 @@ mv ~/src/thinkrail/packages/spec-graph/node_modules/package \
 ## Lane rules
 
 1. **One writer per worktree.** The runner gives every lane its own worktree; never point two lanes at one.
-2. **Open lanes through the runner.** A hand-made `pi` run leaves no record, so the pane cannot show it.
+2. **Open lanes through the runner.** A hand-made `pi` run leaves no record, so the panel cannot show it.
 3. **Keep `--session-id` stable.** The runner derives it from repository and lane; a follow-up depends on it.
 4. **Keep one `in_progress` item in the plan.** A step is a task, not a thought.
 5. **The writer never accepts the work.** The orchestrator verifies in the main session.
@@ -344,7 +345,7 @@ mv ~/src/thinkrail/packages/spec-graph/node_modules/package \
   service; the agent session runs inside it, so schedule the restart
   (`systemd-run --user --on-active=25 … systemctl --user restart hermes-serve`) and say that the window
   reconnects.
-- **The app may run on another machine.** The panes are read from
+- **The app may run on another machine.** The panels are read from
   `$HERMES_HOME/desktop-plugins/pi-team/plugin.js` on the machine that shows them, not from the agent
   machine. Copy the file there and compare sha256. That machine reaches the backend through the `url` in
   its own `connection.json` (`mode: remote`) — the desktop backend, not the gateway port the routes were
@@ -375,18 +376,18 @@ mv ~/src/thinkrail/packages/spec-graph/node_modules/package \
   follow-up run continues the conversation. Use `setsid` or `systemd-run --user` when a lane must outlive
   a gateway restart.
 - **A panel feature exists only when three layers are present.** The runner writes an artifact, the
-  backend exposes it in the lane payload, the pane renders it and posts the answer back. Check each
+  backend exposes it in the lane payload, the panel renders it and posts the answer back. Check each
   layer before reporting a feature as working or writing it into this skill: the runner half alone
   leaves a lane parked and invisible to Ilja. Search the artifact name in `dashboard/plugin_api.py` and
   in `plugin.js` — a route list without the field, or a field without the handler, is a half-built flow,
   not a fault in the lane.
 - **A probe lane is a live row in Ilja's panel.** A test run (`hello`, `ask2`, a throwaway theme probe)
-  leaves `~/.hermes/lanes/<lane>`, a worktree and a branch behind, and the pane draws it as real work; a
+  leaves `~/.hermes/lanes/<lane>`, a worktree and a branch behind, and the panel draws it as real work; a
   hand-written `sessions` entry in the registry then looks like a link Ilja added himself. After every
   probe: `git -C <repo> worktree remove --force .worktrees/<lane>`, `git -C <repo> worktree prune`,
   `rm -rf ~/.hermes/lanes/<lane>`, drop the session from `projects.json`, and confirm the lane count is
   zero before calling the panel ready.
-- **The pane holds no privilege.** It only reads files and git; every action goes through the runner.
+- **The panel holds no privilege.** It only reads files and git; every action goes through the runner.
 
 ## Verification
 
