@@ -197,7 +197,9 @@ function LaneList({ ctx }) {
   })
   const current = useValue(selectedLane)
   const cwd = useValue(host.state.cwd)
-  const sessionId = useValue(host.state.activeSessionId)
+  // Stored ids survive a reload; runtime ids do not, and openSession takes the stored one.
+  const storedSessionId = useValue(host.state.focusedStoredSessionId)
+  const sessionId = storedSessionId || useValue(host.state.activeSessionId)
   const collapsed = useValue(collapsedAtom)
   const override = useValue(focusAtom)
   const lanes = (query.data && query.data.lanes) || []
@@ -472,7 +474,9 @@ function SessionTitle({ entry }) {
 }
 
 function RenameSession() {
-  const sessionId = useValue(host.state.activeSessionId)
+  // Stored ids survive a reload; runtime ids do not, and openSession takes the stored one.
+  const storedSessionId = useValue(host.state.focusedStoredSessionId)
+  const sessionId = storedSessionId || useValue(host.state.activeSessionId)
   const draft = useValue(titleDraft)
   const [busy, setBusy] = useState(false)
 

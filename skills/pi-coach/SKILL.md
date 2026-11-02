@@ -99,6 +99,9 @@ block is refused as `no markers` — merge that file by hand. Run `--check` afte
 **Feature ↔ session link.** Ilja links his current chat session to a feature from the panel: the feature
 header carries `+` (link) and `✓` (linked, click to remove). The link lives in the registry, under the
 feature's `sessions` list, so one session can serve several features and one feature several sessions.
+Store `host.state.focusedStoredSessionId`, never `host.state.activeSessionId`: the runtime id does not
+survive a reload, and `openSession` / `session.title` take the stored one — a runtime id in the registry
+opens a blank draft on click.
 The right panel lists a lane's feature sessions and jumps to one with `host.openSession`. Titles come from
 `host.request('session.title', {session_id})`, which answers `pending` while the session row does not
 exist yet — render the id until it does. The API is
