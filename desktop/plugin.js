@@ -446,7 +446,7 @@ function planGlyph(status) {
 
 const titleDraft = atom('')
 
-function SessionTitle({ entry }) {
+function SessionTitle({ entry, project, feature, onRemove }) {
   const query = useQuery({
     queryKey: ['pi-team', 'title', entry.id],
     queryFn: () => host.request('session.title', { session_id: entry.id }),
@@ -454,20 +454,32 @@ function SessionTitle({ entry }) {
   })
   const payload = query.data || {}
   const title = String(payload.title || (payload.result && payload.result.title) || '')
-  return jsxs('button', {
-    type: 'button',
-    onClick: () => host.openSession(entry.id),
-    title: title ? `open: ${title}` : 'open this session',
-    className:
-      'flex w-full items-baseline justify-between gap-2 px-2.5 py-[3px] text-left hover:bg-(--chrome-action-hover)',
+  return jsxs('div', {
+    className: 'flex items-center gap-1 pr-1.5 hover:bg-(--chrome-action-hover)',
     children: [
-      jsx('span', {
-        className: 'truncate text-[0.625rem] text-(--ui-text-secondary)',
-        children: title || entry.id
+      jsxs('button', {
+        type: 'button',
+        onClick: () => host.openSession(entry.id),
+        title: title ? `open: ${title}` : 'open this session',
+        className: 'flex min-w-0 flex-1 items-baseline justify-between gap-2 px-2.5 py-[3px] text-left',
+        children: [
+          jsx('span', {
+            className: 'truncate text-[0.625rem] text-(--ui-text-secondary)',
+            children: title || entry.id
+          }),
+          jsx('span', {
+            className: 'shrink-0 text-[0.625rem] text-(--ui-text-quaternary)',
+            children: '↗'
+          })
+        ]
       }),
-      jsx('span', {
-        className: 'shrink-0 text-[0.625rem] text-(--ui-text-quaternary)',
-        children: '↗'
+      jsx('button', {
+        type: 'button',
+        onClick: onRemove,
+        title: 'remove this session from the feature',
+        className:
+          'shrink-0 px-1 text-[0.6875rem] leading-none text-(--ui-text-quaternary) hover:text-(--ui-danger)',
+        children: '×'
       })
     ]
   })
@@ -633,7 +645,25 @@ function LaneStatus({ ctx }) {
       (lane.feature_sessions || []).length > 0
         ? jsx(Section, { title: `sessions · ${lane.feature_sessions.length}` })
         : null,
-      (lane.feature_sessions || []).map(entry => jsx(SessionTitle, { entry }, entry.id)),
+      (lane.feature_sessions || []).map(entry =>
+        jsx(
+          SessionTitle,
+          {
+            entry,
+            project: lane.project,
+            feature: lane.group,
+            onRemove: () =>
+              ctx
+                .rest('/unlink', {
+                  method: 'POST',
+                  body: { project: lane.project, feature: lane.group, session: entry.id },
+                  timeoutMs: 8000
+                })
+                .then(() => query.refetch())
+          },
+          entry.id
+        )
+      ),
       jsx(RenameSession, {}),
 
       jsx(Section, { title: 'task' }),

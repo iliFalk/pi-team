@@ -102,7 +102,8 @@ feature's `sessions` list, so one session can serve several features and one fea
 Store `host.state.focusedStoredSessionId`, never `host.state.activeSessionId`: the runtime id does not
 survive a reload, and `openSession` / `session.title` take the stored one — a runtime id in the registry
 opens a blank draft on click.
-The right panel lists a lane's feature sessions and jumps to one with `host.openSession`. Titles come from
+The right panel lists a lane's feature sessions, jumps to one with `host.openSession`, and drops one with
+the `×` on its row (`POST /unlink` with project, feature and session id). Titles come from
 `host.request('session.title', {session_id})`, which answers `pending` while the session row does not
 exist yet — render the id until it does. The API is
 `POST /api/plugins/pi-team/link` and `/unlink` with `{project, feature, session}`; an unknown project or
