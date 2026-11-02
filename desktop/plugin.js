@@ -20,6 +20,69 @@ const REST = { timeoutMs: 8000 }
 
 const selectedLane = atom('')
 
+// Marching outline for a lane that works right now. Injected once; every colour
+// comes from the app's theme variables, so a theme switch needs no plugin change.
+const RUN_CSS = `
+@property --pi-angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+
+@keyframes pi-team-run { to { --pi-angle: 360deg; } }
+
+.pi-team-run {
+  position: relative;
+}
+
+.pi-team-asks {
+  position: relative;
+}
+
+.pi-team-run::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  background: conic-gradient(
+    from var(--pi-angle),
+    transparent 0deg 230deg,
+    var(--ui-accent) 320deg,
+    transparent 360deg
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: pi-team-run 1.5s linear infinite;
+}
+
+.pi-team-asks::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  background: var(--ui-accent);
+  opacity: 0.45;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pi-team-run::before { animation: none; opacity: 0.35; }
+}
+`
+
+function installRunStyle() {
+  if (typeof document === 'undefined') return
+  if (document.getElementById('pi-team-run-css')) return
+  const style = document.createElement('style')
+  style.id = 'pi-team-run-css'
+  style.textContent = RUN_CSS
+  document.head.appendChild(style)
+}
+
+
 const rowClass =
   'flex w-full items-start gap-2 px-2.5 py-1.5 text-left transition-colors hover:bg-(--chrome-action-hover)'
 
@@ -39,10 +102,21 @@ function firstLine(text) {
 function LaneRow({ lane, active, onPick }) {
   const snippet = lane.shelved ? lane.shelved_reason : firstLine(lane.last_text) || lane.task
   const dim = lane.shelved ? 'opacity-55' : ''
+  const live = lane.state === 'running' ? 'pi-team-run' : lane.state === 'waiting' ? 'pi-team-asks' : ''
+  const className = [
+    rowClass,
+    active ? 'bg-(--chrome-action-hover)' : '',
+    dim,
+    live,
+    live ? 'rounded-md' : ''
+  ]
+    .filter(Boolean)
+    .join(' ')
+
   return jsxs('button', {
     type: 'button',
     onClick: onPick,
-    className: active ? `${rowClass} bg-(--chrome-action-hover) ${dim}` : `${rowClass} ${dim}`,
+    className,
     children: [
       jsx('span', {
         className: `mt-1.5 inline-block size-1.5 shrink-0 rounded-full ${stateDot(lane.state)}`
@@ -55,7 +129,9 @@ function LaneRow({ lane, active, onPick }) {
             children: [
               jsx('span', { className: 'truncate font-mono text-[0.6875rem]', children: lane.lane }),
               jsx('span', {
-                className: 'ml-auto shrink-0 text-[0.625rem] text-(--ui-text-quaternary)',
+                className: `ml-auto shrink-0 text-[0.625rem] ${
+                  lane.state === 'running' ? 'text-(--ui-accent)' : 'text-(--ui-text-quaternary)'
+                }`,
                 children: lane.state
               })
             ]
@@ -582,6 +658,8 @@ export default {
   id: ID,
   name: 'pi-team',
   register(ctx) {
+    installRunStyle()
+
     ctx.i18n.register({
       en: { lanes: 'Lanes', status: 'Lane status', pick: 'Pick a lane on the left.' },
       ru: { lanes: 'Полосы', status: 'Статус полосы', pick: 'Выберите полосу слева.' }
