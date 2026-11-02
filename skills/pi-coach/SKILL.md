@@ -82,6 +82,12 @@ pi-lane <lane> "<task>" --project <project> --feature <feature>
 `pi-project list` shows projects and their features; `pi-feature list <project>` shows one project's
 features. A lane for a thrown-away experiment can still run outside the registry with `--repo <path>`.
 
+**The demo fixture is a small working app, not a hello-world fork.** `demo` is `~/work/demo-app`: one static
+page (`index.html`, `app.js`, `styles.css`), no dependencies, no build, started with
+`python3 -m http.server 8080`. A lane needs something to change — a repository whose only file is a README
+yields an empty worktree and a panel that looks broken. Give the fixture one visible surface per feature so
+a task names a file, and check the diff after the first lane lands.
+
 **The coding block travels with the project.** `pi-project agents [<project>…] [--check]` writes the
 block from this skill's `templates/ponytail-block.md` into `<repo>/AGENTS.md`, or refreshes the copy already
 there. The block spans from `<!-- ponytail v1` to `<!-- /ponytail -->`; anything after the end marker is
@@ -260,6 +266,18 @@ Settle this before rearranging them again:
 - `pi-team:` prefixes every contributed id (`pi-team:lanes`), which is what a sibling panel names as its
   dock anchor.
 
+**Updating a client.** The `⟳` button in the lanes header calls `POST /update`: the backend pulls the
+repo here (`~/work/pi-team`, override with `PI_TEAM_REPO`), writes `desktop/plugin.js` to this machine's
+`desktop-plugins/`, then hands the same bytes to every host in
+`~/.hermes/plugin-data/pi-team/clients.json` (`{"host": "ili@casalt", "path": "/home/ili/…/plugin.js"}`)
+over `ssh` with the file on stdin. The app watches that folder, so a copied file reloads by itself.
+
+- The route takes **git's** copy. Commit and push a local edit first, or the button silently reverts it.
+- `ssh` rides Tailscale check mode: an unapproved host answers with an approval URL, and the notify shows
+  that line. `local` in `host` writes in place and needs no ssh.
+- The pane cannot run git or write files — the SDK exposes no fs and no exec — so an update is always a
+  backend route, never plugin code.
+
 ## Lane status (what the `pi-team` panels read)
 
 | Field | Source |
@@ -399,6 +417,8 @@ mv ~/src/thinkrail/packages/spec-graph/node_modules/package \
   lands. Left `waiting` after the run, the answer channel is broken, not the task.
 - `POST /lanes/<lane>/answer` answers `422` for a value outside the options and `409` when no question is
   open; an accepted answer carries the question `id` back.
+- `/api/plugins/pi-team/lanes` returns the list payload only: `status`, `plan` and `spec_tree` arrive on
+  `/lanes/<lane>`. A `KeyError` on `plan` from the list route means the wrong route, not a missing field.
 - The lane and registry scripts carry no `.py` suffix, so
   `importlib.util.spec_from_file_location` returns `None` for them. Test a function from one by loading it
   with `SourceFileLoader(name, path)` plus `spec_from_loader` and calling it — that exercises the shipped
