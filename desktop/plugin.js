@@ -10,7 +10,7 @@
  * Procedure: skill `pi-coach`.
  */
 
-import { atom, Button, host, Input, useQuery, useValue } from '@hermes/plugin-sdk'
+import { atom, Button, ConfirmDialog, host, Input, useQuery, useValue } from '@hermes/plugin-sdk'
 import { useState } from 'react'
 import { jsx, jsxs } from 'react/jsx-runtime'
 
@@ -205,25 +205,18 @@ function LaneList({ ctx }) {
   const toggle = key => collapsedAtom.set({ ...collapsed, [key]: !collapsed[key] })
   const isOpen = key => !collapsed[key]
 
-  const [updating, setUpdating] = useState(false)
-  const runUpdate = async () => {
-    if (updating) return
-    setUpdating(true)
-    try {
-      const result = await ctx.rest('/update', { method: 'POST', body: {}, timeoutMs: 90000 })
-      const failed = (result.steps || []).filter(step => !step.ok)
-      host.notify({
-        kind: failed.length ? 'error' : 'info',
-        message: failed.length
-          ? `update: ${failed.map(step => `${step.host} — ${step.detail}`).join(' · ')}`
-          : `update: ${result.sha256} · ${(result.steps || []).length} targets`
-      })
-      query.refetch()
-    } catch (error) {
-      host.notify({ kind: 'error', message: `update failed: ${error.message || error}` })
-    } finally {
-      setUpdating(false)
+  const [askUpdate, setAskUpdate] = useState(false)
+  const doUpdate = async () => {
+    const result = await ctx.rest('/update', { method: 'POST', body: {}, timeoutMs: 90000 })
+    const failed = (result.steps || []).filter(step => !step.ok)
+    if (failed.length) {
+      throw new Error(failed.map(step => `${step.host}: ${step.detail}`).join(' · '))
     }
+    host.notify({
+      kind: 'info',
+      message: `update: ${result.sha256} · ${(result.steps || []).length} targets`
+    })
+    query.refetch()
   }
 
   const linkFeature = (projectName, featureName, linked) =>
@@ -380,10 +373,10 @@ function LaneList({ ctx }) {
           jsx('span', { children: `projects · ${projects.length}` }),
           jsx('button', {
             type: 'button',
-            onClick: runUpdate,
+            onClick: () => setAskUpdate(true),
             title: 'pull the panel from git and refresh every client',
             className: 'ml-auto px-1 text-(--ui-text-quaternary) hover:text-(--ui-accent)',
-            children: updating ? '…' : '⟳'
+            children: '⟳'
           }),
           override
             ? jsx('button', {
@@ -399,6 +392,17 @@ function LaneList({ ctx }) {
         className: 'min-h-0 flex-1 overflow-y-auto',
         children: lanes.length === 0 ? emptyHint : projectBlocks
       }),
+      askUpdate
+        ? jsx(ConfirmDialog, {
+            open: true,
+            onClose: () => setAskUpdate(false),
+            onConfirm: doUpdate,
+            title: 'Update pi-team',
+            description:
+              'Pull iliFalk/pi-team and copy plugin.js to every client in clients.json. The version in git replaces the local file, so uncommitted edits are lost.',
+            confirmLabel: 'Update'
+          })
+        : null,
       query.error
         ? jsx('div', {
             className:

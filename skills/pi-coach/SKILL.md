@@ -266,7 +266,7 @@ Settle this before rearranging them again:
 - `pi-team:` prefixes every contributed id (`pi-team:lanes`), which is what a sibling panel names as its
   dock anchor.
 
-**Updating a client.** The `⟳` button in the lanes header calls `POST /update`: the backend pulls the
+**Updating a client.** The `⟳` button in the lanes header calls `POST /update` after a `ConfirmDialog` (it replaces files, so it always asks): the backend pulls the
 repo here (`~/work/pi-team`, override with `PI_TEAM_REPO`), writes `desktop/plugin.js` to this machine's
 `desktop-plugins/`, then hands the same bytes to every host in
 `~/.hermes/plugin-data/pi-team/clients.json` (`{"host": "ili@casalt", "path": "/home/ili/…/plugin.js"}`)
