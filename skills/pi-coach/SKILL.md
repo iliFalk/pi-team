@@ -392,6 +392,9 @@ mv ~/src/thinkrail/packages/spec-graph/node_modules/package \
 ## Verification
 
 - `~/.hermes/lanes/<lane>/lane.json` names state `done` or `failed`, never `running` after the run.
+- `done` is not proof of work: run `git -C <worktree> status --porcelain`. An empty answer means the lane
+  read the files and narrated a plan instead of editing — phrase the task as an order ("Edit these files
+  now, do not describe a plan") and run it again on the same lane.
 - A lane that asked shows `waiting` with a `question.json`, and returns to `running` when `answer.json`
   lands. Left `waiting` after the run, the answer channel is broken, not the task.
 - `POST /lanes/<lane>/answer` answers `422` for a value outside the options and `409` when no question is
