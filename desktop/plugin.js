@@ -205,6 +205,27 @@ function LaneList({ ctx }) {
   const toggle = key => collapsedAtom.set({ ...collapsed, [key]: !collapsed[key] })
   const isOpen = key => !collapsed[key]
 
+  const [updating, setUpdating] = useState(false)
+  const runUpdate = async () => {
+    if (updating) return
+    setUpdating(true)
+    try {
+      const result = await ctx.rest('/update', { method: 'POST', body: {}, timeoutMs: 90000 })
+      const failed = (result.steps || []).filter(step => !step.ok)
+      host.notify({
+        kind: failed.length ? 'error' : 'info',
+        message: failed.length
+          ? `update: ${failed.map(step => `${step.host} — ${step.detail}`).join(' · ')}`
+          : `update: ${result.sha256} · ${(result.steps || []).length} targets`
+      })
+      query.refetch()
+    } catch (error) {
+      host.notify({ kind: 'error', message: `update failed: ${error.message || error}` })
+    } finally {
+      setUpdating(false)
+    }
+  }
+
   const linkFeature = (projectName, featureName, linked) =>
     ctx
       .rest(linked ? '/unlink' : '/link', {
@@ -357,11 +378,18 @@ function LaneList({ ctx }) {
           'flex items-center gap-2 border-b border-(--ui-stroke-secondary) px-2.5 py-1.5 text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary)',
         children: [
           jsx('span', { children: `projects · ${projects.length}` }),
+          jsx('button', {
+            type: 'button',
+            onClick: runUpdate,
+            title: 'pull the panel from git and refresh every client',
+            className: 'ml-auto px-1 text-(--ui-text-quaternary) hover:text-(--ui-accent)',
+            children: updating ? '…' : '⟳'
+          }),
           override
             ? jsx('button', {
                 type: 'button',
                 onClick: () => focusAtom.set(''),
-                className: 'ml-auto normal-case text-(--ui-text-tertiary) hover:text-foreground',
+                className: 'normal-case text-(--ui-text-tertiary) hover:text-foreground',
                 children: 'clear focus'
               })
             : null
