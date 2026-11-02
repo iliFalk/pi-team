@@ -375,8 +375,9 @@ function LaneList({ ctx }) {
             type: 'button',
             onClick: () => setAskUpdate(true),
             title: 'pull the panel from git and refresh every client',
-            className: 'ml-auto px-1 text-(--ui-text-quaternary) hover:text-(--ui-accent)',
-            children: '⟳'
+            className:
+              'ml-auto shrink-0 px-1 text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary) hover:text-(--ui-accent)',
+            children: 'update'
           }),
           override
             ? jsx('button', {
