@@ -15,7 +15,7 @@ import { useState } from 'react'
 import { jsx, jsxs } from 'react/jsx-runtime'
 
 const ID = 'pi-team'
-const POLL_MS = 2500
+const POLL_MS = 3000
 const REST = { timeoutMs: 8000 }
 
 const selectedLane = atom('')
@@ -51,7 +51,7 @@ const RUN_CSS = `
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
-  animation: pi-team-run 1.5s linear infinite;
+  animation: pi-team-run 2.5s linear infinite;
 }
 
 .pi-team-asks::before {
