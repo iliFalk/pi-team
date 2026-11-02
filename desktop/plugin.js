@@ -687,6 +687,23 @@ function LaneStatus({ ctx }) {
   })
 }
 
+/** One panel, two areas: the lane list on the left, the selected lane on the right. */
+function TeamPane({ ctx }) {
+  return jsxs('div', {
+    className: 'flex h-full min-h-0',
+    children: [
+      jsx('div', {
+        className: 'flex w-[240px] shrink-0 flex-col border-r border-(--ui-stroke-secondary)',
+        children: jsx(LaneList, { ctx })
+      }),
+      jsx('div', {
+        className: 'flex min-w-0 flex-1 flex-col',
+        children: jsx(LaneStatus, { ctx })
+      })
+    ]
+  })
+}
+
 export default {
   id: ID,
   name: 'pi-team',
@@ -699,29 +716,16 @@ export default {
     })
 
     ctx.register({
-      id: 'lanes',
+      id: 'team',
       area: 'panes',
-      title: 'pi lanes',
+      title: 'pi team',
       data: {
         placement: 'right',
         dock: { pane: 'workspace', pos: 'right', enforce: true },
-        width: '250px',
-        minWidth: '180px'
+        width: '620px',
+        minWidth: '380px'
       },
-      render: () => jsx(LaneList, { ctx })
-    })
-
-    ctx.register({
-      id: 'status',
-      area: 'panes',
-      title: 'pi lane status',
-      data: {
-        placement: 'right',
-        dock: { pane: 'pi-team:lanes', pos: 'right', enforce: true },
-        width: '320px',
-        minWidth: '220px'
-      },
-      render: () => jsx(LaneStatus, { ctx })
+      render: () => jsx(TeamPane, { ctx })
     })
   }
 }
