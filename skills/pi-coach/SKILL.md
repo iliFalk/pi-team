@@ -246,25 +246,24 @@ rm -rf ~/.hermes/lanes/<lane>
 A dirty worktree: `git worktree remove --force`, then `git worktree prune`. Keep the lane record while the
 branch is alive: it holds the task and the last text.
 
-## Where the panels live
+## Where the panel lives
 
-The app's SDK calls these tiles `panes`; this file writes `panel` for the thing Ilja sees and keeps
-`pane` for the API (`area: 'panes'`, `dock`, `placement`).
+The desktop plugin registers **one** pane, `pi team`, tiled into the right sidebar
+(`placement: 'right'`, `dock: { pane: 'workspace', pos: 'right', enforce: true }`, 620px). Inside it two
+areas sit side by side: the lane list as a fixed 240px column with a border on its right, and the selected
+lane filling the rest.
 
-The desktop plugin registers two panels and tiles them into the right sidebar, side by side: `pi lanes`
-docked right of the workspace and `pi lane status` docked right of `pi-team:lanes`. Both carry
-`dock.enforce: true`, so the arrangement is the plugin's default on every start even after a drag.
-
-Settle this before rearranging them again:
+Settle this before rearranging it again:
 
 - The right sidebar is **one unit with the core `Files` panel**. Closing `Files` collapses that side and
-  the plugin panels go with it. Ilja reads that as "closing Files closes the whole right sidebar".
+  the panel goes with it. Ilja reads that as "closing Files closes the whole right sidebar".
 - A plugin **cannot close or hide a core panel**: the SDK exposes `revealPane`, `undismissPane` and the
   read-only `paneVisibility`; `dismissTreePane` stays inside the app's store.
-- A single floating card (`placement: 'floating'`) was built and reverted: it leaves the sidebar but
-  covers the conversation. Do not switch back without asking.
-- `pi-team:` prefixes every contributed id (`pi-team:lanes`), which is what a sibling panel names as its
-  dock anchor.
+- Two separate panes were tried and merged into this one; a single floating card was tried and reverted —
+  it leaves the sidebar but covers the conversation. Ask before switching either way.
+- Changing a pane id (`lanes`/`status` → `team`) leaves the old tabs in a saved layout: tell Ilja to run
+  ⌘K → **Reset layout**.
+- `pi-team:` prefixes every contributed id (`pi-team:team`).
 
 **Updating a client.** The `⟳` button in the lanes header calls `POST /update` after a `ConfirmDialog` (it replaces files, so it always asks): the backend pulls the
 repo here (`~/work/pi-team`, override with `PI_TEAM_REPO`), writes `desktop/plugin.js` to this machine's
