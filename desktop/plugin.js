@@ -15,7 +15,7 @@ import { useState } from 'react'
 import { jsx, jsxs } from 'react/jsx-runtime'
 
 const ID = 'pi-team'
-const POLL_MS = 3000
+const POLL_MS = 2500
 const REST = { timeoutMs: 8000 }
 
 const selectedLane = atom('')
