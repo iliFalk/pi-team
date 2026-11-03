@@ -232,8 +232,13 @@ function installRunStyle() {
 }
 
 
-const rowClass =
-  'flex w-full items-start gap-2 px-2.5 py-1.5 text-left transition-colors hover:bg-(--chrome-action-hover)'
+// Hover paint belongs to the label, not to the row: the icon must stay outside it.
+const rowClass = 'flex w-full items-start gap-1 px-2.5 py-1.5 text-left transition-colors'
+
+// Painted by state, not by a group-hover class: the panel cannot rely on a utility
+// the app's own stylesheet was not built with.
+const labelBand = 'rounded px-1'
+const labelBandOn = 'rounded px-1 bg-(--chrome-action-hover)'
 
 
 function firstLine(text) {
@@ -243,22 +248,19 @@ function firstLine(text) {
 }
 
 function LaneRow({ lane, active, onPick }) {
+  const [hover, setHover] = useState(false)
   const snippet = lane.shelved ? lane.shelved_reason : firstLine(lane.last_text) || lane.task
   const dim = lane.shelved ? 'opacity-55' : ''
   const live = lane.state === 'running' ? 'pi-team-run' : lane.state === 'waiting' ? 'pi-team-asks' : ''
-  const className = [
-    rowClass,
-    active ? 'bg-(--chrome-action-hover)' : '',
-    dim,
-    live,
-    live ? 'rounded-md' : ''
-  ]
+  const className = [rowClass, dim, live, live ? 'rounded-md' : '']
     .filter(Boolean)
     .join(' ')
 
   return jsxs('button', {
     type: 'button',
     onClick: onPick,
+    onMouseEnter: () => setHover(true),
+    onMouseLeave: () => setHover(false),
     className,
     // The highlight starts at the icon, so the stub and the line stay outside it.
     style: { position: 'relative', marginLeft: ROW_PAD, width: `calc(100% - ${ROW_PAD})`, paddingLeft: 0 },
@@ -271,7 +273,7 @@ function LaneRow({ lane, active, onPick }) {
         children: jsx(icons.Terminal, { size: ICON_SIZE })
       }),
       jsxs('span', {
-        className: 'min-w-0 flex-1',
+        className: `min-w-0 flex-1 ${active || hover ? labelBandOn : labelBand}`,
         children: [
           jsxs('span', {
             className: 'flex items-baseline gap-2',
@@ -299,6 +301,7 @@ const collapsedAtom = atom({})
 
 
 function ListHeader({ label, count, open, onToggle, dim }) {
+  const [hover, setHover] = useState(false)
   return jsxs('div', {
     className: `flex items-center ${dim || ''}`,
     style: { position: 'relative' },
@@ -306,8 +309,10 @@ function ListHeader({ label, count, open, onToggle, dim }) {
       jsx('button', {
         type: 'button',
         onClick: onToggle,
+        onMouseEnter: () => setHover(true),
+        onMouseLeave: () => setHover(false),
         className:
-          'flex min-w-0 flex-1 items-center gap-1 py-1 pr-2 text-left text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary) hover:bg-(--chrome-action-hover)',
+          'flex min-w-0 flex-1 items-center gap-1 py-1 pr-2 text-left text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary)',
         style: { marginLeft: ROW_PAD, width: `calc(100% - ${ROW_PAD})` },
         children: [
           jsx('span', {
@@ -315,8 +320,13 @@ function ListHeader({ label, count, open, onToggle, dim }) {
             style: { width: `${ICON_SIZE}px` },
             children: jsx(FolderIcon, { open })
           }),
-          jsx('span', { className: 'truncate', children: label }),
-          jsx('span', { className: 'ml-auto shrink-0 pl-2', children: String(count) })
+          jsxs('span', {
+            className: `flex min-w-0 flex-1 items-center gap-1 ${hover ? labelBandOn : labelBand}`,
+            children: [
+              jsx('span', { className: 'truncate', children: label }),
+              jsx('span', { className: 'ml-auto shrink-0 pl-2', children: String(count) })
+            ]
+          })
         ]
       }),
     ]
