@@ -407,7 +407,7 @@ function LaneList({ ctx }) {
       jsxs('div', {
         className:
           'flex shrink-0 items-center gap-2 border-b border-(--ui-stroke-secondary) px-2.5 text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary)',
-        style: { height: HEADER_H, boxShadow: SOFT_SHADOW },
+        style: { height: HEADER_H },
         children: [
           jsx('span', { children: `projects · ${projects.length}` }),
           jsx('button', {
@@ -647,7 +647,7 @@ function LaneStatus({ ctx }) {
       jsx('div', {
         className:
           'flex shrink-0 items-center border-b border-(--ui-stroke-secondary) px-2.5 font-mono text-[0.6875rem] text-(--ui-text-secondary)',
-        style: { height: HEADER_H, boxShadow: SOFT_SHADOW },
+        style: { height: HEADER_H },
         children: lane.lane
       }),
       lane.question
@@ -767,7 +767,7 @@ function LaneStatus({ ctx }) {
 /** One panel, two areas: the lane list on the left, the selected lane on the right. */
 function TeamPane({ ctx }) {
   return jsxs('div', {
-    className: 'flex h-full min-h-0',
+    className: 'relative flex h-full min-h-0',
     children: [
       jsx('div', {
         className: 'flex w-[240px] shrink-0 flex-col border-r border-(--ui-stroke-secondary)',
@@ -776,6 +776,20 @@ function TeamPane({ ctx }) {
       jsx('div', {
         className: 'flex min-w-0 flex-1 flex-col',
         children: jsx(LaneStatus, { ctx })
+      }),
+      // One shadow for the whole width: per-header shadows doubled up at the seam.
+      jsx('div', {
+        'aria-hidden': true,
+        style: {
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          top: HEADER_H,
+          height: '6px',
+          // A gradient, not a box-shadow: it paints one band across both columns.
+          background: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.32), rgba(0, 0, 0, 0))',
+          pointerEvents: 'none'
+        }
       })
     ]
   })
