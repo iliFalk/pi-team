@@ -54,6 +54,18 @@ them; the panel draws empty nodes.
 The backend module is imported once, at `hermes-serve` start. An edit reaches the live route only after
 `systemctl --user restart hermes-serve`.
 
+## Check a change before it ships
+
+The panel has no build step, so a stale variable or a typo reaches the window as "failed to render" with no
+line number. Render the components outside the app first:
+
+```sh
+node desktop/render-check.mjs
+```
+
+It strips the three real imports, stubs the SDK with fake lane data, and calls every component; a failure
+prints the component and the exception. Every entry must say `ok`.
+
 ## The Python half
 
 The panes read their data from `plugin_api.py`, so both halves ship here and the repo is the source of both.

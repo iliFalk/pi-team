@@ -196,7 +196,7 @@ function LaneRow({ lane, active, onPick }) {
 const collapsedAtom = atom({})
 
 
-function ListHeader({ label, count, open, onToggle, action, dim }) {
+function ListHeader({ label, count, open, onToggle, dim }) {
   return jsxs('div', {
     className: `pi-row flex items-center border-b border-(--ui-stroke-secondary) ${dim || ''}`,
     children: [
@@ -211,23 +211,6 @@ function ListHeader({ label, count, open, onToggle, action, dim }) {
           jsx('span', { className: 'ml-auto shrink-0 pl-2', children: String(count) })
         ]
       }),
-      action && action.onClick
-        ? jsx('button', {
-            type: 'button',
-            onClick: action.onClick,
-            title: action.title,
-            className: `px-1.5 py-1 text-[0.6875rem] hover:text-(--ui-text-secondary) ${
-              action.active ? 'text-(--ui-accent)' : 'text-(--ui-text-quaternary)'
-            }`,
-            children: action.glyph
-          })
-        : action
-          ? jsx('span', {
-              title: action.title,
-              className: 'px-1.5 py-1 text-[0.6875rem] text-(--ui-accent)',
-              children: action.glyph
-            })
-          : null,
     ]
   })
 }
@@ -327,8 +310,7 @@ function LaneList({ ctx }) {
             label: groupKey || 'ungrouped',
             count: items.length,
             open: gopen,
-            onToggle: () => toggle(gkey),
-            action
+            onToggle: () => toggle(gkey)
           },
           gkey
         ),
