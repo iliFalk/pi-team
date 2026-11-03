@@ -493,6 +493,33 @@ function Section({ title, band }) {
   })
 }
 
+/** The one way to link the open chat to this lane's feature, from the right pane. */
+function AddSessionRow({ ctx, project, feature, sessionId, linked, onDone }) {
+  if (!sessionId || linked) return null
+
+  const link = async () => {
+    try {
+      await ctx.rest('/link', {
+        method: 'POST',
+        body: { project, feature, session: sessionId },
+        timeoutMs: 8000
+      })
+      onDone()
+    } catch (error) {
+      host.notify({ kind: 'error', message: `link failed: ${(error && error.message) || error}` })
+    }
+  }
+
+  return jsx('button', {
+    type: 'button',
+    onClick: link,
+    title: 'link this chat session to the feature',
+    className:
+      'w-full px-2.5 py-[3px] text-left text-[0.625rem] text-(--ui-text-quaternary) hover:text-(--ui-accent)',
+    children: 'add this session +'
+  })
+}
+
 function planGlyph(status) {
   if (status === 'done') return '✓'
   if (status === 'in_progress') return '▸'
@@ -653,6 +680,10 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
 
 function LaneStatus({ ctx }) {
   const laneName = useValue(selectedLane)
+  // Both hooks run every render; openSession and /link take the stored id.
+  const storedSessionId = useValue(host.state.focusedStoredSessionId)
+  const runtimeSessionId = useValue(host.state.activeSessionId)
+  const sessionId = storedSessionId || runtimeSessionId
   const query = useQuery({
     queryKey: ['pi-team', 'lane', laneName],
     queryFn: () => ctx.rest(`/lanes/${encodeURIComponent(laneName)}`, REST),
@@ -726,9 +757,7 @@ function LaneStatus({ ctx }) {
         : null,
       lane.last_error ? jsx(Row, { label: 'error', value: lane.last_error }) : null,
 
-      (lane.feature_sessions || []).length > 0
-        ? jsx(Section, { title: `sessions · ${lane.feature_sessions.length}` })
-        : null,
+      jsx(Section, { title: `sessions · ${(lane.feature_sessions || []).length}` }),
       (lane.feature_sessions || []).map(entry =>
         jsx(
           SessionTitle,
@@ -750,6 +779,15 @@ function LaneStatus({ ctx }) {
           entry.id
         )
       ),
+
+      jsx(AddSessionRow, {
+        ctx,
+        project: lane.project,
+        feature: lane.group,
+        sessionId,
+        linked: (lane.feature_sessions || []).some(entry => entry.id === sessionId),
+        onDone: () => query.refetch()
+      }),
 
       jsx(Section, { title: 'task', band: true }),
       jsx('div', {

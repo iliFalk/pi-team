@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 2.4.0
+version: 2.5.0
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -102,7 +102,9 @@ feature's `sessions` list, so one session can serve several features and one fea
 Store `host.state.focusedStoredSessionId`, never `host.state.activeSessionId`: the runtime id does not
 survive a reload, and `openSession` / `session.title` take the stored one — a runtime id in the registry
 opens a blank draft on click.
-The right panel lists a lane's feature sessions with three controls per row: the pencil names it inline,
+The right panel always shows a `sessions` block: one row per linked session, then `add this session +`,
+which links the open chat to the lane's feature (it hides once that chat is already linked). With no
+sessions the add row stands alone under the label. Each row carries three controls: the pencil names it inline,
 `↗` opens it with `host.openSession`, and `×` drops it from the feature (`POST /unlink` with project,
 feature and session id). The name is the plugin's own label (`POST /label`, stored on the session entry
 in `projects.json`), never the real session title: `session.title` answers `session not found` for a
@@ -291,6 +293,10 @@ repo here (`~/work/pi-team`, override with `PI_TEAM_REPO`), writes `desktop/plug
 over `ssh` with the file on stdin. The app watches that folder, so a copied file reloads by itself.
 
 - The route takes **git's** copy. Commit and push a local edit first, or the button silently reverts it.
+- **The route carries the desktop half only.** `plugin/` (the lane API) reaches a gateway by
+  `cp -r plugin/* ~/.hermes/plugins/pi-team/` plus the serve restart; the button never touches it.
+- **The repo is private**, so `raw.githubusercontent.com` answers 404 to a plain `curl`. A new machine
+  gets the files with `gh repo clone iliFalk/pi-team` or through the button, never by a raw URL.
 - `ssh` rides Tailscale check mode: an unapproved host answers with an approval URL, and the notify shows
   that line. `local` in `host` writes in place and needs no ssh.
 - The pane cannot run git or write files — the SDK exposes no fs and no exec — so an update is always a
