@@ -83,11 +83,22 @@ const RUN_CSS = `
 
 /* Tree guides: a vertical line per level, one short tick per row. */
 .pi-guide {
-  border-left: 1px solid var(--ui-stroke-secondary);
+  position: relative;
   margin-left: 14px;
   /* Reach up into the parent row so the line starts at its middle, not below it. */
   margin-top: -9px;
   padding-top: 9px;
+}
+
+/* The line is its own element, so it can stop at the last row's elbow. */
+.pi-line {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 14px;
+  width: 0;
+  border-left: 1px solid var(--ui-stroke-secondary);
+  pointer-events: none;
 }
 
 .pi-row {
@@ -321,7 +332,14 @@ function LaneList({ ctx }) {
           },
           gkey
         ),
-        ...(gopen ? [jsx('div', { className: 'pi-guide', children: items.map(renderLane) }, `kids:${gkey}`)] : [])
+        ...(gopen ? [jsx(
+            'div',
+            {
+              className: 'pi-guide',
+              children: [jsx('span', { className: 'pi-line' }), ...items.map(renderLane)]
+            },
+            `kids:${gkey}`
+          )] : [])
       ]
     })
 
@@ -343,6 +361,7 @@ function LaneList({ ctx }) {
                   {
                     className: 'pi-guide',
                     children: [
+                      jsx('span', { className: 'pi-line' }),
                       ...groupBlocks,
                       ...(shelved.length > 0
                         ? [
@@ -357,7 +376,14 @@ function LaneList({ ctx }) {
                               `s:${project}`
                             ),
                             ...(isOpen(`s:${project}`)
-                              ? [jsx('div', { className: 'pi-guide', children: shelved.map(renderLane) }, `shelf:${project}`)]
+                              ? [jsx(
+                                'div',
+                                {
+                                  className: 'pi-guide',
+                                  children: [jsx('span', { className: 'pi-line' }), ...shelved.map(renderLane)]
+                                },
+                                `shelf:${project}`
+                              )]
                               : [])
                           ]
                         : [])
