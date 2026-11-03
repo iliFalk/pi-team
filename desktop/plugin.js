@@ -237,8 +237,10 @@ const rowClass = 'flex w-full items-start gap-1 px-2.5 py-1.5 text-left transiti
 
 // Painted by state, not by a group-hover class: the panel cannot rely on a utility
 // the app's own stylesheet was not built with.
-const labelBand = 'rounded px-1'
-const labelBandOn = 'rounded px-1 bg-(--chrome-action-hover)'
+// Padding and an equal negative margin: the band grows by a third without moving
+// the row, so the tree geometry stays where it is.
+const labelBand = 'rounded px-1 py-[4px] -my-[4px]'
+const labelBandOn = 'rounded px-1 py-[4px] -my-[4px] bg-(--chrome-action-hover)'
 
 
 function firstLine(text) {
