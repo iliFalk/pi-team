@@ -104,8 +104,8 @@ Store `host.state.focusedStoredSessionId`, never `host.state.activeSessionId`: t
 survive a reload, and `openSession` / `session.title` take the stored one — a runtime id in the registry
 opens a blank draft on click.
 The right panel always shows a `sessions` block: one row per linked session, then `add this session +`,
-which links the open chat to the lane's feature (it hides once that chat is already linked). With no
-sessions the add row stands alone under the label. Each row carries three controls: the pencil names it inline,
+which links the open chat to the lane's feature. With no sessions the add row stands alone under the
+label; it never hides — a second click on an already-linked chat is a no-op, because `/link` is idempotent. Each row carries three controls: the pencil names it inline,
 `↗` opens it with `host.openSession`, and `×` drops it from the feature (`POST /unlink` with project,
 feature and session id). The name is the plugin's own label (`POST /label`, stored on the session entry
 in `projects.json`), never the real session title: `session.title` answers `session not found` for a

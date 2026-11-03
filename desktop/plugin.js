@@ -488,9 +488,11 @@ function Section({ title, band }) {
 
 /** The one way to link the open chat to this lane's feature, from the right pane. */
 function AddSessionRow({ ctx, project, feature, sessionId, linked, onDone }) {
-  if (!sessionId || linked) return null
-
   const link = async () => {
+    if (!sessionId) {
+      host.notify({ kind: 'error', message: 'no chat session is open' })
+      return
+    }
     try {
       await ctx.rest('/link', {
         method: 'POST',
@@ -506,7 +508,7 @@ function AddSessionRow({ ctx, project, feature, sessionId, linked, onDone }) {
   return jsx('button', {
     type: 'button',
     onClick: link,
-    title: 'link this chat session to the feature',
+    title: linked ? 'this chat session is already linked' : 'link this chat session to the feature',
     className:
       'w-full px-2.5 py-[3px] text-left text-[0.625rem] text-(--ui-text-quaternary) hover:text-(--ui-accent)',
     children: 'add this session +'
