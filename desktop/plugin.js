@@ -84,7 +84,7 @@ const RUN_CSS = `
 /* Tree guides: a vertical line per level, one short tick per row. */
 .pi-guide {
   border-left: 1px solid var(--ui-stroke-secondary);
-  margin-left: 9px;
+  margin-left: 14px;
 }
 
 .pi-row {
