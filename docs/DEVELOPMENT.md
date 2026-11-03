@@ -54,6 +54,23 @@ them; the panel draws empty nodes.
 The backend module is imported once, at `hermes-serve` start. An edit reaches the live route only after
 `systemctl --user restart hermes-serve`.
 
+## The Python half
+
+The panes read their data from `plugin_api.py`, so both halves ship here and the repo is the source of both.
+
+```sh
+# desktop half: what the window loads
+cp desktop/plugin.js ~/.hermes/desktop-plugins/pi-team/plugin.js
+
+# agent half: what the gateway imports, then restart the backend that mounts it
+cp -r plugin/* ~/.hermes/plugins/pi-team/
+systemctl --user restart hermes-serve
+```
+
+The desktop file hot-reloads; the Python file does not — a changed route, field or fix is served only after
+that restart. `plugin/plugin.yaml` stays inside the folder: a manifest at the repo root would make an
+Install-from-Git claim the agent half too and duplicate a gateway copy that is already there.
+
 ## The coding block
 
 Every project carries the same block at the top of its `AGENTS.md`. It sets the working rules for a lane:

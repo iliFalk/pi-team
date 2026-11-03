@@ -1,0 +1,9 @@
+{
+  "name": "pi-team",
+  "label": "pi-team",
+  "description": "pi lanes: list and per-lane status for the desktop panes.",
+  "icon": "ServerProcess",
+  "version": "0.1.0",
+  "tab": { "hidden": true },
+  "api": "plugin_api.py"
+}

@@ -8,10 +8,10 @@ demo                 /home/ilja/work/demo
 demo/settings-menu   theme-item    done    +2 files   plan 1/3
 ```
 
-- **What it is:** a desktop plugin with two panes, plus one skill for the agent that runs the lanes.
+- **What it is:** a desktop plugin with one panel of two areas, plus one skill for the agent that runs the lanes.
 - **What it does:** shows every coding lane by project and feature, with the last text the agent wrote, the changes it made and the plan it follows. Answers a lane's question with one click. Without it the work runs blind and a waiting lane stays waiting.
 - **What it needs:** the Hermes desktop app, connected to the same Hermes gateway that runs the lanes, and the `pi-team` agent plugin enabled on that gateway.
-- **How to start:** open Settings → Plugins in the Hermes desktop, choose Install from Git, paste `iliFalk/pi-team` and tick Desktop. The two panes appear beside the chat.
+- **How to start:** open Settings → Plugins in the Hermes desktop, choose Install from Git, paste `iliFalk/pi-team` and tick Desktop. The panel appears beside the chat, with the lane list and the selected lane side by side.
 
 ## Install
 
