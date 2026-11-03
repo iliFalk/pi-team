@@ -30,37 +30,21 @@ const GUIDE_STEP = '14px'
 // highlighted row, where a border-coloured line washes out.
 const STROKE = 'var(--ui-text-quaternary)'
 
-const spineStyle = (height) => ({
+const LINE = {
   position: 'absolute',
-  left: 0,
-  top: 0,
-  height,
   width: 0,
   borderLeft: `1px solid ${STROKE}`,
-  opacity: 0.4,
-  pointerEvents: 'none'
-})
-
-const elbowStyle = {
-  position: 'absolute',
-  left: 0,
-  top: 0,
-  width: '9px',
-  height: '50%',
-  borderLeft: `1px solid ${STROKE}`,
-  borderBottom: `1px solid ${STROKE}`,
-  borderBottomLeftRadius: '5px',
   opacity: 0.45,
   pointerEvents: 'none'
 }
 
-/** A ball that runs from a working lane's elbow up its line to the feature row. */
+/** A ball that runs from a working lane's stub up the level line to the feature row. */
 function Runner() {
   return jsx('span', {
     'aria-hidden': true,
     style: {
       position: 'absolute',
-      left: 0,
+      left: `-${GUIDE_STEP}`,
       top: '50%',
       width: '5px',
       height: '5px',
@@ -79,16 +63,15 @@ function Runner() {
       element.dataset.piRunner = '1'
       if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
 
-      // Distance from this row's middle to the top of the lane block, i.e. the
-      // feature row above it: measured once, because only the DOM knows it.
+      // Distance from this row's middle up to the feature row: only the DOM knows it.
       const rowBox = row.getBoundingClientRect()
       const kidsBox = kids.getBoundingClientRect()
       const travel = Math.max(12, rowBox.top + rowBox.height / 2 - kidsBox.top)
 
       element.animate(
         [
-          { transform: 'translate(9px, 0)', opacity: 0 },
-          { transform: 'translate(3px, -2px)', opacity: 1, offset: 0.18 },
+          { transform: `translate(${parseInt(GUIDE_STEP, 10)}px, 0)`, opacity: 0 },
+          { transform: 'translate(4px, -2px)', opacity: 1, offset: 0.18 },
           { transform: `translate(0, ${-travel}px)`, opacity: 0.9, offset: 0.9 },
           { transform: `translate(0, ${-travel}px)`, opacity: 0 }
         ],
@@ -98,28 +81,36 @@ function Runner() {
   })
 }
 
-/** One node: its row, its children, and the line that belongs to it.
- *  The line and the tick come AFTER the row: drawn first, the row's own
- *  background (hover, selection) painted over them and cut the elbow away. */
-function TreeNode({ last, children }) {
-  return jsxs('div', {
-    style: { position: 'relative' },
-    children: [
-      ...children,
-      last ? null : jsx('span', { 'aria-hidden': true, style: spineStyle('100%') })
-    ]
-  })
-}
+/** A row of a level: the level line runs beside it and a short stub reaches into it.
+ *  A row with children keeps the line going below its middle, so the level below
+ *  starts on the same stroke instead of on a second one. */
+function TreeRow({ last, orphan, trunk, runner, children }) {
+  const row = Array.isArray(children) ? children : [children]
+  const line = last
+    ? { ...LINE, left: `-${GUIDE_STEP}`, top: 0, height: '50%' }
+    : { ...LINE, left: `-${GUIDE_STEP}`, top: 0, bottom: 0 }
 
-/** A row with its elbow: the line reaches it, and stops at its middle when it is the last. */
-function TreeRow({ last, standalone, runner, children }) {
   return jsxs('div', {
     style: { position: 'relative' },
     children: [
-      children,
-      // Every row gets the same rounded branch; only the line below it differs.
-      standalone && !last ? jsx('span', { 'aria-hidden': true, style: spineStyle('100%') }) : null,
-      jsx('span', { 'aria-hidden': true, style: elbowStyle }),
+      ...row,
+      orphan ? null : jsx('span', { 'aria-hidden': true, style: line }),
+      orphan
+        ? null
+        : jsx('span', {
+            'aria-hidden': true,
+            style: {
+              position: 'absolute',
+              left: `-${GUIDE_STEP}`,
+              top: '50%',
+              width: GUIDE_STEP,
+              height: '1px',
+              background: STROKE,
+              opacity: 0.45,
+              pointerEvents: 'none'
+            }
+          }),
+      trunk ? jsx('span', { 'aria-hidden': true, style: { ...LINE, left: 0, top: '50%', bottom: 0 } }) : null,
       runner ? jsx(Runner, {}) : null
     ]
   })
@@ -223,7 +214,7 @@ function LaneRow({ lane, active, onPick }) {
     onClick: onPick,
     className,
     // The highlight starts where the elbow ends: 9px of tick, then the row.
-    style: { position: 'relative', marginLeft: '9px', width: 'calc(100% - 9px)', paddingLeft: '7px' },
+    style: { position: 'relative', marginLeft: GUIDE_STEP, width: `calc(100% - ${GUIDE_STEP})`, paddingLeft: '6px' },
     children: [
       jsxs('span', {
         className: 'min-w-0 flex-1',
@@ -338,7 +329,6 @@ function LaneList({ ctx }) {
       TreeRow,
       {
         last,
-        standalone: true,
         runner: lane.state === 'running',
         children: jsx(LaneRow, {
           lane,
@@ -375,18 +365,16 @@ function LaneList({ ctx }) {
       const last = index === groupKeys.length - 1 && shelved.length === 0
 
       return jsx(
-        TreeNode,
+        TreeRow,
         {
           last,
+          trunk: gopen && items.length > 0,
           children: [
-            jsx(TreeRow, {
-              last,
-              children: jsx(ListHeader, {
-                label: groupKey || 'ungrouped',
-                count: items.length,
-                open: gopen,
-                onToggle: () => toggle(gkey)
-              })
+            jsx(ListHeader, {
+              label: groupKey || 'ungrouped',
+              count: items.length,
+              open: gopen,
+              onToggle: () => toggle(gkey)
             }),
             gopen && items.length
               ? jsx('div', {
@@ -404,18 +392,16 @@ function LaneList({ ctx }) {
     const shelfOpen = isOpen(`s:${project}`)
     const shelfNode = shelved.length
       ? jsx(
-          TreeNode,
+          TreeRow,
           {
             last: true,
+            trunk: shelfOpen,
             children: [
-              jsx(TreeRow, {
-                last: true,
-                children: jsx(ListHeader, {
-                  label: 'shelf',
-                  count: shelved.length,
-                  open: shelfOpen,
-                  onToggle: () => toggle(`s:${project}`)
-                })
+              jsx(ListHeader, {
+                label: 'shelf',
+                count: shelved.length,
+                open: shelfOpen,
+                onToggle: () => toggle(`s:${project}`)
               }),
               shelfOpen
                 ? jsx('div', {
@@ -430,9 +416,12 @@ function LaneList({ ctx }) {
         )
       : null
 
-    return jsxs(
-      'div',
+    return jsx(
+      TreeRow,
       {
+        // A project is the top level: no line above it, but its line reaches down.
+        orphan: true,
+        trunk: open,
         children: [
           jsx(ListHeader, {
             label: project,
