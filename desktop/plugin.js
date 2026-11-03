@@ -233,8 +233,8 @@ function installRunStyle() {
 
 
 // Hover paint belongs to the label, not to the row: the icon must stay outside it.
-const ROW_PY = '19px'
-const HEADER_PY = '12px'
+const ROW_PY = '6px'
+const HEADER_PY = '4px'
 const BAND_PY = 4
 
 const rowClass = 'flex w-full items-start gap-1 px-2.5 text-left transition-colors'
