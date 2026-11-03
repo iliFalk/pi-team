@@ -77,6 +77,27 @@ const RUN_CSS = `
 @media (prefers-reduced-motion: reduce) {
   .pi-team-run::before { animation: none; opacity: 0.35; }
 }
+
+/* Tree guides: a vertical line per level, one short tick per row. */
+.pi-guide {
+  border-left: 1px solid var(--ui-stroke-secondary);
+  margin-left: 9px;
+}
+
+.pi-row {
+  position: relative;
+}
+
+.pi-row::after {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 50%;
+  width: 6px;
+  height: 1px;
+  background: var(--ui-stroke-secondary);
+  pointer-events: none;
+}
 `
 
 function installRunStyle() {
@@ -111,6 +132,7 @@ function LaneRow({ lane, active, onPick }) {
   const live = lane.state === 'running' ? 'pi-team-run' : lane.state === 'waiting' ? 'pi-team-asks' : ''
   const className = [
     rowClass,
+    'pi-row',
     active ? 'bg-(--chrome-action-hover)' : '',
     dim,
     live,
@@ -157,7 +179,7 @@ const focusAtom = atom('')
 
 function ListHeader({ label, count, open, onToggle, onFocus, action, dim }) {
   return jsxs('div', {
-    className: `flex items-center border-b border-(--ui-stroke-secondary) ${dim || ''}`,
+    className: `pi-row flex items-center border-b border-(--ui-stroke-secondary) ${dim || ''}`,
     children: [
       jsx('button', {
         type: 'button',
@@ -262,14 +284,11 @@ function LaneList({ ctx }) {
 
   const renderLane = lane =>
     jsx(
-      'div',
+      LaneRow,
       {
-        className: 'pl-3',
-        children: jsx(LaneRow, {
-          lane,
-          active: lane.lane === current,
-          onPick: () => selectedLane.set(lane.lane)
-        })
+        lane,
+        active: lane.lane === current,
+        onPick: () => selectedLane.set(lane.lane)
       },
       lane.lane
     )
@@ -320,12 +339,11 @@ function LaneList({ ctx }) {
             count: items.length,
             open: gopen,
             onToggle: () => toggle(gkey),
-            action,
-            dim: 'pl-2'
+            action
           },
           gkey
         ),
-        ...(gopen ? items.map(renderLane) : [])
+        ...(gopen ? [jsx('div', { className: 'pi-guide', children: items.map(renderLane) }, `kids:${gkey}`)] : [])
       ]
     })
 
@@ -343,23 +361,33 @@ function LaneList({ ctx }) {
           }),
           ...(open
             ? [
-                ...groupBlocks,
-                ...(shelved.length > 0
-                  ? [
-                      jsx(
-                        ListHeader,
-                        {
-                          label: 'shelf',
-                          count: shelved.length,
-                          open: isOpen(`s:${project}`),
-                          onToggle: () => toggle(`s:${project}`),
-                          dim: 'pl-2'
-                        },
-                        `s:${project}`
-                      ),
-                      ...(isOpen(`s:${project}`) ? shelved.map(renderLane) : [])
+                jsx(
+                  'div',
+                  {
+                    className: 'pi-guide',
+                    children: [
+                      ...groupBlocks,
+                      ...(shelved.length > 0
+                        ? [
+                            jsx(
+                              ListHeader,
+                              {
+                                label: 'shelf',
+                                count: shelved.length,
+                                open: isOpen(`s:${project}`),
+                                onToggle: () => toggle(`s:${project}`)
+                              },
+                              `s:${project}`
+                            ),
+                            ...(isOpen(`s:${project}`)
+                              ? [jsx('div', { className: 'pi-guide', children: shelved.map(renderLane) }, `shelf:${project}`)]
+                              : [])
+                          ]
+                        : [])
                     ]
-                  : [])
+                  },
+                  `body:${project}`
+                )
               ]
             : [])
         ]
