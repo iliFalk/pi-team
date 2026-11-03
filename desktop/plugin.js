@@ -108,36 +108,57 @@ function FolderIcon({ open }) {
   })
 }
 
-/** A row of a level: the level line runs beside it and a short stub reaches into it.
- *  A row with children keeps the line going below its middle, so the level below
- *  starts on the same stroke instead of on a second one. */
-function TreeRow({ last, orphan, runner, children }) {
-  const row = Array.isArray(children) ? children : [children]
-  const line = last
-    ? { ...LINE, left: LINE_X, top: 0, height: '50%' }
-    : { ...LINE, left: LINE_X, top: 0, bottom: 0 }
+/** A row, the segment of its level's line that belongs to it, and its children.
+ *  Every measurement here is row-relative: a percentage of the node would put the
+ *  stub and the end of the line in the middle of the children instead of the row. */
+function TreeRow({ last, orphan, trunk, runner, row, children }) {
+  const blocks = (Array.isArray(children) ? children : [children]).filter(Boolean)
+
+  // The last row stops at its own middle, so its half is measured inside the row.
+  // Every other row runs on beside its children, so its line spans the whole node.
+  const insideRow = last ? { ...LINE, left: LINE_X, top: 0, height: '50%' } : null
+  const wholeNode = last || orphan ? null : { ...LINE, left: LINE_X, top: 0, bottom: 0 }
 
   return jsxs('div', {
+    // The node is the box the full-height line is measured against.
     style: { position: 'relative' },
     children: [
-      ...row,
-      orphan ? null : jsx('span', { 'aria-hidden': true, style: line }),
-      orphan
-        ? null
-        : jsx('span', {
-            'aria-hidden': true,
-            style: {
-              position: 'absolute',
-              left: LINE_X,
-              top: '50%',
-              width: STUB_W,
-              height: '1px',
-              background: STROKE,
-              opacity: 0.45,
-              pointerEvents: 'none'
-            }
-          }),
-      runner ? jsx(Runner, {}) : null
+      jsxs('div', {
+        style: { position: 'relative' },
+        children: [
+          row,
+          insideRow ? jsx('span', { 'aria-hidden': true, style: insideRow }) : null,
+          orphan
+            ? null
+            : jsx('span', {
+                'aria-hidden': true,
+                style: {
+                  position: 'absolute',
+                  left: LINE_X,
+                  top: '50%',
+                  width: STUB_W,
+                  height: '1px',
+                  background: STROKE,
+                  opacity: 0.45,
+                  pointerEvents: 'none'
+                }
+              }),
+          trunk
+            ? jsx('span', {
+                'aria-hidden': true,
+                style: {
+                  ...LINE,
+                  left: ICON_CENTER,
+                  top: `calc(50% + ${ICON_SIZE / 2}px)`,
+                  bottom: 0
+                }
+              })
+            : null,
+          runner ? jsx(Runner, {}) : null
+        ]
+      }),
+      ...blocks,
+      wholeNode ? jsx('span', { 'aria-hidden': true, style: wholeNode }) : null
     ]
   })
 }
@@ -275,7 +296,7 @@ function LaneRow({ lane, active, onPick }) {
 const collapsedAtom = atom({})
 
 
-function ListHeader({ label, count, open, onToggle, dim, trunk }) {
+function ListHeader({ label, count, open, onToggle, dim }) {
   return jsxs('div', {
     className: `flex items-center ${dim || ''}`,
     style: { position: 'relative' },
@@ -296,18 +317,6 @@ function ListHeader({ label, count, open, onToggle, dim, trunk }) {
           jsx('span', { className: 'ml-auto shrink-0 pl-2', children: String(count) })
         ]
       }),
-      // The line to the children starts at the bottom of the icon and leaves the row.
-      trunk
-        ? jsx('span', {
-            'aria-hidden': true,
-            style: {
-              ...LINE,
-              left: `${ICON_SIZE / 2}px`,
-              top: `calc(50% + ${ICON_SIZE / 2}px)`,
-              height: `calc(50% - ${ICON_SIZE / 2}px)`
-            }
-          })
-        : null
     ]
   })
 }
@@ -373,7 +382,7 @@ function LaneList({ ctx }) {
       {
         last,
         runner: lane.state === 'running',
-        children: jsx(LaneRow, {
+        row: jsx(LaneRow, {
           lane,
           active: lane.lane === current,
           onPick: () => selectedLane.set(lane.lane)
@@ -411,14 +420,14 @@ function LaneList({ ctx }) {
         TreeRow,
         {
           last,
+          trunk: gopen && items.length > 0,
+          row: jsx(ListHeader, {
+            label: groupKey || 'ungrouped',
+            count: items.length,
+            open: gopen,
+            onToggle: () => toggle(gkey)
+          }),
           children: [
-            jsx(ListHeader, {
-              label: groupKey || 'ungrouped',
-              count: items.length,
-              open: gopen,
-              trunk: gopen && items.length > 0,
-              onToggle: () => toggle(gkey)
-            }),
             gopen && items.length
               ? jsx('div', {
                   'data-pi-kids': '',
@@ -438,14 +447,14 @@ function LaneList({ ctx }) {
           TreeRow,
           {
             last: true,
+            trunk: shelfOpen,
+            row: jsx(ListHeader, {
+              label: 'shelf',
+              count: shelved.length,
+              open: shelfOpen,
+              onToggle: () => toggle(`s:${project}`)
+            }),
             children: [
-              jsx(ListHeader, {
-                label: 'shelf',
-                count: shelved.length,
-                open: shelfOpen,
-                trunk: shelfOpen,
-                onToggle: () => toggle(`s:${project}`)
-              }),
               shelfOpen
                 ? jsx('div', {
                     'data-pi-kids': '',
@@ -464,14 +473,14 @@ function LaneList({ ctx }) {
       {
         // A project is the top level: no line above it, but its line reaches down.
         orphan: true,
+        trunk: open,
+        row: jsx(ListHeader, {
+          label: project,
+          count: all.length,
+          open,
+          onToggle: () => toggle(`p:${project}`)
+        }),
         children: [
-          jsx(ListHeader, {
-            label: project,
-            count: all.length,
-            open,
-            trunk: open,
-            onToggle: () => toggle(`p:${project}`)
-          }),
           open
             ? jsx('div', {
                 style: { paddingLeft: GUIDE_STEP },
