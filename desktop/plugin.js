@@ -15,6 +15,10 @@ import { useState } from 'react'
 import { jsx, jsxs } from 'react/jsx-runtime'
 
 const ID = 'pi-team'
+// One height for both column headers, one for both text blocks: the borders line up.
+const HEADER_H = '28px'
+const TEXT_H = '64px'
+
 const POLL_MS = 3000
 const REST = { timeoutMs: 8000 }
 
@@ -372,7 +376,8 @@ function LaneList({ ctx }) {
     children: [
       jsxs('div', {
         className:
-          'flex items-center gap-2 border-b border-(--ui-stroke-secondary) px-2.5 py-1.5 text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary)',
+          'flex shrink-0 items-center gap-2 border-b border-(--ui-stroke-secondary) px-2.5 text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary)',
+        style: { height: HEADER_H },
         children: [
           jsx('span', { children: `projects · ${projects.length}` }),
           jsx('button', {
@@ -611,7 +616,8 @@ function LaneStatus({ ctx }) {
     children: [
       jsx('div', {
         className:
-          'border-b border-(--ui-stroke-secondary) px-2.5 py-1.5 font-mono text-[0.6875rem] text-(--ui-text-secondary)',
+          'flex shrink-0 items-center border-b border-(--ui-stroke-secondary) px-2.5 font-mono text-[0.6875rem] text-(--ui-text-secondary)',
+        style: { height: HEADER_H },
         children: lane.lane
       }),
       lane.question
@@ -672,14 +678,17 @@ function LaneStatus({ ctx }) {
 
       jsx(Section, { title: 'task' }),
       jsx('div', {
-        className: 'px-2.5 py-0.5 text-[0.625rem] text-(--ui-text-secondary)',
+        className:
+          'shrink-0 overflow-y-auto whitespace-pre-wrap px-2.5 py-0.5 text-[0.625rem] leading-snug text-(--ui-text-secondary)',
+        style: { height: TEXT_H },
         children: lane.task || '—'
       }),
 
       jsx(Section, { title: 'last message' }),
       jsx('div', {
         className:
-          'whitespace-pre-wrap px-2.5 py-0.5 font-mono text-[0.625rem] leading-relaxed text-(--ui-text-secondary)',
+          'shrink-0 overflow-y-auto whitespace-pre-wrap break-words px-2.5 py-0.5 font-mono text-[0.625rem] leading-snug text-(--ui-text-secondary)',
+        style: { height: TEXT_H },
         children: lane.last_text || 'nothing written yet'
       }),
 
