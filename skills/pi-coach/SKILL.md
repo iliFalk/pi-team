@@ -102,8 +102,9 @@ feature's `sessions` list, so one session can serve several features and one fea
 Store `host.state.focusedStoredSessionId`, never `host.state.activeSessionId`: the runtime id does not
 survive a reload, and `openSession` / `session.title` take the stored one — a runtime id in the registry
 opens a blank draft on click.
-The right panel lists a lane's feature sessions, jumps to one with `host.openSession`, and drops one with
-the `×` on its row (`POST /unlink` with project, feature and session id). Titles come from
+The right panel lists a lane's feature sessions with three controls per row: the pencil renames it inline
+(`session.title` with the stored id), `↗` opens it with `host.openSession`, and `×` drops it from the
+feature (`POST /unlink` with project, feature and session id). There is no separate rename field. Titles come from
 `host.request('session.title', {session_id})`, which answers `pending` while the session row does not
 exist yet — render the id until it does. The API is
 `POST /api/plugins/pi-team/link` and `/unlink` with `{project, feature, session}`; an unknown project or
@@ -222,8 +223,8 @@ PY
 
 The `pi-team` right panel shows the same fields: last text, last tool call, turns, tokens and cost.
 
-**Where the panels live.** Both sit on the right edge with `enforce: true`; the constraint behind that
-choice is in § Where the panels live. Moving them means editing the dock hints in `plugin.js`.
+**Where the panel lives.** It sits on the right edge with `enforce: true`; the constraint behind that
+choice is in § Where the panel lives. Moving it means editing the dock hints in `plugin.js`.
 
 ## Lane: verify
 
@@ -269,7 +270,23 @@ Settle this before rearranging it again:
   ⌘K → **Reset layout**.
 - `pi-team:` prefixes every contributed id (`pi-team:team`).
 
-**Updating a client.** The `⟳` button in the lanes header calls `POST /update` after a `ConfirmDialog` (it replaces files, so it always asks): the backend pulls the
+**How the panel is built.** Label a control with a word, not a glyph: at 10 px a pictograph can read as an
+empty spot, so the update control is the word `update`. Give both column headers one fixed height
+(`HEADER_H`, 28px), or their text size sets their heights and the two `border-b` lines land on different
+rows. Draw a shadow as a 3-px gradient strip across the full width (`BAND_H`, `BAND_BG`), never as
+`boxShadow`: on a zero- or 1-px-tall strip Chromium paints nothing, and two per-header shadows double up
+at the seam the columns share, which Ilja sees as a broken line. The same band goes under a section label
+(`TASK`, `LAST MESSAGE`), not onto the block below it — he marks the label line as the place for the
+shadow, and a shadow on the block's own border reads as a frame around the text. The blocks keep one
+fixed height (`TEXT_H`, 100px) with scrolling inside — a block that grows with the text pushes the fields
+below it off screen. Hierarchy rows carry guide lines (a `.pi-guide` border per level plus a `.pi-row`
+tick), so the indent comes from nesting, not from per-row paddings. Put sizes and heights in inline
+`style`: the app ships its CSS prebuilt, so a class it never saw in its own source may do nothing, while
+an inline value always applies. Keep every one of these numbers in the constant block at the top of
+`plugin.js`, so "half that big" or "64 → 100" is one edit in one place. Recipes and the pixel check:
+`hermes-desktop-plugins` § `references/panel-visuals.md`.
+
+**Updating a client.** The `update` word at the right end of the `projects` header calls `POST /update` after a `ConfirmDialog` (it replaces files, so it always asks): the backend pulls the
 repo here (`~/work/pi-team`, override with `PI_TEAM_REPO`), writes `desktop/plugin.js` to this machine's
 `desktop-plugins/`, then hands the same bytes to every host in
 `~/.hermes/plugin-data/pi-team/clients.json` (`{"host": "ili@casalt", "path": "/home/ili/…/plugin.js"}`)
@@ -427,4 +444,9 @@ mv ~/src/thinkrail/packages/spec-graph/node_modules/package \
   with `SourceFileLoader(name, path)` plus `spec_from_loader` and calling it — that exercises the shipped
   file instead of a wrapper copy that can drift from it.
 - `git -C <worktree> status --porcelain` reports the lane work.
+- Panel geometry is checkable without the window: rebuild the box model in a throwaway HTML file with the
+  same numbers, screenshot it in headless Chromium and measure the pixels — header-line y, band rows, text
+  indents, spread across a seam (`hermes-desktop-plugins` § `references/panel-visuals.md`). Measured
+  numbers are what he accepts; the rendered look in his own window stays unverified, so say that and name
+  the gesture that closes it.
 - The project gates ran as commands, and the output is attached to the report.

@@ -10,7 +10,7 @@
  * Procedure: skill `pi-coach`.
  */
 
-import { atom, Button, ConfirmDialog, host, Input, useQuery, useValue } from '@hermes/plugin-sdk'
+import { atom, ConfirmDialog, host, icons, Input, useQuery, useValue } from '@hermes/plugin-sdk'
 import { useState } from 'react'
 import { jsx, jsxs } from 'react/jsx-runtime'
 
@@ -499,34 +499,85 @@ function planGlyph(status) {
   return '·'
 }
 
-const titleDraft = atom('')
-
 function SessionTitle({ entry, project, feature, onRemove }) {
   const query = useQuery({
     queryKey: ['pi-team', 'title', entry.id],
     queryFn: () => host.request('session.title', { session_id: entry.id }),
     staleTime: 60000
   })
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+
   const payload = query.data || {}
   const title = String(payload.title || (payload.result && payload.result.title) || '')
+
+  const startEdit = () => {
+    setDraft(title || '')
+    setEditing(true)
+  }
+
+  const save = async () => {
+    const next = draft.trim()
+    if (!next) {
+      setEditing(false)
+      return
+    }
+    await host.request('session.title', { session_id: entry.id, title: next })
+    setEditing(false)
+    query.refetch()
+  }
+
+  if (editing) {
+    return jsxs('div', {
+      className: 'flex items-center gap-1 px-2.5 py-[3px]',
+      children: [
+        jsx(Input, {
+          value: draft,
+          autoFocus: true,
+          placeholder: 'session name',
+          onChange: event => setDraft(event.target.value),
+          onKeyDown: event => {
+            if (event.key === 'Enter') save()
+            if (event.key === 'Escape') setEditing(false)
+          },
+          className: 'h-5 flex-1 text-[0.625rem]'
+        }),
+        jsx('button', {
+          type: 'button',
+          onClick: save,
+          className: 'shrink-0 px-1 text-[0.625rem] text-(--ui-accent)',
+          children: 'ok'
+        })
+      ]
+    })
+  }
+
+  const iconClass =
+    'shrink-0 px-1 leading-none text-(--ui-text-quaternary) hover:text-(--ui-text-secondary)'
+
   return jsxs('div', {
-    className: 'flex items-center gap-1 pr-1.5 hover:bg-(--chrome-action-hover)',
+    className: 'flex items-center gap-0.5 pr-1.5 hover:bg-(--chrome-action-hover)',
     children: [
-      jsxs('button', {
+      jsx('button', {
         type: 'button',
         onClick: () => host.openSession(entry.id),
         title: title ? `open: ${title}` : 'open this session',
-        className: 'flex min-w-0 flex-1 items-baseline justify-between gap-2 px-2.5 py-[3px] text-left',
-        children: [
-          jsx('span', {
-            className: 'truncate text-[0.625rem] text-(--ui-text-secondary)',
-            children: title || entry.id
-          }),
-          jsx('span', {
-            className: 'shrink-0 text-[0.625rem] text-(--ui-text-quaternary)',
-            children: '↗'
-          })
-        ]
+        className: 'min-w-0 flex-1 truncate px-2.5 py-[3px] text-left text-[0.625rem] text-(--ui-text-secondary)',
+        children: title || entry.id
+      }),
+      jsx('button', {
+        type: 'button',
+        onClick: startEdit,
+        title: 'rename this session',
+        className: iconClass,
+        children: jsx(icons.Pencil, { size: 11 })
+      }),
+      jsx('button', {
+        type: 'button',
+        onClick: () => host.openSession(entry.id),
+        title: 'open this session',
+        className: iconClass,
+        children: jsx(icons.ExternalLink, { size: 11 })
       }),
       jsx('button', {
         type: 'button',
@@ -540,45 +591,6 @@ function SessionTitle({ entry, project, feature, onRemove }) {
   })
 }
 
-function RenameSession() {
-  // Stored ids survive a reload; runtime ids do not, and openSession takes the stored one.
-  // Both hooks run unconditionally: a conditional one makes the count vary per render.
-  const storedSessionId = useValue(host.state.focusedStoredSessionId)
-  const runtimeSessionId = useValue(host.state.activeSessionId)
-  const sessionId = storedSessionId || runtimeSessionId
-  const draft = useValue(titleDraft)
-  const [busy, setBusy] = useState(false)
-
-  const apply = async () => {
-    const title = draft.trim()
-    if (!title || !sessionId || busy) return
-    setBusy(true)
-    try {
-      await host.request('session.title', { session_id: sessionId, title })
-      titleDraft.set('')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return jsxs('div', {
-    className: 'flex items-center gap-1 border-t border-(--ui-stroke-secondary) px-2 py-1.5',
-    children: [
-      jsx(Input, {
-        value: draft,
-        placeholder: 'name this session',
-        onChange: event => titleDraft.set(event.target.value),
-        className: 'h-6 flex-1 text-[0.625rem]'
-      }),
-      jsx(Button, {
-        type: 'button',
-        onClick: apply,
-        disabled: busy,
-        children: busy ? '…' : 'set'
-      })
-    ]
-  })
-}
 
 function QuestionBlock({ ctx, lane, question, onDone }) {
   const send = body =>
@@ -722,7 +734,6 @@ function LaneStatus({ ctx }) {
           entry.id
         )
       ),
-      jsx(RenameSession, {}),
 
       jsx(Section, { title: 'task', band: true }),
       jsx('div', {
