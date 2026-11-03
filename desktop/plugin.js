@@ -233,7 +233,7 @@ function installRunStyle() {
 
 
 // Hover paint belongs to the label, not to the row: the icon must stay outside it.
-const rowClass = 'flex w-full items-start gap-1 px-2.5 py-[15px] text-left transition-colors'
+const rowClass = 'flex w-full items-start gap-1 px-2.5 py-[19px] text-left transition-colors'
 
 // Painted by state, not by a group-hover class: the panel cannot rely on a utility
 // the app's own stylesheet was not built with.
@@ -314,7 +314,7 @@ function ListHeader({ label, count, open, onToggle, dim }) {
         onMouseEnter: () => setHover(true),
         onMouseLeave: () => setHover(false),
         className:
-          'flex min-w-0 flex-1 items-center gap-1 py-[10px] pr-2 text-left text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary)',
+          'flex min-w-0 flex-1 items-center gap-1 py-[12px] pr-2 text-left text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary)',
         style: { marginLeft: ROW_PAD, width: `calc(100% - ${ROW_PAD})` },
         children: [
           jsx('span', {
