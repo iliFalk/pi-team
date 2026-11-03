@@ -233,14 +233,22 @@ function installRunStyle() {
 
 
 // Hover paint belongs to the label, not to the row: the icon must stay outside it.
-const rowClass = 'flex w-full items-start gap-1 px-2.5 py-[19px] text-left transition-colors'
+const ROW_PY = '19px'
+const HEADER_PY = '12px'
+const BAND_PY = 4
+
+const rowClass = 'flex w-full items-start gap-1 px-2.5 text-left transition-colors'
 
 // Painted by state, not by a group-hover class: the panel cannot rely on a utility
 // the app's own stylesheet was not built with.
-// Padding and an equal negative margin: the band grows by a third without moving
-// the row, so the tree geometry stays where it is.
-const labelBand = 'rounded px-1 py-[4px] -my-[4px]'
-const labelBandOn = 'rounded px-1 py-[4px] -my-[4px] bg-(--chrome-action-hover)'
+// Padding and an equal negative margin: the band grows without moving the row.
+const bandStyle = {
+  padding: `${BAND_PY}px 4px`,
+  margin: `-${BAND_PY}px 0`,
+  borderRadius: '4px'
+}
+const labelBand = ''
+const labelBandOn = 'bg-(--chrome-action-hover)'
 
 
 function firstLine(text) {
@@ -265,7 +273,14 @@ function LaneRow({ lane, active, onPick }) {
     onMouseLeave: () => setHover(false),
     className,
     // The highlight starts at the icon, so the stub and the line stay outside it.
-    style: { position: 'relative', marginLeft: ROW_PAD, width: `calc(100% - ${ROW_PAD})`, paddingLeft: 0 },
+    style: {
+      position: 'relative',
+      marginLeft: ROW_PAD,
+      width: `calc(100% - ${ROW_PAD})`,
+      paddingTop: ROW_PY,
+      paddingBottom: ROW_PY,
+      paddingLeft: 0
+    },
     children: [
       // Centre of the row, which is where the stub arrives: a two-line row put the
       // icon on its first line and left it half a line above the connector.
@@ -276,6 +291,7 @@ function LaneRow({ lane, active, onPick }) {
       }),
       jsxs('span', {
         className: `min-w-0 flex-1 ${active || hover ? labelBandOn : labelBand}`,
+        style: bandStyle,
         children: [
           jsxs('span', {
             className: 'flex items-baseline gap-2',
@@ -314,8 +330,8 @@ function ListHeader({ label, count, open, onToggle, dim }) {
         onMouseEnter: () => setHover(true),
         onMouseLeave: () => setHover(false),
         className:
-          'flex min-w-0 flex-1 items-center gap-1 py-[12px] pr-2 text-left text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary)',
-        style: { marginLeft: ROW_PAD, width: `calc(100% - ${ROW_PAD})` },
+          'flex min-w-0 flex-1 items-center gap-1 pr-2 text-left text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary)',
+        style: { marginLeft: ROW_PAD, width: `calc(100% - ${ROW_PAD})`, paddingTop: HEADER_PY, paddingBottom: HEADER_PY },
         children: [
           jsx('span', {
             className: 'flex shrink-0 items-center justify-center',
@@ -324,6 +340,7 @@ function ListHeader({ label, count, open, onToggle, dim }) {
           }),
           jsxs('span', {
             className: `flex min-w-0 flex-1 items-center gap-1 ${hover ? labelBandOn : labelBand}`,
+            style: bandStyle,
             children: [
               jsx('span', { className: 'truncate', children: label }),
               jsx('span', { className: 'ml-auto shrink-0 pl-2', children: String(count) })
