@@ -32,15 +32,17 @@ const lineStyle = {
   bottom: '14px',
   width: 0,
   borderLeft: `1px solid ${STROKE}`,
+  opacity: 0.7,
   pointerEvents: 'none'
 }
 const tickStyle = {
   position: 'absolute',
   left: '-1px',
   top: '50%',
-  width: '11px',
+  width: '9px',
   height: '1px',
   background: STROKE,
+  opacity: 0.7,
   pointerEvents: 'none'
 }
 const BAND_BG = 'linear-gradient(to bottom, rgba(0, 0, 0, 0.32), rgba(0, 0, 0, 0))'
@@ -131,7 +133,7 @@ function firstLine(text) {
   return line ? line.trim().slice(0, 80) : ''
 }
 
-function LaneRow({ lane, active, onPick }) {
+function LaneRow({ lane, active, onPick, tick }) {
   const snippet = lane.shelved ? lane.shelved_reason : firstLine(lane.last_text) || lane.task
   const dim = lane.shelved ? 'opacity-55' : ''
   const live = lane.state === 'running' ? 'pi-team-run' : lane.state === 'waiting' ? 'pi-team-asks' : ''
@@ -151,7 +153,7 @@ function LaneRow({ lane, active, onPick }) {
     className,
     style: { position: 'relative' },
     children: [
-      jsx('span', { 'aria-hidden': true, style: tickStyle }),
+      tick ? jsx('span', { 'aria-hidden': true, style: tickStyle }) : null,
       jsx('span', {
         className: `mt-1.5 inline-block size-1.5 shrink-0 rounded-full ${stateDot(lane.state)}`
       }),
@@ -183,7 +185,7 @@ function LaneRow({ lane, active, onPick }) {
 const collapsedAtom = atom({})
 
 
-function ListHeader({ label, count, open, onToggle, dim }) {
+function ListHeader({ label, count, open, onToggle, dim, tick }) {
   return jsxs('div', {
     className: `flex items-center border-b border-(--ui-stroke-secondary) ${dim || ''}`,
     style: { position: 'relative' },
@@ -194,7 +196,7 @@ function ListHeader({ label, count, open, onToggle, dim }) {
         className:
           'flex min-w-0 flex-1 items-center gap-1 px-2 py-1 text-left text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary) hover:bg-(--chrome-action-hover)',
         children: [
-          jsx('span', { 'aria-hidden': true, style: tickStyle }),
+          tick ? jsx('span', { 'aria-hidden': true, style: tickStyle }) : null,
           jsx('span', { className: 'w-2 shrink-0', children: open ? '▾' : '▸' }),
           jsx('span', { className: 'truncate', children: label }),
           jsx('span', { className: 'ml-auto shrink-0 pl-2', children: String(count) })
@@ -264,6 +266,7 @@ function LaneList({ ctx }) {
       LaneRow,
       {
         lane,
+        tick: true,
         active: lane.lane === current,
         onPick: () => selectedLane.set(lane.lane)
       },
@@ -298,6 +301,7 @@ function LaneList({ ctx }) {
           {
             label: groupKey || 'ungrouped',
             count: items.length,
+            tick: true,
             open: gopen,
             onToggle: () => toggle(gkey)
           },
@@ -341,6 +345,7 @@ function LaneList({ ctx }) {
                               {
                                 label: 'shelf',
                                 count: shelved.length,
+                                tick: true,
                                 open: isOpen(`s:${project}`),
                                 onToggle: () => toggle(`s:${project}`)
                               },
