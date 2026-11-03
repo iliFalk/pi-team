@@ -17,6 +17,8 @@ import { jsx, jsxs } from 'react/jsx-runtime'
 const ID = 'pi-team'
 // One height for both column headers, one for both text blocks: the borders line up.
 const HEADER_H = '28px'
+// A short fall-off below each header. Black alpha, because a shadow has no theme colour.
+const HEADER_SHADOW = '0 2px 4px -2px rgba(0, 0, 0, 0.55)'
 const TEXT_H = '100px'
 
 const POLL_MS = 3000
@@ -377,7 +379,7 @@ function LaneList({ ctx }) {
       jsxs('div', {
         className:
           'flex shrink-0 items-center gap-2 border-b border-(--ui-stroke-secondary) px-2.5 text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary)',
-        style: { height: HEADER_H },
+        style: { height: HEADER_H, boxShadow: HEADER_SHADOW },
         children: [
           jsx('span', { children: `projects · ${projects.length}` }),
           jsx('button', {
@@ -617,7 +619,7 @@ function LaneStatus({ ctx }) {
       jsx('div', {
         className:
           'flex shrink-0 items-center border-b border-(--ui-stroke-secondary) px-2.5 font-mono text-[0.6875rem] text-(--ui-text-secondary)',
-        style: { height: HEADER_H },
+        style: { height: HEADER_H, boxShadow: HEADER_SHADOW },
         children: lane.lane
       }),
       lane.question
