@@ -178,9 +178,9 @@ function LaneRow({ lane, active, onPick }) {
 }
 
 const collapsedAtom = atom({})
-const focusAtom = atom('')
 
-function ListHeader({ label, count, open, onToggle, onFocus, action, dim }) {
+
+function ListHeader({ label, count, open, onToggle, action, dim }) {
   return jsxs('div', {
     className: `pi-row flex items-center border-b border-(--ui-stroke-secondary) ${dim || ''}`,
     children: [
@@ -212,16 +212,6 @@ function ListHeader({ label, count, open, onToggle, onFocus, action, dim }) {
               children: action.glyph
             })
           : null,
-      onFocus
-        ? jsx('button', {
-            type: 'button',
-            onClick: onFocus,
-            title: 'focus this project',
-            className:
-              'px-2 py-1 text-[0.6875rem] text-(--ui-text-quaternary) hover:text-(--ui-text-secondary)',
-            children: '»'
-          })
-        : null
     ]
   })
 }
@@ -240,7 +230,6 @@ function LaneList({ ctx }) {
   const runtimeSessionId = useValue(host.state.activeSessionId)
   const sessionId = storedSessionId || runtimeSessionId
   const collapsed = useValue(collapsedAtom)
-  const override = useValue(focusAtom)
   const lanes = (query.data && query.data.lanes) || []
 
   const toggle = key => collapsedAtom.set({ ...collapsed, [key]: !collapsed[key] })
@@ -268,7 +257,7 @@ function LaneList({ ctx }) {
   const autoProject =
     lanes.reduce((found, lane) => found || matchesCwd(lane.repo, lane.project), '') ||
     registry.reduce((found, entry) => found || matchesCwd(entry.repo, entry.name), '')
-  const focused = override || autoProject
+  const focused = autoProject
 
   const laneByProject = new Map()
   for (const lane of lanes) {
@@ -340,8 +329,7 @@ function LaneList({ ctx }) {
             label: project,
             count: all.length,
             open,
-            onToggle: () => toggle(`p:${project}`),
-            onFocus: () => focusAtom.set(project)
+            onToggle: () => toggle(`p:${project}`)
           }),
           ...(open
             ? [
@@ -402,14 +390,7 @@ function LaneList({ ctx }) {
               'ml-auto shrink-0 px-1 text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary) hover:text-(--ui-accent)',
             children: 'update'
           }),
-          override
-            ? jsx('button', {
-                type: 'button',
-                onClick: () => focusAtom.set(''),
-                className: 'normal-case text-(--ui-text-tertiary) hover:text-foreground',
-                children: 'clear focus'
-              })
-            : null
+
         ]
       }),
       jsx('div', {
