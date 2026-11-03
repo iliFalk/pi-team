@@ -17,7 +17,7 @@ import { jsx, jsxs } from 'react/jsx-runtime'
 const ID = 'pi-team'
 // One height for both column headers, one for both text blocks: the borders line up.
 const HEADER_H = '28px'
-const TEXT_H = '64px'
+const TEXT_H = '100px'
 
 const POLL_MS = 3000
 const REST = { timeoutMs: 8000 }
