@@ -195,7 +195,7 @@ function ListHeader({ label, count, open, onToggle, onFocus, action, dim }) {
           jsx('span', { className: 'ml-auto shrink-0 pl-2', children: String(count) })
         ]
       }),
-      action
+      action && action.onClick
         ? jsx('button', {
             type: 'button',
             onClick: action.onClick,
@@ -205,7 +205,13 @@ function ListHeader({ label, count, open, onToggle, onFocus, action, dim }) {
             }`,
             children: action.glyph
           })
-        : null,
+        : action
+          ? jsx('span', {
+              title: action.title,
+              className: 'px-1.5 py-1 text-[0.6875rem] text-(--ui-accent)',
+              children: action.glyph
+            })
+          : null,
       onFocus
         ? jsx('button', {
             type: 'button',
@@ -253,15 +259,6 @@ function LaneList({ ctx }) {
     })
     query.refetch()
   }
-
-  const linkFeature = (projectName, featureName, linked) =>
-    ctx
-      .rest(linked ? '/unlink' : '/link', {
-        method: 'POST',
-        body: { project: projectName, feature: featureName, session: sessionId },
-        timeoutMs: 8000
-      })
-      .then(() => query.refetch())
 
   const registry = (query.data && query.data.registry) || []
   const registryByName = new Map(registry.map(entry => [entry.name, entry]))
@@ -326,13 +323,9 @@ function LaneList({ ctx }) {
           registeredFeature &&
             (registeredFeature.sessions || []).some(entry => entry.id === sessionId)
         )
-      const action = registeredFeature
-        ? {
-            glyph: linked ? '✓' : '+',
-            active: linked,
-            title: linked ? 'this session is linked — click to remove' : 'link this session to the feature',
-            onClick: () => linkFeature(project, groupKey, linked)
-          }
+      // Linking lives in the right pane's sessions block; here it is only a marker.
+      const action = linked
+        ? { glyph: '✓', active: true, title: 'this chat session is linked to the feature' }
         : null
       return [
         jsx(

@@ -96,8 +96,9 @@ row and is updated on the legacy rule. `--check` prints `current`, `outdated`, `
 `no markers` per project and changes nothing. A project whose `AGENTS.md` carries its own rules and no
 block is refused as `no markers` — merge that file by hand. Run `--check` after any template change.
 
-**Feature ↔ session link.** Ilja links his current chat session to a feature from the panel: the feature
-header carries `+` (link) and `✓` (linked, click to remove). The link lives in the registry, under the
+**Feature ↔ session link.** Linking happens in one place: the right pane's sessions block
+(`add this session +`). The feature header in the left list only marks a feature that already carries this
+chat — a `✓`, not a button; unlinking is the row's `×`. The link lives in the registry, under the
 feature's `sessions` list, so one session can serve several features and one feature several sessions.
 Store `host.state.focusedStoredSessionId`, never `host.state.activeSessionId`: the runtime id does not
 survive a reload, and `openSession` / `session.title` take the stored one — a runtime id in the registry
