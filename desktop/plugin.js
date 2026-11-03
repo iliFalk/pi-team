@@ -499,7 +499,7 @@ function planGlyph(status) {
   return '·'
 }
 
-function SessionTitle({ entry, project, feature, onRemove }) {
+function SessionTitle({ ctx, entry, project, feature, onRemove, onChanged }) {
   const query = useQuery({
     queryKey: ['pi-team', 'title', entry.id],
     queryFn: () => host.request('session.title', { session_id: entry.id }),
@@ -509,10 +509,13 @@ function SessionTitle({ entry, project, feature, onRemove }) {
   const [draft, setDraft] = useState('')
 
   const payload = query.data || {}
-  const title = String(payload.title || (payload.result && payload.result.title) || '')
+  const realTitle = String(payload.title || (payload.result && payload.result.title) || '')
+  const label = String(entry.label || '')
+  const title = label || realTitle
+  const shown = title || `${entry.id.slice(0, 12)}…`
 
   const startEdit = () => {
-    setDraft(title || '')
+    setDraft(label || '')
     setEditing(true)
   }
 
@@ -523,15 +526,17 @@ function SessionTitle({ entry, project, feature, onRemove }) {
       return
     }
     try {
-      const result = await host.request('session.title', { session_id: entry.id, title: next })
-      const applied = result && (result.title || (result.result && result.result.title))
-      host.notify({ kind: 'info', message: `rename sent: ${applied || next}` })
+      await ctx.rest('/label', {
+        method: 'POST',
+        body: { project, feature, session: entry.id, label: next },
+        timeoutMs: 8000
+      })
       setEditing(false)
-      query.refetch()
+      onChanged && onChanged()
     } catch (error) {
       host.notify({
         kind: 'error',
-        message: `rename failed: ${(error && error.message) || error}`
+        message: `label failed: ${(error && error.message) || error}`
       })
     }
   }
@@ -572,7 +577,7 @@ function SessionTitle({ entry, project, feature, onRemove }) {
         onClick: () => host.openSession(entry.id),
         title: title ? `open: ${title}` : 'open this session',
         className: 'min-w-0 flex-1 truncate px-2.5 py-[3px] text-left text-[0.625rem] text-(--ui-text-secondary)',
-        children: title || entry.id
+        children: shown
       }),
       jsx('button', {
         type: 'button',
@@ -728,9 +733,11 @@ function LaneStatus({ ctx }) {
         jsx(
           SessionTitle,
           {
+            ctx,
             entry,
             project: lane.project,
             feature: lane.group,
+            onChanged: () => query.refetch(),
             onRemove: () =>
               ctx
                 .rest('/unlink', {

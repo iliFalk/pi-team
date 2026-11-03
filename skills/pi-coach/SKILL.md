@@ -102,11 +102,14 @@ feature's `sessions` list, so one session can serve several features and one fea
 Store `host.state.focusedStoredSessionId`, never `host.state.activeSessionId`: the runtime id does not
 survive a reload, and `openSession` / `session.title` take the stored one — a runtime id in the registry
 opens a blank draft on click.
-The right panel lists a lane's feature sessions with three controls per row: the pencil renames it inline
-(`session.title` with the stored id), `↗` opens it with `host.openSession`, and `×` drops it from the
-feature (`POST /unlink` with project, feature and session id). There is no separate rename field. Titles come from
-`host.request('session.title', {session_id})`, which answers `pending` while the session row does not
-exist yet — render the id until it does. The API is
+The right panel lists a lane's feature sessions with three controls per row: the pencil renames it inline,
+`↗` opens it with `host.openSession`, `×` drops it from the feature (`POST /unlink` with project, feature
+and session id). There is no separate rename field. Both name call sites use the STORED id, and both can
+answer nothing: the read returns `pending` until the session row persists, and the write is owner-routed
+inside the app — core sends the runtime id to the connection that owns the session and falls back to REST,
+while the plugin's `host.request` reaches the ambient connection only. So render the id when no title comes
+back, and make the rename report itself (`host.notify` with the applied title, or the error text). A
+swallowed rejection looks exactly like a dead `ok` button, and Ilja reports it as one. The API is
 `POST /api/plugins/pi-team/link` and `/unlink` with `{project, feature, session}`; an unknown project or
 feature answers 404. Automatic attribution is impossible from the agent side — the shell wrapper strips
 `HERMES_SESSION_*` — so the link is always a deliberate click.
