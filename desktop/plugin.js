@@ -314,19 +314,7 @@ function LaneList({ ctx }) {
       const items = groups.get(groupKey)
       const gkey = `g:${project}/${groupKey}`
       const gopen = isOpen(gkey)
-      const registeredFeature = ((registered && registered.features) || []).find(
-        feature => feature.name === groupKey
-      )
-      const linked =
-        Boolean(sessionId) &&
-        Boolean(
-          registeredFeature &&
-            (registeredFeature.sessions || []).some(entry => entry.id === sessionId)
-        )
-      // Linking lives in the right pane's sessions block; here it is only a marker.
-      const action = linked
-        ? { glyph: '✓', active: true, title: 'this chat session is linked to the feature' }
-        : null
+
       return [
         jsx(
           ListHeader,
