@@ -220,7 +220,7 @@ function LaneRow({ lane, active, onPick }) {
     type: 'button',
     onClick: onPick,
     className,
-    style: { position: 'relative', paddingLeft: '8px' },
+    style: { position: 'relative', paddingLeft: '16px' },
     children: [
       jsxs('span', {
         className: 'min-w-0 flex-1',
