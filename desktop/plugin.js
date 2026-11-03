@@ -263,10 +263,12 @@ function LaneRow({ lane, active, onPick }) {
     // The highlight starts at the icon, so the stub and the line stay outside it.
     style: { position: 'relative', marginLeft: ROW_PAD, width: `calc(100% - ${ROW_PAD})`, paddingLeft: 0 },
     children: [
+      // Centre of the row, which is where the stub arrives: a two-line row put the
+      // icon on its first line and left it half a line above the connector.
       jsx('span', {
-        className: 'flex shrink-0 items-start justify-center pt-0.5',
-        style: { width: `${ICON_SIZE}px` },
-        children: jsx(icons.Terminal, { size: 11 })
+        className: 'flex shrink-0 items-center justify-center self-center',
+        style: { width: `${ICON_SIZE}px`, height: `${ICON_SIZE}px` },
+        children: jsx(icons.Terminal, { size: ICON_SIZE })
       }),
       jsxs('span', {
         className: 'min-w-0 flex-1',
