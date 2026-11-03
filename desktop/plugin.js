@@ -21,32 +21,62 @@ const HEADER_H = '28px'
 const SOFT_SHADOW = '0 2px 4px -2px rgba(0, 0, 0, 0.55)'
 // A short band under a label or a header: the only shadow shape this panel uses.
 const BAND_H = '3px'
-// Tree geometry lives in inline styles: an injected stylesheet did not reach the pane.
+const BAND_BG = 'linear-gradient(to bottom, rgba(0, 0, 0, 0.32), rgba(0, 0, 0, 0))'
+// Both text blocks share one height and scroll inside it.
+const TEXT_H = '100px'
+// Tree geometry: a node owns its line, so a level cannot break into loose segments.
 const GUIDE_STEP = '14px'
-const STROKE = 'var(--ui-stroke-secondary)'
-const guideStyle = { position: 'relative', marginLeft: GUIDE_STEP, marginTop: '-9px', paddingTop: '9px' }
-const lineStyle = {
+// Quaternary rather than the border tone: the elbow must stay visible on a
+// highlighted row, where a border-coloured line washes out.
+const STROKE = 'var(--ui-text-quaternary)'
+
+const spineStyle = (height) => ({
   position: 'absolute',
   left: 0,
   top: 0,
-  bottom: '14px',
+  height,
   width: 0,
   borderLeft: `1px solid ${STROKE}`,
-  opacity: 0.7,
+  opacity: 0.4,
   pointerEvents: 'none'
-}
+})
+
 const tickStyle = {
   position: 'absolute',
-  left: '-1px',
+  left: 0,
   top: '50%',
   width: '9px',
   height: '1px',
   background: STROKE,
-  opacity: 0.7,
+  opacity: 0.65,
   pointerEvents: 'none'
 }
-const BAND_BG = 'linear-gradient(to bottom, rgba(0, 0, 0, 0.32), rgba(0, 0, 0, 0))'
-const TEXT_H = '100px'
+
+/** One node: its row, its children, and the line that belongs to it.
+ *  The line and the tick come AFTER the row: drawn first, the row's own
+ *  background (hover, selection) painted over them and cut the elbow away. */
+function TreeNode({ last, children }) {
+  return jsxs('div', {
+    style: { position: 'relative' },
+    children: [
+      ...children,
+      last ? null : jsx('span', { 'aria-hidden': true, style: spineStyle('100%') })
+    ]
+  })
+}
+
+/** A row with its elbow: the line reaches it, and stops at its middle when it is the last. */
+function TreeRow({ last, standalone, children }) {
+  const spine = last ? '50%' : '100%'
+  return jsxs('div', {
+    style: { position: 'relative' },
+    children: [
+      children,
+      last || standalone ? jsx('span', { 'aria-hidden': true, style: spineStyle(spine) }) : null,
+      jsx('span', { 'aria-hidden': true, style: tickStyle })
+    ]
+  })
+}
 
 const POLL_MS = 3000
 const REST = { timeoutMs: 8000 }
@@ -133,7 +163,7 @@ function firstLine(text) {
   return line ? line.trim().slice(0, 80) : ''
 }
 
-function LaneRow({ lane, active, onPick, tick }) {
+function LaneRow({ lane, active, onPick }) {
   const snippet = lane.shelved ? lane.shelved_reason : firstLine(lane.last_text) || lane.task
   const dim = lane.shelved ? 'opacity-55' : ''
   const live = lane.state === 'running' ? 'pi-team-run' : lane.state === 'waiting' ? 'pi-team-asks' : ''
@@ -153,7 +183,6 @@ function LaneRow({ lane, active, onPick, tick }) {
     className,
     style: { position: 'relative' },
     children: [
-      tick ? jsx('span', { 'aria-hidden': true, style: tickStyle }) : null,
       jsx('span', {
         className: `mt-1.5 inline-block size-1.5 shrink-0 rounded-full ${stateDot(lane.state)}`
       }),
@@ -185,7 +214,7 @@ function LaneRow({ lane, active, onPick, tick }) {
 const collapsedAtom = atom({})
 
 
-function ListHeader({ label, count, open, onToggle, dim, tick }) {
+function ListHeader({ label, count, open, onToggle, dim }) {
   return jsxs('div', {
     className: `flex items-center border-b border-(--ui-stroke-secondary) ${dim || ''}`,
     style: { position: 'relative' },
@@ -196,8 +225,7 @@ function ListHeader({ label, count, open, onToggle, dim, tick }) {
         className:
           'flex min-w-0 flex-1 items-center gap-1 px-2 py-1 text-left text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary) hover:bg-(--chrome-action-hover)',
         children: [
-          tick ? jsx('span', { 'aria-hidden': true, style: tickStyle }) : null,
-          jsx('span', { className: 'w-2 shrink-0', children: open ? '▾' : '▸' }),
+              jsx('span', { className: 'w-2 shrink-0', children: open ? '▾' : '▸' }),
           jsx('span', { className: 'truncate', children: label }),
           jsx('span', { className: 'ml-auto shrink-0 pl-2', children: String(count) })
         ]
@@ -261,14 +289,17 @@ function LaneList({ ctx }) {
   ])
   const projects = [...projectNames].sort()
 
-  const renderLane = lane =>
+  const renderLane = (lane, last) =>
     jsx(
-      LaneRow,
+      TreeRow,
       {
-        lane,
-        tick: true,
-        active: lane.lane === current,
-        onPick: () => selectedLane.set(lane.lane)
+        last,
+        standalone: true,
+        children: jsx(LaneRow, {
+          lane,
+          active: lane.lane === current,
+          onPick: () => selectedLane.set(lane.lane)
+        })
       },
       lane.lane
     )
@@ -290,38 +321,71 @@ function LaneList({ ctx }) {
       groups.get(key).push(lane)
     }
 
-    const groupBlocks = [...groups.keys()].sort().flatMap(groupKey => {
+    const groupKeys = [...groups.keys()].sort()
+
+    const featureNodes = groupKeys.map((groupKey, index) => {
       const items = groups.get(groupKey)
       const gkey = `g:${project}/${groupKey}`
       const gopen = isOpen(gkey)
+      const last = index === groupKeys.length - 1 && shelved.length === 0
 
-      return [
-        jsx(
-          ListHeader,
-          {
-            label: groupKey || 'ungrouped',
-            count: items.length,
-            tick: true,
-            open: gopen,
-            onToggle: () => toggle(gkey)
-          },
-          gkey
-        ),
-        ...(gopen ? [jsx(
-            'div',
-            {
-              style: guideStyle,
-              children: [jsx('span', { 'aria-hidden': true, style: lineStyle }), ...items.map(renderLane)]
-            },
-            `kids:${gkey}`
-          )] : [])
-      ]
+      return jsx(
+        TreeNode,
+        {
+          last,
+          children: [
+            jsx(TreeRow, {
+              last,
+              children: jsx(ListHeader, {
+                label: groupKey || 'ungrouped',
+                count: items.length,
+                open: gopen,
+                onToggle: () => toggle(gkey)
+              })
+            }),
+            gopen && items.length
+              ? jsx('div', {
+                  style: { paddingLeft: GUIDE_STEP },
+                  children: items.map((lane, i) => renderLane(lane, i === items.length - 1))
+                })
+              : null
+          ]
+        },
+        gkey
+      )
     })
+
+    const shelfOpen = isOpen(`s:${project}`)
+    const shelfNode = shelved.length
+      ? jsx(
+          TreeNode,
+          {
+            last: true,
+            children: [
+              jsx(TreeRow, {
+                last: true,
+                children: jsx(ListHeader, {
+                  label: 'shelf',
+                  count: shelved.length,
+                  open: shelfOpen,
+                  onToggle: () => toggle(`s:${project}`)
+                })
+              }),
+              shelfOpen
+                ? jsx('div', {
+                    style: { paddingLeft: GUIDE_STEP },
+                    children: shelved.map((lane, i) => renderLane(lane, i === shelved.length - 1))
+                  })
+                : null
+            ]
+          },
+          `shelf:${project}`
+        )
+      : null
 
     return jsxs(
       'div',
       {
-        className: '',
         children: [
           jsx(ListHeader, {
             label: project,
@@ -329,46 +393,12 @@ function LaneList({ ctx }) {
             open,
             onToggle: () => toggle(`p:${project}`)
           }),
-          ...(open
-            ? [
-                jsx(
-                  'div',
-                  {
-                    style: guideStyle,
-                    children: [
-                      jsx('span', { 'aria-hidden': true, style: lineStyle }),
-                      ...groupBlocks,
-                      ...(shelved.length > 0
-                        ? [
-                            jsx(
-                              ListHeader,
-                              {
-                                label: 'shelf',
-                                count: shelved.length,
-                                tick: true,
-                                open: isOpen(`s:${project}`),
-                                onToggle: () => toggle(`s:${project}`)
-                              },
-                              `s:${project}`
-                            ),
-                            ...(isOpen(`s:${project}`)
-                              ? [jsx(
-                                'div',
-                                {
-                                  style: guideStyle,
-                                  children: [jsx('span', { 'aria-hidden': true, style: lineStyle }), ...shelved.map(renderLane)]
-                                },
-                                `shelf:${project}`
-                              )]
-                              : [])
-                          ]
-                        : [])
-                    ]
-                  },
-                  `body:${project}`
-                )
-              ]
-            : [])
+          open
+            ? jsx('div', {
+                style: { paddingLeft: GUIDE_STEP },
+                children: [...featureNodes, shelfNode]
+              })
+            : null
         ]
       },
       project
