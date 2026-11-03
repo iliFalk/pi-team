@@ -21,6 +21,28 @@ const HEADER_H = '28px'
 const SOFT_SHADOW = '0 2px 4px -2px rgba(0, 0, 0, 0.55)'
 // A short band under a label or a header: the only shadow shape this panel uses.
 const BAND_H = '3px'
+// Tree geometry lives in inline styles: an injected stylesheet did not reach the pane.
+const GUIDE_STEP = '14px'
+const STROKE = 'var(--ui-stroke-secondary)'
+const guideStyle = { position: 'relative', marginLeft: GUIDE_STEP, marginTop: '-9px', paddingTop: '9px' }
+const lineStyle = {
+  position: 'absolute',
+  left: 0,
+  top: 0,
+  bottom: '14px',
+  width: 0,
+  borderLeft: `1px solid ${STROKE}`,
+  pointerEvents: 'none'
+}
+const tickStyle = {
+  position: 'absolute',
+  left: '-1px',
+  top: '50%',
+  width: '11px',
+  height: '1px',
+  background: STROKE,
+  pointerEvents: 'none'
+}
 const BAND_BG = 'linear-gradient(to bottom, rgba(0, 0, 0, 0.32), rgba(0, 0, 0, 0))'
 const TEXT_H = '100px'
 
@@ -81,42 +103,6 @@ const RUN_CSS = `
   .pi-team-run::before { animation: none; opacity: 0.35; }
 }
 
-/* Tree guides: a vertical line per level, one short tick per row. */
-.pi-guide {
-  position: relative;
-  margin-left: 14px;
-  /* Reach up into the parent row so the line starts at its middle, not below it. */
-  margin-top: -9px;
-  padding-top: 9px;
-}
-
-/* The line is its own element, so it can stop at the last row's elbow. */
-.pi-line {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 14px;
-  width: 0;
-  border-left: 1px solid var(--ui-stroke-secondary);
-  pointer-events: none;
-}
-
-.pi-row {
-  position: relative;
-}
-
-.pi-row::after {
-  content: '';
-  position: absolute;
-  left: -1px;
-  top: 50%;
-  /* Long enough to meet the row's text through its 10px padding. */
-  width: 11px;
-  height: 1px;
-  background: var(--ui-stroke-secondary);
-  pointer-events: none;
-  z-index: 1;
-}
 `
 
 function installRunStyle() {
@@ -151,7 +137,6 @@ function LaneRow({ lane, active, onPick }) {
   const live = lane.state === 'running' ? 'pi-team-run' : lane.state === 'waiting' ? 'pi-team-asks' : ''
   const className = [
     rowClass,
-    'pi-row',
     active ? 'bg-(--chrome-action-hover)' : '',
     dim,
     live,
@@ -164,7 +149,9 @@ function LaneRow({ lane, active, onPick }) {
     type: 'button',
     onClick: onPick,
     className,
+    style: { position: 'relative' },
     children: [
+      jsx('span', { 'aria-hidden': true, style: tickStyle }),
       jsx('span', {
         className: `mt-1.5 inline-block size-1.5 shrink-0 rounded-full ${stateDot(lane.state)}`
       }),
@@ -198,7 +185,8 @@ const collapsedAtom = atom({})
 
 function ListHeader({ label, count, open, onToggle, dim }) {
   return jsxs('div', {
-    className: `pi-row flex items-center border-b border-(--ui-stroke-secondary) ${dim || ''}`,
+    className: `flex items-center border-b border-(--ui-stroke-secondary) ${dim || ''}`,
+    style: { position: 'relative' },
     children: [
       jsx('button', {
         type: 'button',
@@ -206,6 +194,7 @@ function ListHeader({ label, count, open, onToggle, dim }) {
         className:
           'flex min-w-0 flex-1 items-center gap-1 px-2 py-1 text-left text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary) hover:bg-(--chrome-action-hover)',
         children: [
+          jsx('span', { 'aria-hidden': true, style: tickStyle }),
           jsx('span', { className: 'w-2 shrink-0', children: open ? '▾' : '▸' }),
           jsx('span', { className: 'truncate', children: label }),
           jsx('span', { className: 'ml-auto shrink-0 pl-2', children: String(count) })
@@ -317,8 +306,8 @@ function LaneList({ ctx }) {
         ...(gopen ? [jsx(
             'div',
             {
-              className: 'pi-guide',
-              children: [jsx('span', { className: 'pi-line' }), ...items.map(renderLane)]
+              style: guideStyle,
+              children: [jsx('span', { 'aria-hidden': true, style: lineStyle }), ...items.map(renderLane)]
             },
             `kids:${gkey}`
           )] : [])
@@ -341,9 +330,9 @@ function LaneList({ ctx }) {
                 jsx(
                   'div',
                   {
-                    className: 'pi-guide',
+                    style: guideStyle,
                     children: [
-                      jsx('span', { className: 'pi-line' }),
+                      jsx('span', { 'aria-hidden': true, style: lineStyle }),
                       ...groupBlocks,
                       ...(shelved.length > 0
                         ? [
@@ -361,8 +350,8 @@ function LaneList({ ctx }) {
                               ? [jsx(
                                 'div',
                                 {
-                                  className: 'pi-guide',
-                                  children: [jsx('span', { className: 'pi-line' }), ...shelved.map(renderLane)]
+                                  style: guideStyle,
+                                  children: [jsx('span', { 'aria-hidden': true, style: lineStyle }), ...shelved.map(renderLane)]
                                 },
                                 `shelf:${project}`
                               )]

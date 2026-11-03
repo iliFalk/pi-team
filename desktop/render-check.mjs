@@ -99,7 +99,7 @@ const ctx = { rest: async () => ({}), i18n: { register: () => {} }, register: ()
 const results = {}
 selectedLane.set('theme-picker')
 
-for (const name of ['LaneList', 'LaneStatus', 'TeamPane', 'SessionTitle', 'AddSessionRow', 'QuestionBlock']) {
+for (const name of ['LaneList', 'LaneRow', 'ListHeader', 'Section', 'Row', 'LaneStatus', 'TeamPane', 'SessionTitle', 'AddSessionRow', 'QuestionBlock']) {
   const fn = eval(name)
   try {
     const out = fn({
@@ -114,6 +114,13 @@ for (const name of ['LaneList', 'LaneStatus', 'TeamPane', 'SessionTitle', 'AddSe
       onChanged: () => {},
       onDone: () => {},
       question: ${JSON.stringify(fakeLane.question)},
+      lane: ${JSON.stringify(fakeLane)},
+      label: 'demo',
+      count: 1,
+      open: true,
+      onToggle: () => {},
+      title: 'sessions · 1',
+      band: true,
       onPick: () => {}
     })
     results[name] = 'ok (' + JSON.stringify(out).length + ' chars)'
