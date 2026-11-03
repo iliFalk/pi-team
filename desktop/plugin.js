@@ -195,12 +195,6 @@ function installRunStyle() {
 const rowClass =
   'flex w-full items-start gap-2 px-2.5 py-1.5 text-left transition-colors hover:bg-(--chrome-action-hover)'
 
-function stateDot(state) {
-  if (state === 'running') return 'bg-(--ui-accent)'
-  if (state === 'failed') return 'bg-(--ui-danger)'
-  if (state === 'done') return 'bg-(--ui-text-tertiary)'
-  return 'bg-(--ui-text-quaternary)'
-}
 
 function firstLine(text) {
   if (!text) return ''
@@ -226,11 +220,8 @@ function LaneRow({ lane, active, onPick }) {
     type: 'button',
     onClick: onPick,
     className,
-    style: { position: 'relative' },
+    style: { position: 'relative', paddingLeft: '8px' },
     children: [
-      jsx('span', {
-        className: `mt-1.5 inline-block size-1.5 shrink-0 rounded-full ${stateDot(lane.state)}`
-      }),
       jsxs('span', {
         className: 'min-w-0 flex-1',
         children: [
@@ -270,7 +261,12 @@ function ListHeader({ label, count, open, onToggle, dim }) {
         className:
           'flex min-w-0 flex-1 items-center gap-1 px-2 py-1 text-left text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary) hover:bg-(--chrome-action-hover)',
         children: [
-              jsx('span', { className: 'w-2 shrink-0', children: open ? '▾' : '▸' }),
+              jsx('span', {
+            className: 'flex w-3 shrink-0 items-center justify-center',
+            children: open
+              ? jsx(icons.ChevronDown, { size: 11 })
+              : jsx(icons.ChevronRight, { size: 11 })
+          }),
           jsx('span', { className: 'truncate', children: label }),
           jsx('span', { className: 'ml-auto shrink-0 pl-2', children: String(count) })
         ]
