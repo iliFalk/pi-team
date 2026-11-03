@@ -52,6 +52,50 @@ const tickStyle = {
   pointerEvents: 'none'
 }
 
+/** A ball that runs from a working lane's elbow up its line to the feature row. */
+function Runner() {
+  return jsx('span', {
+    'aria-hidden': true,
+    style: {
+      position: 'absolute',
+      left: 0,
+      top: '50%',
+      width: '5px',
+      height: '5px',
+      marginLeft: '-2px',
+      marginTop: '-2px',
+      borderRadius: '999px',
+      background: 'var(--ui-accent)',
+      pointerEvents: 'none',
+      opacity: 0
+    },
+    ref: element => {
+      if (!element || element.dataset.piRunner) return
+      const kids = element.closest('[data-pi-kids]')
+      const row = element.parentElement
+      if (!kids || !row) return
+      element.dataset.piRunner = '1'
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+      // Distance from this row's middle to the top of the lane block, i.e. the
+      // feature row above it: measured once, because only the DOM knows it.
+      const rowBox = row.getBoundingClientRect()
+      const kidsBox = kids.getBoundingClientRect()
+      const travel = Math.max(12, rowBox.top + rowBox.height / 2 - kidsBox.top)
+
+      element.animate(
+        [
+          { transform: 'translate(9px, 0)', opacity: 0 },
+          { transform: 'translate(3px, -2px)', opacity: 1, offset: 0.18 },
+          { transform: `translate(0, ${-travel}px)`, opacity: 0.9, offset: 0.9 },
+          { transform: `translate(0, ${-travel}px)`, opacity: 0 }
+        ],
+        { duration: 1900, iterations: Infinity, easing: 'ease-in-out' }
+      )
+    }
+  })
+}
+
 /** One node: its row, its children, and the line that belongs to it.
  *  The line and the tick come AFTER the row: drawn first, the row's own
  *  background (hover, selection) painted over them and cut the elbow away. */
@@ -66,14 +110,15 @@ function TreeNode({ last, children }) {
 }
 
 /** A row with its elbow: the line reaches it, and stops at its middle when it is the last. */
-function TreeRow({ last, standalone, children }) {
+function TreeRow({ last, standalone, runner, children }) {
   const spine = last ? '50%' : '100%'
   return jsxs('div', {
     style: { position: 'relative' },
     children: [
       children,
       last || standalone ? jsx('span', { 'aria-hidden': true, style: spineStyle(spine) }) : null,
-      jsx('span', { 'aria-hidden': true, style: tickStyle })
+      jsx('span', { 'aria-hidden': true, style: tickStyle }),
+      runner ? jsx(Runner, {}) : null
     ]
   })
 }
@@ -295,6 +340,7 @@ function LaneList({ ctx }) {
       {
         last,
         standalone: true,
+        runner: lane.state === 'running',
         children: jsx(LaneRow, {
           lane,
           active: lane.lane === current,
@@ -345,6 +391,7 @@ function LaneList({ ctx }) {
             }),
             gopen && items.length
               ? jsx('div', {
+                  'data-pi-kids': '',
                   style: { paddingLeft: GUIDE_STEP },
                   children: items.map((lane, i) => renderLane(lane, i === items.length - 1))
                 })
@@ -373,6 +420,7 @@ function LaneList({ ctx }) {
               }),
               shelfOpen
                 ? jsx('div', {
+                    'data-pi-kids': '',
                     style: { paddingLeft: GUIDE_STEP },
                     children: shelved.map((lane, i) => renderLane(lane, i === shelved.length - 1))
                   })
