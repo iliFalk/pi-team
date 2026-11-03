@@ -19,6 +19,9 @@ const ID = 'pi-team'
 const HEADER_H = '28px'
 // A short fall-off below each header and text block. Black alpha, because a shadow has no theme colour.
 const SOFT_SHADOW = '0 2px 4px -2px rgba(0, 0, 0, 0.55)'
+// A short band under a label or a header: the only shadow shape this panel uses.
+const BAND_H = '3px'
+const BAND_BG = 'linear-gradient(to bottom, rgba(0, 0, 0, 0.32), rgba(0, 0, 0, 0))'
 const TEXT_H = '100px'
 
 const POLL_MS = 3000
@@ -467,11 +470,26 @@ function Row({ label, value }) {
   })
 }
 
-function Section({ title }) {
-  return jsx('div', {
+function Section({ title, band }) {
+  return jsxs('div', {
     className:
       'mt-1 border-t border-(--ui-stroke-secondary) px-2.5 pt-1.5 pb-0.5 text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary)',
-    children: title
+    children: [
+      title,
+      band
+        ? jsx('div', {
+            'aria-hidden': true,
+            style: {
+              height: BAND_H,
+              marginLeft: '-10px',
+              marginRight: '-10px',
+              marginTop: '2px',
+              background: BAND_BG,
+              pointerEvents: 'none'
+            }
+          })
+        : null
+    ]
   })
 }
 
@@ -706,19 +724,19 @@ function LaneStatus({ ctx }) {
       ),
       jsx(RenameSession, {}),
 
-      jsx(Section, { title: 'task' }),
+      jsx(Section, { title: 'task', band: true }),
       jsx('div', {
         className:
           'shrink-0 overflow-y-auto whitespace-pre-wrap px-2.5 py-0.5 text-[0.625rem] leading-snug text-(--ui-text-secondary)',
-        style: { height: TEXT_H, boxShadow: SOFT_SHADOW },
+        style: { height: TEXT_H },
         children: lane.task || '—'
       }),
 
-      jsx(Section, { title: 'last message' }),
+      jsx(Section, { title: 'last message', band: true }),
       jsx('div', {
         className:
           'shrink-0 overflow-y-auto whitespace-pre-wrap break-words px-2.5 py-0.5 font-mono text-[0.625rem] leading-snug text-(--ui-text-secondary)',
-        style: { height: TEXT_H, boxShadow: SOFT_SHADOW },
+        style: { height: TEXT_H },
         children: lane.last_text || 'nothing written yet'
       }),
 
@@ -785,9 +803,9 @@ function TeamPane({ ctx }) {
           left: 0,
           right: 0,
           top: HEADER_H,
-          height: '6px',
+          height: BAND_H,
           // A gradient, not a box-shadow: it paints one band across both columns.
-          background: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.32), rgba(0, 0, 0, 0))',
+          background: BAND_BG,
           pointerEvents: 'none'
         }
       })
