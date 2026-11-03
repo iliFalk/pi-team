@@ -54,17 +54,6 @@ const elbowStyle = {
   pointerEvents: 'none'
 }
 
-const tickStyle = {
-  position: 'absolute',
-  left: 0,
-  top: '50%',
-  width: '9px',
-  height: '1px',
-  background: STROKE,
-  opacity: 0.65,
-  pointerEvents: 'none'
-}
-
 /** A ball that runs from a working lane's elbow up its line to the feature row. */
 function Runner() {
   return jsx('span', {
@@ -128,12 +117,9 @@ function TreeRow({ last, standalone, runner, children }) {
     style: { position: 'relative' },
     children: [
       children,
-      last
-        ? jsx('span', { 'aria-hidden': true, style: elbowStyle })
-        : standalone
-          ? jsx('span', { 'aria-hidden': true, style: spineStyle('100%') })
-          : null,
-      last ? null : jsx('span', { 'aria-hidden': true, style: tickStyle }),
+      // Every row gets the same rounded branch; only the line below it differs.
+      standalone && !last ? jsx('span', { 'aria-hidden': true, style: spineStyle('100%') }) : null,
+      jsx('span', { 'aria-hidden': true, style: elbowStyle }),
       runner ? jsx(Runner, {}) : null
     ]
   })
