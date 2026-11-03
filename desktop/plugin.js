@@ -41,6 +41,19 @@ const spineStyle = (height) => ({
   pointerEvents: 'none'
 })
 
+const elbowStyle = {
+  position: 'absolute',
+  left: 0,
+  top: 0,
+  width: '9px',
+  height: '50%',
+  borderLeft: `1px solid ${STROKE}`,
+  borderBottom: `1px solid ${STROKE}`,
+  borderBottomLeftRadius: '5px',
+  opacity: 0.45,
+  pointerEvents: 'none'
+}
+
 const tickStyle = {
   position: 'absolute',
   left: 0,
@@ -111,13 +124,16 @@ function TreeNode({ last, children }) {
 
 /** A row with its elbow: the line reaches it, and stops at its middle when it is the last. */
 function TreeRow({ last, standalone, runner, children }) {
-  const spine = last ? '50%' : '100%'
   return jsxs('div', {
     style: { position: 'relative' },
     children: [
       children,
-      last || standalone ? jsx('span', { 'aria-hidden': true, style: spineStyle(spine) }) : null,
-      jsx('span', { 'aria-hidden': true, style: tickStyle }),
+      last
+        ? jsx('span', { 'aria-hidden': true, style: elbowStyle })
+        : standalone
+          ? jsx('span', { 'aria-hidden': true, style: spineStyle('100%') })
+          : null,
+      last ? null : jsx('span', { 'aria-hidden': true, style: tickStyle }),
       runner ? jsx(Runner, {}) : null
     ]
   })
