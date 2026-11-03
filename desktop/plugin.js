@@ -85,6 +85,9 @@ const RUN_CSS = `
 .pi-guide {
   border-left: 1px solid var(--ui-stroke-secondary);
   margin-left: 14px;
+  /* Reach up into the parent row so the line starts at its middle, not below it. */
+  margin-top: -9px;
+  padding-top: 9px;
 }
 
 .pi-row {
@@ -96,10 +99,12 @@ const RUN_CSS = `
   position: absolute;
   left: -1px;
   top: 50%;
-  width: 6px;
+  /* Long enough to meet the row's text through its 10px padding. */
+  width: 11px;
   height: 1px;
   background: var(--ui-stroke-secondary);
   pointer-events: none;
+  z-index: 1;
 }
 `
 
