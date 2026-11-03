@@ -522,9 +522,18 @@ function SessionTitle({ entry, project, feature, onRemove }) {
       setEditing(false)
       return
     }
-    await host.request('session.title', { session_id: entry.id, title: next })
-    setEditing(false)
-    query.refetch()
+    try {
+      const result = await host.request('session.title', { session_id: entry.id, title: next })
+      const applied = result && (result.title || (result.result && result.result.title))
+      host.notify({ kind: 'info', message: `rename sent: ${applied || next}` })
+      setEditing(false)
+      query.refetch()
+    } catch (error) {
+      host.notify({
+        kind: 'error',
+        message: `rename failed: ${(error && error.message) || error}`
+      })
+    }
   }
 
   if (editing) {
