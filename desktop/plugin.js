@@ -87,6 +87,27 @@ function Runner() {
   })
 }
 
+// The icon set ships only the open folder, so both states are drawn here, in the
+// same 24-grid and stroke as the rest of the panel.
+const FOLDER_CLOSED = 'M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z'
+const FOLDER_OPEN =
+  'm6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2'
+
+function FolderIcon({ open }) {
+  return jsx('svg', {
+    viewBox: '0 0 24 24',
+    width: ICON_SIZE,
+    height: ICON_SIZE,
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': true,
+    children: jsx('path', { d: open ? FOLDER_OPEN : FOLDER_CLOSED })
+  })
+}
+
 /** A row of a level: the level line runs beside it and a short stub reaches into it.
  *  A row with children keeps the line going below its middle, so the level below
  *  starts on the same stroke instead of on a second one. */
@@ -254,9 +275,9 @@ function LaneRow({ lane, active, onPick }) {
 const collapsedAtom = atom({})
 
 
-function ListHeader({ label, count, open, onToggle, dim, trunk, Icon = icons.FolderOpen }) {
+function ListHeader({ label, count, open, onToggle, dim, trunk }) {
   return jsxs('div', {
-    className: `flex items-center border-b border-(--ui-stroke-secondary) ${dim || ''}`,
+    className: `flex items-center ${dim || ''}`,
     style: { position: 'relative' },
     children: [
       jsx('button', {
@@ -269,7 +290,7 @@ function ListHeader({ label, count, open, onToggle, dim, trunk, Icon = icons.Fol
           jsx('span', {
             className: 'flex shrink-0 items-center justify-center',
             style: { width: `${ICON_SIZE}px` },
-            children: jsx(Icon, {})
+            children: jsx(FolderIcon, { open })
           }),
           jsx('span', { className: 'truncate', children: label }),
           jsx('span', { className: 'ml-auto shrink-0 pl-2', children: String(count) })
@@ -705,7 +726,7 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
   const options = (question.options || []).filter(Boolean)
 
   return jsxs('div', {
-    className: 'border-b border-(--ui-stroke-secondary) px-2.5 py-1.5',
+    className: 'px-2.5 py-1.5',
     children: [
       jsx('div', {
         className: 'text-[0.625rem] font-medium text-(--ui-accent)',
