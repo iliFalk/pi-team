@@ -25,7 +25,13 @@ const BAND_BG = 'linear-gradient(to bottom, rgba(0, 0, 0, 0.32), rgba(0, 0, 0, 0
 // Both text blocks share one height and scroll inside it.
 const TEXT_H = '100px'
 // Tree geometry: a node owns its line, so a level cannot break into loose segments.
-const GUIDE_STEP = '14px'
+// The line hangs under the icon, so the icon column and the line are one axis.
+const GUIDE_STEP = '18px'
+const ROW_PAD = '6px'
+const ICON_SIZE = 12
+const ICON_CENTER = '12px'
+const LINE_X = '-6px'
+const STUB_W = '12px'
 // Quaternary rather than the border tone: the elbow must stay visible on a
 // highlighted row, where a border-coloured line washes out.
 const STROKE = 'var(--ui-text-quaternary)'
@@ -44,7 +50,7 @@ function Runner() {
     'aria-hidden': true,
     style: {
       position: 'absolute',
-      left: `-${GUIDE_STEP}`,
+      left: LINE_X,
       top: '50%',
       width: '5px',
       height: '5px',
@@ -70,7 +76,7 @@ function Runner() {
 
       element.animate(
         [
-          { transform: `translate(${parseInt(GUIDE_STEP, 10)}px, 0)`, opacity: 0 },
+          { transform: `translate(${parseInt(STUB_W, 10)}px, 0)`, opacity: 0 },
           { transform: 'translate(4px, -2px)', opacity: 1, offset: 0.18 },
           { transform: `translate(0, ${-travel}px)`, opacity: 0.9, offset: 0.9 },
           { transform: `translate(0, ${-travel}px)`, opacity: 0 }
@@ -84,11 +90,11 @@ function Runner() {
 /** A row of a level: the level line runs beside it and a short stub reaches into it.
  *  A row with children keeps the line going below its middle, so the level below
  *  starts on the same stroke instead of on a second one. */
-function TreeRow({ last, orphan, trunk, runner, children }) {
+function TreeRow({ last, orphan, runner, children }) {
   const row = Array.isArray(children) ? children : [children]
   const line = last
-    ? { ...LINE, left: `-${GUIDE_STEP}`, top: 0, height: '50%' }
-    : { ...LINE, left: `-${GUIDE_STEP}`, top: 0, bottom: 0 }
+    ? { ...LINE, left: LINE_X, top: 0, height: '50%' }
+    : { ...LINE, left: LINE_X, top: 0, bottom: 0 }
 
   return jsxs('div', {
     style: { position: 'relative' },
@@ -101,16 +107,15 @@ function TreeRow({ last, orphan, trunk, runner, children }) {
             'aria-hidden': true,
             style: {
               position: 'absolute',
-              left: `-${GUIDE_STEP}`,
+              left: LINE_X,
               top: '50%',
-              width: GUIDE_STEP,
+              width: STUB_W,
               height: '1px',
               background: STROKE,
               opacity: 0.45,
               pointerEvents: 'none'
             }
           }),
-      trunk ? jsx('span', { 'aria-hidden': true, style: { ...LINE, left: 0, top: '50%', bottom: 0 } }) : null,
       runner ? jsx(Runner, {}) : null
     ]
   })
@@ -213,9 +218,14 @@ function LaneRow({ lane, active, onPick }) {
     type: 'button',
     onClick: onPick,
     className,
-    // The highlight starts where the elbow ends: 9px of tick, then the row.
-    style: { position: 'relative', marginLeft: GUIDE_STEP, width: `calc(100% - ${GUIDE_STEP})`, paddingLeft: '6px' },
+    // The highlight starts at the icon, so the stub and the line stay outside it.
+    style: { position: 'relative', marginLeft: ROW_PAD, width: `calc(100% - ${ROW_PAD})`, paddingLeft: 0 },
     children: [
+      jsx('span', {
+        className: 'flex shrink-0 items-start justify-center pt-0.5',
+        style: { width: `${ICON_SIZE}px` },
+        children: jsx(icons.Terminal, { size: 11 })
+      }),
       jsxs('span', {
         className: 'min-w-0 flex-1',
         children: [
@@ -244,7 +254,7 @@ function LaneRow({ lane, active, onPick }) {
 const collapsedAtom = atom({})
 
 
-function ListHeader({ label, count, open, onToggle, dim }) {
+function ListHeader({ label, count, open, onToggle, dim, trunk, Icon = icons.FolderOpen }) {
   return jsxs('div', {
     className: `flex items-center border-b border-(--ui-stroke-secondary) ${dim || ''}`,
     style: { position: 'relative' },
@@ -253,18 +263,30 @@ function ListHeader({ label, count, open, onToggle, dim }) {
         type: 'button',
         onClick: onToggle,
         className:
-          'flex min-w-0 flex-1 items-center gap-1 px-2 py-1 text-left text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary) hover:bg-(--chrome-action-hover)',
+          'flex min-w-0 flex-1 items-center gap-1 py-1 pr-2 text-left text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary) hover:bg-(--chrome-action-hover)',
+        style: { marginLeft: ROW_PAD, width: `calc(100% - ${ROW_PAD})` },
         children: [
-              jsx('span', {
-            className: 'flex w-3 shrink-0 items-center justify-center',
-            children: open
-              ? jsx(icons.ChevronDown, { size: 11 })
-              : jsx(icons.ChevronRight, { size: 11 })
+          jsx('span', {
+            className: 'flex shrink-0 items-center justify-center',
+            style: { width: `${ICON_SIZE}px` },
+            children: jsx(Icon, {})
           }),
           jsx('span', { className: 'truncate', children: label }),
           jsx('span', { className: 'ml-auto shrink-0 pl-2', children: String(count) })
         ]
       }),
+      // The line to the children starts at the bottom of the icon and leaves the row.
+      trunk
+        ? jsx('span', {
+            'aria-hidden': true,
+            style: {
+              ...LINE,
+              left: `${ICON_SIZE / 2}px`,
+              top: `calc(50% + ${ICON_SIZE / 2}px)`,
+              height: `calc(50% - ${ICON_SIZE / 2}px)`
+            }
+          })
+        : null
     ]
   })
 }
@@ -368,12 +390,12 @@ function LaneList({ ctx }) {
         TreeRow,
         {
           last,
-          trunk: gopen && items.length > 0,
           children: [
             jsx(ListHeader, {
               label: groupKey || 'ungrouped',
               count: items.length,
               open: gopen,
+              trunk: gopen && items.length > 0,
               onToggle: () => toggle(gkey)
             }),
             gopen && items.length
@@ -395,12 +417,12 @@ function LaneList({ ctx }) {
           TreeRow,
           {
             last: true,
-            trunk: shelfOpen,
             children: [
               jsx(ListHeader, {
                 label: 'shelf',
                 count: shelved.length,
                 open: shelfOpen,
+                trunk: shelfOpen,
                 onToggle: () => toggle(`s:${project}`)
               }),
               shelfOpen
@@ -421,12 +443,12 @@ function LaneList({ ctx }) {
       {
         // A project is the top level: no line above it, but its line reaches down.
         orphan: true,
-        trunk: open,
         children: [
           jsx(ListHeader, {
             label: project,
             count: all.length,
             open,
+            trunk: open,
             onToggle: () => toggle(`p:${project}`)
           }),
           open
