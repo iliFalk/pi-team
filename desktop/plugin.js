@@ -220,7 +220,8 @@ function LaneRow({ lane, active, onPick }) {
     type: 'button',
     onClick: onPick,
     className,
-    style: { position: 'relative', paddingLeft: '16px' },
+    // The highlight starts where the elbow ends: 9px of tick, then the row.
+    style: { position: 'relative', marginLeft: '9px', width: 'calc(100% - 9px)', paddingLeft: '7px' },
     children: [
       jsxs('span', {
         className: 'min-w-0 flex-1',
