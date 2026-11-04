@@ -18,6 +18,7 @@ import os
 import re
 import shlex
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -487,16 +488,35 @@ def _lane_entry(lane_dir: Path) -> Optional[Dict[str, Any]]:
                 "asked_at": question.get("asked_at"),
             }
 
-    reason = _shelf_reason(entry, str(record.get("repo") or ""), worktree)
-    entry["shelved"] = bool(reason)
-    entry["shelved_reason"] = reason
-    # A merged lane carries the merge commit that closed it. Without it the group is a dead end.
+    # Closing is a decision, not a side effect of finishing: only an explicit close (the
+    # orchestrator, after a merge) puts a lane on the shelf.
+    closed_at = record.get("closed_at")
+    guess = _shelf_reason(entry, str(record.get("repo") or ""), worktree)
+    entry["shelved"] = bool(closed_at)
+    entry["shelved_reason"] = str(record.get("closed_reason") or "") or (guess if closed_at else "")
+    entry["handed_at"] = record.get("handed_at")
+    entry["handed"] = bool(record.get("handed_at")) and not closed_at
+    # What git says about the lane right now: a hint for the card, never a decision.
+    entry["git_hint"] = guess
     entry["merge"] = None
     marker = "merged into "
-    if reason.startswith(marker):
+    hint = guess if guess.startswith(marker) else ""
+    if hint:
         entry["merge"] = _merge_receipt(
-            str(record.get("repo") or ""), str(entry.get("branch") or ""), reason[len(marker):].strip()
+            str(record.get("repo") or ""), str(entry.get("branch") or ""), hint[len(marker):].strip()
         )
+    if closed_at and not entry["merge"]:
+        branch_subject = str(record.get("merge_subject") or "")
+        if branch_subject:
+            entry["merge"] = {
+                "sha": str(record.get("merge_sha") or ""),
+                "short": str(record.get("merge_sha") or "")[:7],
+                "date": str(record.get("closed_date") or ""),
+                "subject": branch_subject,
+                "files": int(record.get("merge_files") or 0),
+                "insertions": int(record.get("merge_insertions") or 0),
+                "deletions": int(record.get("merge_deletions") or 0),
+            }
     return entry
 
 
@@ -651,6 +671,39 @@ def label_session(body: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
     tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     tmp.replace(path)
     return {"project": project, "feature": feature, "session": session, "label": label}
+
+
+def _plugin_ctx() -> Any:
+    """The PluginContext kept by this plugin's entry point, when it is loaded."""
+    module = sys.modules.get("pi_team_runtime")
+    return getattr(module, "ctx", None) if module else None
+
+
+@router.post("/lanes/{lane}/hand")
+def hand_lane(lane: str, payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Take a finished lane off the agent's hands: mark it handed and say so in the chat."""
+    lane_dir = _lanes_root() / lane
+    record = _read_json(lane_dir / "lane.json")
+    if record is None:
+        raise HTTPException(status_code=404, detail="unknown lane")
+    if record.get("closed_at"):
+        raise HTTPException(status_code=409, detail="lane is already closed")
+    record["handed_at"] = int(time.time())
+    (lane_dir / "lane.json").write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    who = f'{record.get("project") or "?"}/{record.get("group") or "?"}'
+    text = (
+        f'Handed over: lane {lane} ({who}) is finished and waiting for a check. '
+        f'Merge it and close it with pi-lane close {lane}.'
+    )
+    sent = False
+    ctx = _plugin_ctx()
+    if ctx is not None:
+        try:
+            sent = bool(ctx.inject_message(text, session_key=payload.get("session_key") or None))
+        except Exception:
+            sent = False
+    return {"ok": True, "handed_at": record["handed_at"], "message_sent": sent}
 
 
 @router.post("/lanes/{lane}/answer")

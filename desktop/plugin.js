@@ -69,8 +69,10 @@ const mark = (sign, count, color) =>
 function countStates(lanes) {
   const counts = { ask: 0, bad: 0, run: 0, done: 0 }
   for (const lane of lanes) {
-    // A closed lane is quiet only if it ended well: a failure survives the cleanup.
-    if (!lane || (lane.shelved && !isBad(lane))) continue
+    // A handed lane has left the agent's hands; a closed one is done with. Neither counts,
+    // unless a closed lane failed — that survives the cleanup.
+    if (!lane || lane.handed) continue
+    if (lane.shelved && !isBad(lane)) continue
     if (isBad(lane)) counts.bad += 1
     else if (lane.state === 'waiting') counts.ask += 1
     else if (lane.state === 'running') counts.run += 1
@@ -558,8 +560,9 @@ function LaneList({ ctx }) {
   const projectBlocks = projects.map(project => {
     const all = laneByProject.get(project) || []
     const open = isOpen(`p:${project}`) && (!focused || focused === project)
-    const active = all.filter(lane => !lane.shelved)
     const shelved = all.filter(lane => lane.shelved)
+    const handed = all.filter(lane => lane.handed && !lane.shelved)
+    const active = all.filter(lane => !lane.shelved && !lane.handed)
 
     const registered = registryByName.get(project)
     const groups = new Map()
@@ -578,7 +581,7 @@ function LaneList({ ctx }) {
       const items = groups.get(groupKey)
       const gkey = `g:${project}/${groupKey}`
       const gopen = isOpen(gkey)
-      const last = index === groupKeys.length - 1 && shelved.length === 0
+      const last = index === groupKeys.length - 1 && shelved.length === 0 && handed.length === 0
 
       return jsx(
         TreeRow,
@@ -605,6 +608,34 @@ function LaneList({ ctx }) {
         gkey
       )
     })
+
+    const handedOpen = isOpen(`h:${project}`)
+    const handedNode = handed.length
+      ? jsx(
+          TreeRow,
+          {
+            last: shelved.length === 0,
+            row: jsx(ListHeader, {
+              label: 'handed',
+              plain: handed.length,
+              open: handedOpen,
+              onToggle: () => {
+                toggle(`h:${project}`)
+                selectedLane.set(`handed:${project}`)
+              }
+            }),
+            children: [
+              handedOpen
+                ? jsx('div', {
+                    style: { paddingLeft: GUIDE_STEP },
+                    children: handed.map((lane, i) => renderLane(lane, i === handed.length - 1))
+                  })
+                : null
+            ]
+          },
+          `handed:${project}`
+        )
+      : null
 
     const shelfOpen = isOpen(`s:${project}`)
     const shelfNode = shelved.length
@@ -657,7 +688,7 @@ function LaneList({ ctx }) {
           open
             ? jsx('div', {
                 style: { paddingLeft: GUIDE_STEP },
-                children: [...featureNodes, shelfNode]
+                children: [...featureNodes, handedNode, shelfNode]
               })
             : null
         ]
@@ -977,7 +1008,7 @@ function Receipt({ merge }) {
 }
 
 /** Every closed lane of one project, when its group row is picked. */
-function ClosedList({ project, rows, onPick }) {
+function GroupList({ title, rows, onPick }) {
   return jsxs('div', {
     className: 'flex h-full flex-col overflow-y-auto pb-2 text-xs',
     children: [
@@ -985,7 +1016,7 @@ function ClosedList({ project, rows, onPick }) {
         className:
           'flex shrink-0 items-center border-b border-(--ui-stroke-secondary) px-2.5 font-mono text-[0.6875rem] text-(--ui-text-secondary)',
         style: { height: HEADER_H },
-        children: `closed · ${project}`
+        children: title
       }),
       rows.length === 0
         ? jsx('div', {
@@ -1018,7 +1049,9 @@ function ClosedList({ project, rows, onPick }) {
 function LaneStatus({ ctx }) {
   const laneName = useValue(selectedLane)
   // A group row of the tree picks a whole list, not one lane.
-  const groupProject = laneName.startsWith('closed:') ? laneName.slice('closed:'.length) : null
+  const groupMatch = /^(closed|handed):(.+)$/.exec(laneName)
+  const groupKind = groupMatch ? groupMatch[1] : null
+  const groupProject = groupMatch ? groupMatch[2] : null
   // Both hooks run every render; openSession and /link take the stored id.
   const storedSessionId = useValue(host.state.focusedStoredSessionId)
   const runtimeSessionId = useValue(host.state.activeSessionId)
@@ -1036,11 +1069,15 @@ function LaneStatus({ ctx }) {
     refetchInterval: POLL_MS
   })
 
-  if (groupProject) {
+  if (groupKind) {
     const rows = ((listQuery.data && listQuery.data.lanes) || []).filter(
-      lane => lane.shelved && lane.project === groupProject
+      lane => (groupKind === 'closed' ? lane.shelved : lane.handed) && lane.project === groupProject
     )
-    return jsx(ClosedList, { project: groupProject, rows, onPick: name => selectedLane.set(name) })
+    return jsx(GroupList, {
+      title: `${groupKind} · ${groupProject}`,
+      rows,
+      onPick: name => selectedLane.set(name)
+    })
   }
 
   if (!laneName) {
@@ -1086,6 +1123,26 @@ function LaneStatus({ ctx }) {
           })
         : null,
       jsx(Row, { label: 'state', value: lane.state, color: stateColour(lane) }),
+      !lane.shelved && !lane.handed && ['done', 'stopped', 'failed', 'error'].includes(lane.state)
+        ? jsx('button', {
+            type: 'button',
+            onClick: () =>
+              ctx
+                .rest(`/lanes/${encodeURIComponent(lane.lane)}/hand`, {
+                  method: 'POST',
+                  body: { session_key: sessionId },
+                  timeoutMs: 8000
+                })
+                .then(() => query.refetch()),
+            title: 'send this lane to the orchestrator: check it, merge it, close it',
+            className:
+              'mx-2.5 my-1 shrink-0 rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.625rem] hover:bg-(--ui-fill-tertiary)',
+            children: 'hand over'
+          })
+        : null,
+      lane.handed
+        ? jsx(Row, { label: 'handed', value: 'waiting for a check and a merge', color: ASK_COLOR })
+        : null,
       lane.shelved ? jsx(Row, { label: 'closed', value: lane.shelved_reason }) : null,
       lane.merge ? jsx(Receipt, { merge: lane.merge }) : null,
       // A closed lane that did not end well still says why, even after its worktree is gone.
