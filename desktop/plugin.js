@@ -320,9 +320,9 @@ function installRunStyle() {
 const ROW_PY = '6px'
 const HEADER_PY = '4px'
 const BAND_PY = 4
-// Two lane paddings, so the air above the first project and between projects matches the
-// air between two lanes. A groove of the same family as the header band divides them.
-const PROJECT_GAP = '12px'
+// One value for both: the air under the panel header and the air around the divider are
+// the same 4px, so the first project and the next one start from the same place.
+const PROJECT_GAP = '4px'
 // A line of its own with the shadow outside it: dark beside the line, fading away from it.
 const PROJECT_SEP_H = '4px'
 const PROJECT_SEP_SHADOW = '4px'
@@ -690,7 +690,7 @@ function LaneList({ ctx }) {
       }),
       jsx('div', {
         className: 'min-h-0 flex-1 overflow-y-auto',
-        style: { display: 'flex', flexDirection: 'column', gap: '2px', paddingTop: PROJECT_GAP },
+        style: { display: 'flex', flexDirection: 'column', gap: PROJECT_GAP, paddingTop: PROJECT_GAP },
         children: lanes.length === 0 ? emptyHint : projectTree
       }),
       askUpdate
