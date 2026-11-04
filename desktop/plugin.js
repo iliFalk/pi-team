@@ -48,10 +48,11 @@ const LINE = {
 function Pulse() {
   return jsx('span', {
     'aria-hidden': true,
+    className: 'pi-team-pulse',
     style: {
       display: 'inline-block',
-      width: '6px',
-      height: '6px',
+      width: '7px',
+      height: '7px',
       borderRadius: '999px',
       background: 'var(--ui-accent)',
       flex: 'none'
@@ -274,6 +275,25 @@ const RUN_CSS = `
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
+}
+
+.pi-team-pulse {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--ui-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ui-accent) 22%, transparent);
+  animation: pi-team-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes pi-team-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pi-team-pulse { animation: none; opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
