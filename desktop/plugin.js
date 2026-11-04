@@ -416,7 +416,7 @@ function ListHeader({ label, count, secondary, running, waiting, open, onToggle,
                       // A pixel down, the way the folder sits: an icon's ink centres higher
                       // than a digit's, and the two share this line on every header.
                       jsx('span', {
-                        style: { display: 'flex', transform: 'translateY(1px)' },
+                        style: { display: 'flex', transform: 'translateY(-2px)' },
                         children: jsx(Gear, {})
                       }),
                       jsx('span', { children: String(running) })
