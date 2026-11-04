@@ -316,6 +316,9 @@ function installRunStyle() {
 const ROW_PY = '6px'
 const HEADER_PY = '4px'
 const BAND_PY = 4
+// Two lane paddings, so the air above the first project and between projects matches the
+// air between two lanes.
+const PROJECT_GAP = '12px'
 
 const rowClass = 'flex w-full items-start gap-1 px-2.5 text-left transition-colors'
 
@@ -654,6 +657,7 @@ function LaneList({ ctx }) {
       }),
       jsx('div', {
         className: 'min-h-0 flex-1 overflow-y-auto',
+        style: { display: 'flex', flexDirection: 'column', gap: PROJECT_GAP, paddingTop: PROJECT_GAP },
         children: lanes.length === 0 ? emptyHint : projectBlocks
       }),
       askUpdate
