@@ -89,7 +89,7 @@ function Pulse() {
 const BALL = 4
 const BALL_SHIFT = 0.5
 
-function Runner() {
+function Runner({ last }) {
   return jsx('span', {
     'aria-hidden': true,
     style: {
@@ -101,8 +101,8 @@ function Runner() {
       width: `${BALL}px`,
       height: `${BALL}px`,
       marginLeft: `${-(BALL / 2) + BALL_SHIFT}px`,
-      // One pixel down: the body reads low against the 1px stub once it is centred on it.
-      marginTop: `${-BALL / 2 + 1}px`,
+      // The last row of a level carries the end of the line, where the body reads a pixel high.
+      marginTop: `${-BALL / 2 + (last ? 1 : 0)}px`,
       borderRadius: '999px',
       background: RUN_COLOR,
       pointerEvents: 'none',
@@ -235,7 +235,7 @@ function TreeRow({ last, orphan, trunk, runner, row, children }) {
                 }
               })
             : null,
-          runner ? jsx(Runner, {}) : null
+          runner ? jsx(Runner, { last }) : null
         ]
       }),
       ...blocks,
