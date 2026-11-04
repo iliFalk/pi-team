@@ -56,6 +56,37 @@ const BAD_STATES = ['failed', 'error', 'stopped']
 
 const isBad = lane => BAD_STATES.includes(lane.state) || Boolean(lane.last_error)
 
+/** A gear that turns while a lane works: the word is replaced by the motion. */
+function Gear() {
+  return jsx('svg', {
+    viewBox: '0 0 24 24',
+    width: 12,
+    height: 12,
+    fill: 'none',
+    stroke: RUN_COLOR,
+    strokeWidth: 2,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-label': 'running',
+    style: { display: 'block', flex: 'none' },
+    ref: element => {
+      if (!element || element.dataset.piGear) return
+      element.dataset.piGear = '1'
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+      element.animate(
+        [{ transform: 'rotate(0deg)' }, { transform: 'rotate(360deg)' }],
+        { duration: 1800, iterations: Infinity, easing: 'linear' }
+      )
+    },
+    children: [
+      jsx('path', {
+        d: 'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z'
+      }, 'gear'),
+      jsx('circle', { cx: 12, cy: 12, r: 3 }, 'hub')
+    ]
+  })
+}
+
 /** A dot that breathes while work is going on in a lane of this node. */
 function Pulse() {
   return jsx('span', {
@@ -426,10 +457,11 @@ function LaneRow({ lane, active, onPick }) {
                 children: lane.lane
               }),
               jsx('span', {
-                className: 'ml-auto shrink-0 text-[0.625rem]',
+                className: 'ml-auto flex shrink-0 items-center gap-1 text-[0.625rem]',
                 style: { color: statusColor || 'var(--ui-text-quaternary)' },
-                // The same mark the header uses, so a question reads the same at both levels.
-                children: asked ? `? ${lane.state}` : lane.state
+                // A working lane says it with motion; the rest keep their word, and a
+                // question carries the same mark the headers use.
+                children: lane.state === 'running' ? jsx(Gear, {}) : asked ? `? ${lane.state}` : lane.state
               })
             ]
           }),
