@@ -382,6 +382,37 @@ def _shelf_reason(entry: Dict[str, Any], repo: str, worktree: str) -> str:
 # lane assembly
 # --------------------------------------------------------------------------- #
 
+def _merge_receipt(repo: str, branch: str, default: str) -> Optional[Dict[str, Any]]:
+    """The merge commit that brought this lane's branch into the default branch, or None."""
+    if not repo or not branch or not Path(repo).is_dir():
+        return None
+    rc, out = _run_git(repo, "log", default, "--merges", "--date=short", "--format=%H %ad %s", "-40")
+    if rc != 0:
+        return None
+    for line in out.splitlines():
+        parts = line.split(" ", 2)
+        if len(parts) < 3:
+            continue
+        sha, date, subject = parts
+        short = branch.rsplit("/", 1)[-1]
+        if branch in subject or (short and short in subject):
+            files = insertions = deletions = 0
+            rc_stat, stat = _run_git(repo, "show", "--shortstat", "--format=", sha)
+            if rc_stat == 0:
+                changed = re.search(r"(\d+) files? changed", stat)
+                files = int(changed.group(1)) if changed else 0
+                added = _INSERT_RE.search(stat)
+                insertions = int(added.group(1)) if added else 0
+                removed = _DELETE_RE.search(stat)
+                deletions = int(removed.group(1)) if removed else 0
+            return {
+                "sha": sha, "short": sha[:7], "date": date,
+                "subject": subject, "files": files,
+                "insertions": insertions, "deletions": deletions,
+            }
+    return None
+
+
 def _lane_entry(lane_dir: Path) -> Optional[Dict[str, Any]]:
     record = _read_json(lane_dir / "lane.json")
     if record is None:
@@ -454,6 +485,13 @@ def _lane_entry(lane_dir: Path) -> Optional[Dict[str, Any]]:
     reason = _shelf_reason(entry, str(record.get("repo") or ""), worktree)
     entry["shelved"] = bool(reason)
     entry["shelved_reason"] = reason
+    # A merged lane carries the merge commit that closed it. Without it the group is a dead end.
+    entry["merge"] = None
+    marker = "merged into "
+    if reason.startswith(marker):
+        entry["merge"] = _merge_receipt(
+            str(record.get("repo") or ""), str(entry.get("branch") or ""), reason[len(marker):].strip()
+        )
     return entry
 
 

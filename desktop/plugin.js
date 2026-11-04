@@ -601,7 +601,10 @@ function LaneList({ ctx }) {
               counts: null,
               plain: shelved.length,
               open: shelfOpen,
-              onToggle: () => toggle(`s:${project}`)
+              onToggle: () => {
+                toggle(`s:${project}`)
+                selectedLane.set(`closed:${project}`)
+              }
             }),
             children: [
               shelfOpen
@@ -937,8 +940,65 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
   })
 }
 
+/** The merge commit that closed a lane, shown under its card. */
+function Receipt({ merge }) {
+  return jsxs('div', {
+    children: [
+      jsx(Section, { title: 'merge' }),
+      jsx(Row, { label: 'commit', value: merge.short, color: RUN_COLOR }),
+      jsx(Row, { label: 'date', value: merge.date }),
+      jsx(Row, { label: 'into', value: merge.subject }),
+      jsx(Row, {
+        label: 'diff',
+        value: `${merge.files} files  +${merge.insertions} −${merge.deletions}`
+      })
+    ]
+  })
+}
+
+/** Every closed lane of one project, when its group row is picked. */
+function ClosedList({ project, rows, onPick }) {
+  return jsxs('div', {
+    className: 'flex h-full flex-col overflow-y-auto pb-2 text-xs',
+    children: [
+      jsx('div', {
+        className:
+          'flex shrink-0 items-center border-b border-(--ui-stroke-secondary) px-2.5 font-mono text-[0.6875rem] text-(--ui-text-secondary)',
+        style: { height: HEADER_H },
+        children: `closed · ${project}`
+      }),
+      rows.length === 0
+        ? jsx('div', {
+            className: 'px-2.5 py-2 text-[0.625rem] text-(--ui-text-quaternary)',
+            children: 'No closed lane yet.'
+          })
+        : rows.map(row =>
+            jsxs(
+              'button',
+              {
+                type: 'button',
+                onClick: () => onPick(row.lane),
+                className:
+                  'flex w-full items-baseline gap-2 px-2.5 py-1.5 text-left transition-colors hover:bg-(--chrome-action-hover)',
+                children: [
+                  jsx('span', { className: 'truncate font-mono text-[0.6875rem]', children: row.lane }),
+                  jsx('span', {
+                    className: 'ml-auto shrink-0 text-[0.625rem] text-(--ui-text-quaternary)',
+                    children: row.shelved_reason
+                  })
+                ]
+              },
+              row.lane
+            )
+          )
+    ]
+  })
+}
+
 function LaneStatus({ ctx }) {
   const laneName = useValue(selectedLane)
+  // A group row of the tree picks a whole list, not one lane.
+  const groupProject = laneName.startsWith('closed:') ? laneName.slice('closed:'.length) : null
   // Both hooks run every render; openSession and /link take the stored id.
   const storedSessionId = useValue(host.state.focusedStoredSessionId)
   const runtimeSessionId = useValue(host.state.activeSessionId)
@@ -946,9 +1006,22 @@ function LaneStatus({ ctx }) {
   const query = useQuery({
     queryKey: ['pi-team', 'lane', laneName],
     queryFn: () => ctx.rest(`/lanes/${encodeURIComponent(laneName)}`, REST),
-    enabled: Boolean(laneName),
+    enabled: Boolean(laneName) && !groupProject,
     refetchInterval: POLL_MS
   })
+  const listQuery = useQuery({
+    queryKey: ['pi-team', 'lanes'],
+    queryFn: () => ctx.rest('/lanes', REST),
+    enabled: Boolean(groupProject),
+    refetchInterval: POLL_MS
+  })
+
+  if (groupProject) {
+    const rows = ((listQuery.data && listQuery.data.lanes) || []).filter(
+      lane => lane.shelved && lane.project === groupProject
+    )
+    return jsx(ClosedList, { project: groupProject, rows, onPick: name => selectedLane.set(name) })
+  }
 
   if (!laneName) {
     return jsx('div', {
@@ -994,6 +1067,7 @@ function LaneStatus({ ctx }) {
         : null,
       jsx(Row, { label: 'state', value: lane.state, color: stateColour(lane) }),
       lane.shelved ? jsx(Row, { label: 'closed', value: lane.shelved_reason }) : null,
+      lane.merge ? jsx(Receipt, { merge: lane.merge }) : null,
       jsx(Row, { label: 'branch', value: lane.branch || '—' }),
       jsx(Row, {
         label: 'changes',
