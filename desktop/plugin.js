@@ -262,7 +262,7 @@ function LaneRow({ lane, active, onPick }) {
   const snippet = lane.shelved ? lane.shelved_reason : firstLine(lane.last_text) || lane.task
   const dim = lane.shelved ? 'opacity-55' : ''
   const live = lane.state === 'running' ? 'pi-team-run' : lane.state === 'waiting' ? 'pi-team-asks' : ''
-  const className = [rowClass, dim, live, live ? 'rounded-md' : '']
+  const className = [rowClass, dim]
     .filter(Boolean)
     .join(' ')
 
@@ -290,7 +290,7 @@ function LaneRow({ lane, active, onPick }) {
         children: jsx(icons.Terminal, { size: ICON_SIZE })
       }),
       jsxs('span', {
-        className: `min-w-0 flex-1 ${active || hover ? labelBandOn : labelBand}`,
+        className: `min-w-0 flex-1 ${active || hover ? labelBandOn : labelBand} ${live}`,
         style: bandStyle,
         children: [
           jsxs('span', {
