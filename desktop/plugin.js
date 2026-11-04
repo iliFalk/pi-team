@@ -480,6 +480,13 @@ function ListHeader({ label, count, secondary, running, waiting, open, onToggle,
                     className: 'ml-auto flex shrink-0 items-baseline gap-1 pl-2',
                     style: TEXT_NUDGE,
                     children: [
+                      // One question mark per waiting lane under this row, three at most.
+                      waiting
+                        ? jsx('span', {
+                            style: { color: ASK_COLOR, fontWeight: 600 },
+                            children: '?'.repeat(Math.min(waiting, 3))
+                          })
+                        : null,
                       jsx('span', { children: String(count) }),
                       secondary === undefined || secondary === null
                         ? null
