@@ -85,9 +85,9 @@ function Runner() {
       const base = parseFloat(LINE_X) + BALL_SHIFT
       const stubStart = parseFloat(STUB_W) - BALL_SHIFT
       const up = featureRect.top + featureRect.height / 2 - (rowRect.top + rowRect.height / 2)
-      const intoIcon = iconRect
-        ? iconRect.left + iconRect.width / 2 - rowRect.left - base
-        : 0
+      // Stops at the icon's left edge, not its centre: the folder is drawn as an outline,
+      // so a ball parked in the middle would show through it instead of going under.
+      const intoIcon = iconRect ? iconRect.left - rowRect.left - base + 1 : 0
 
       element.animate(
         [
@@ -96,9 +96,10 @@ function Runner() {
           { transform: `translate(${stubStart - 2}px, 0px) scale(1)`, opacity: 1, offset: 0.05 },
           { transform: 'translate(0px, 0px) scale(1)', opacity: 1, offset: 0.22 },
           { transform: `translate(0px, ${up}px) scale(1)`, opacity: 1, offset: 0.72 },
+          // No fade: it shrinks away where the folder is, under the folder's own row.
           { transform: `translate(${intoIcon}px, ${up}px) scale(1)`, opacity: 1, offset: 0.9 },
-          { transform: `translate(${intoIcon}px, ${up}px) scale(0.9)`, opacity: 0.2, offset: 0.97 },
-          { transform: `translate(${intoIcon}px, ${up}px) scale(0.9)`, opacity: 0, offset: 1 }
+          { transform: `translate(${intoIcon}px, ${up}px) scale(0)`, opacity: 1, offset: 0.99 },
+          { transform: `translate(${intoIcon}px, ${up}px) scale(0)`, opacity: 0, offset: 1 }
         ],
         { duration: 2400, iterations: Infinity, easing: 'linear' }
       )
@@ -143,7 +144,8 @@ function TreeRow({ last, orphan, trunk, runner, row, children }) {
     style: { position: 'relative' },
     children: [
       jsxs('div', {
-        style: { position: 'relative' },
+        // A row that owns children sits above them, so the ball can pass under it.
+        style: { position: 'relative', zIndex: blocks.length ? 1 : undefined },
         children: [
           row,
           insideRow ? jsx('span', { 'aria-hidden': true, style: insideRow }) : null,
