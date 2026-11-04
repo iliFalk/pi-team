@@ -96,21 +96,19 @@ row and is updated on the legacy rule. `--check` prints `current`, `outdated`, `
 `no markers` per project and changes nothing. A project whose `AGENTS.md` carries its own rules and no
 block is refused as `no markers` — merge that file by hand. Run `--check` after any template change.
 
-**Feature ↔ session link.** Linking happens in one place: the right pane's sessions block
-(`add this session +`). The feature header in the left list only marks a feature that already carries this
-chat — a `✓`, not a button; unlinking is the row's `×`. The link lives in the registry, under the
-feature's `sessions` list, so one session can serve several features and one feature several sessions.
-Store `host.state.focusedStoredSessionId`, never `host.state.activeSessionId`: the runtime id does not
-survive a reload, and `openSession` / `session.title` take the stored one — a runtime id in the registry
-opens a blank draft on click.
-The right panel always shows a `sessions` block: one row per linked session, then `add this session +`,
-which links the open chat to the lane's feature. With no sessions the add row stands alone under the
-label; it never hides — a second click on an already-linked chat is a no-op, because `/link` is idempotent. Each row carries three controls: the pencil names it inline,
-`↗` opens it with `host.openSession`, and `×` drops it from the feature (`POST /unlink` with project,
-feature and session id). The name is the plugin's own label (`POST /label`, stored on the session entry
-in `projects.json`), never the real session title: `session.title` answers `session not found` for a
-stored id, and the panel must leave the session untouched. The row shows the label, else the real title,
-else a shortened id.
+**Feature ↔ session link.** The left list is a pure tree — project, feature, lane, and no icons on any of
+its rows; the panel asks the detail side for every state it draws. Linking lives only in the right pane's
+sessions block, which is always drawn: one row per linked session, then `add this session +`, which links
+the open chat to the lane's feature. With no sessions the add row stands alone under the label, and it
+never hides — a second click on an already-linked chat changes nothing, because `/link` is idempotent.
+Each row carries three controls: the pencil names it inline, `↗` opens it with `host.openSession`, and `×`
+drops it from the feature (`POST /unlink` with project, feature and session id). The name is the plugin's
+own label (`POST /label`, stored on the session entry in `projects.json`) and must never touch the real
+session title: setting `session.title` needs the runtime id, so a stored one answers `session not found`,
+and Ilja wants the panel to leave his chat alone. The row shows the label, else the real title, else a
+shortened id. Store `host.state.focusedStoredSessionId`, never `host.state.activeSessionId`: a runtime id
+does not survive a reload, and `openSession` takes the stored one — a runtime id in the registry opens a
+blank draft on click.
 
 ## Which instructions a lane obeys
 
@@ -224,6 +222,10 @@ PY
 
 The `pi-team` right panel shows the same fields: last text, last tool call, turns, tokens and cost.
 
+**The running count belongs to the deepest visible level.** A closed project sums the running lanes of
+all its features, an open project leaves that to its features, and a feature leaves it to its own rows
+once it is open. Never two levels at once: repeated counters in one column stop being read.
+
 **Where the panel lives.** It sits on the right edge with `enforce: true`; the constraint behind that
 choice is in § Where the panel lives. Moving it means editing the dock hints in `plugin.js`.
 
@@ -272,7 +274,12 @@ Settle this before rearranging it again:
 - `pi-team:` prefixes every contributed id (`pi-team:team`).
 
 **How the panel is built.** Label a control with a word, not a glyph: at 10 px a pictograph can read as an
-empty spot, so the update control is the word `update`. Give both column headers one fixed height
+empty spot, so the update control is the word `update`. **The list rows carry no interactive glyphs** — Ilja removed the link `+`, the `✓` marker and the
+project-focus `»` one by one, and every gesture lives on the detail side; any state a row would mark (this
+chat is linked) is already on the right. The rows DO carry level icons, which he asked for: a folder
+(closed/open) per project and feature, `icons.Terminal` for a lane, no chevrons — a whole-row click toggles,
+and the guide lines hang from the icons. A feature with working lanes shows a pulsing dot and `<n> running`
+at its right edge, and every working lane runs a ball up its line that ends behind the folder icon. Give both column headers one fixed height
 (`HEADER_H`, 28px), or their text size sets their heights and the two `border-b` lines land on different
 rows. Draw a shadow as a 3-px gradient strip across the full width (`BAND_H`, `BAND_BG`), never as
 `boxShadow`: on a zero- or 1-px-tall strip Chromium paints nothing, and two per-header shadows double up
@@ -280,8 +287,13 @@ at the seam the columns share, which Ilja sees as a broken line. The same band g
 (`TASK`, `LAST MESSAGE`), not onto the block below it — he marks the label line as the place for the
 shadow, and a shadow on the block's own border reads as a frame around the text. The blocks keep one
 fixed height (`TEXT_H`, 100px) with scrolling inside — a block that grows with the text pushes the fields
-below it off screen. Hierarchy rows carry guide lines (a `.pi-guide` border per level plus a `.pi-row`
-tick), so the indent comes from nesting, not from per-row paddings. Put sizes and heights in inline
+below it off screen. Hierarchy rows carry guide lines drawn INLINE, one element per node: `TreeNode` owns the vertical run of
+its subtree, `TreeRow` the row plus its elbow (a rounded `╰` box for the last row, a straight `├` tee
+above), and both are appended AFTER the row so a selected row's background cannot paint over them. No
+class may carry that geometry — an injected stylesheet does not reach the panel. The indent comes from
+nesting the children in a `paddingLeft: GUIDE_STEP` box, and a row's highlight starts where the elbow ends
+(`marginLeft: 9px`, `width: calc(100% - 9px)`), so every label sits 16px from its level line. Changing the
+step, the radius or that 16 moves every level at once: it is one constant, not per-row padding. Put sizes and heights in inline
 `style`: the app ships its CSS prebuilt, so a class it never saw in its own source may do nothing, while
 an inline value always applies. Keep every one of these numbers in the constant block at the top of
 `plugin.js`, so "half that big" or "64 → 100" is one edit in one place. Recipes and the pixel check:
@@ -290,8 +302,16 @@ an inline value always applies. Keep every one of these numbers in the constant 
 **Updating a client.** The `update` word at the right end of the `projects` header calls `POST /update` after a `ConfirmDialog` (it replaces files, so it always asks): the backend pulls the
 repo here (`~/work/pi-team`, override with `PI_TEAM_REPO`), writes `desktop/plugin.js` to this machine's
 `desktop-plugins/`, then hands the same bytes to every host in
-`~/.hermes/plugin-data/pi-team/clients.json` (`{"host": "ili@casalt", "path": "/home/ili/…/plugin.js"}`)
+`~/.hermes/plugin-data/pi-team/clients.json` (`{"host": "ili@casamac", "path": "/home/ili/…/plugin.js"}`)
 over `ssh` with the file on stdin. The app watches that folder, so a copied file reloads by itself.
+
+- **A machine joins the list only after its SSH answers.** Add the entry, then prove it: `ssh <host>
+  'sha256sum <path>'` must print the hash the route will write. Until that works the button reports the
+  host's error and copies nothing there — a refused port or an unapproved Tailscale check is the whole
+  failure, not the plugin.
+- Test a new client end to end through the route, not by eye: call `POST /update` with FastAPI
+  `TestClient`, then read `steps` — one row per stage (`git`, `local`, each host) with `ok` and `detail`,
+  and compare `sha256sum` on the client against the repo. That output is the report Ilja can check.
 
 - The route takes **git's** copy. Commit and push a local edit first, or the button silently reverts it.
 - **The route carries the desktop half only.** `plugin/` (the lane API) reaches a gateway by
@@ -318,6 +338,23 @@ over `ssh` with the file on stdin. The app watches that folder, so a copied file
 | shelf | why the lane left the active list: merged, quiet, or worktree gone |
 
 The backend reads the last 1 MB of `events.jsonl`. Older events do not reach the panel.
+
+## Show the panel without a run
+
+To show the animation without spending a lane, write a simulated record and keep a live PID:
+
+```sh
+# ~/.hermes/lanes/<lane>/lane.json: lane, task, project, group, state "running", pid, worktree, branch
+# ~/.hermes/lanes/<lane>/events.jsonl: one message_end with an assistant text part and a tool_use part
+```
+
+- **The backend trusts the PID.** A record whose process is gone is served as `stopped` whatever the file
+  says, so probe `os.kill(pid, 0)` and read `/lanes` back before saying the animation is on.
+- **A background process started from an agent session dies with that session.** Re-arm it each time
+  (`sleep 7200` through `terminal(background=true)`) and state in the report that it ends by itself.
+- Two records in one `group` exercise the feature's `<n> running` indicator; one record shows the ball
+  alone. Give the record a real `repo` and `worktree` so the detail side has fields to draw.
+- Tear the demo down (`state: done`, or `rm -rf ~/.hermes/lanes/<lane>`) so it never reads as real work.
 
 ## Shelf
 
@@ -431,6 +468,11 @@ mv ~/src/thinkrail/packages/spec-graph/node_modules/package \
   `rm -rf ~/.hermes/lanes/<lane>`, drop the session from `projects.json`, and confirm the lane count is
   zero before calling the panel ready.
 - **The panel holds no privilege.** It only reads files and git; every action goes through the runner.
+- **"failed to render" is a ReferenceError in `plugin.js`, not a data fault.** One `jsx()` prop naming a
+  component or helper that is gone takes the whole panel down with a card that names no line, and
+  `node --check` passes because the syntax is valid. Run `node desktop/render-check.mjs` in
+  `~/work/pi-team` (it stubs the SDK and calls every component) and fix the name before copying the file
+  anywhere. Keep its fixtures rich enough to clear early returns, or the body never runs.
 
 ## Verification
 
