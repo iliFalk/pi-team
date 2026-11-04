@@ -45,6 +45,16 @@ const LINE = {
   pointerEvents: 'none'
 }
 
+// One palette for the three states the tree reports.
+const RUN_COLOR = '#1A6543'
+const ASK_COLOR = '#0762B4'
+const BAD_COLOR = '#8A1C0E'
+const ASK_BG = 'rgba(7, 98, 180, 0.70)'
+const ASK_BG_SOFT = 'rgba(7, 98, 180, 0.18)'
+const BAD_STATES = ['failed', 'error', 'stopped']
+
+const isBad = lane => BAD_STATES.includes(lane.state) || Boolean(lane.last_error)
+
 /** A dot that breathes while work is going on in a lane of this node. */
 function Pulse() {
   return jsx('span', {
@@ -55,7 +65,7 @@ function Pulse() {
       width: '7px',
       height: '7px',
       borderRadius: '999px',
-      background: 'var(--ui-accent)',
+      background: RUN_COLOR,
       flex: 'none'
     },
     ref: element => {
@@ -92,7 +102,7 @@ function Runner() {
       marginLeft: `${-(BALL / 2) + BALL_SHIFT}px`,
       marginTop: `${-BALL / 2}px`,
       borderRadius: '999px',
-      background: 'var(--ui-accent)',
+      background: RUN_COLOR,
       pointerEvents: 'none',
       opacity: 0
     },
@@ -258,7 +268,7 @@ const RUN_CSS = `
   background: conic-gradient(
     from var(--pi-angle),
     transparent 0deg 230deg,
-    var(--ui-accent) 320deg,
+    ${RUN_COLOR} 320deg,
     transparent 360deg
   );
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
@@ -274,7 +284,7 @@ const RUN_CSS = `
   border-radius: inherit;
   padding: 1px;
   pointer-events: none;
-  background: var(--ui-accent);
+  background: ${ASK_COLOR};
   opacity: 0.45;
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
@@ -286,8 +296,8 @@ const RUN_CSS = `
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  background: var(--ui-accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ui-accent) 22%, transparent);
+  background: ${RUN_COLOR};
+  box-shadow: 0 0 0 2px color-mix(in srgb, ${RUN_COLOR} 22%, transparent);
   animation: pi-team-pulse 1.6s ease-in-out infinite;
 }
 
@@ -357,7 +367,15 @@ function LaneRow({ lane, active, onPick }) {
   const [hover, setHover] = useState(false)
   const snippet = lane.shelved ? lane.shelved_reason : firstLine(lane.last_text) || lane.task
   const dim = lane.shelved ? 'opacity-55' : ''
-  const live = lane.state === 'running' ? 'pi-team-run' : lane.state === 'waiting' ? 'pi-team-asks' : ''
+  const asked = lane.state === 'waiting'
+  const bad = isBad(lane)
+  const live = lane.state === 'running' ? 'pi-team-run' : asked ? 'pi-team-asks' : ''
+  const bandFill = asked
+    ? { ...bandStyle, background: ASK_BG }
+    : active || hover
+      ? { ...bandStyle, background: 'var(--chrome-action-hover)' }
+      : bandStyle
+  const statusColor = asked ? '#ffffff' : bad ? BAD_COLOR : lane.state === 'running' ? RUN_COLOR : undefined
   const className = [rowClass, dim]
     .filter(Boolean)
     .join(' ')
@@ -386,23 +404,27 @@ function LaneRow({ lane, active, onPick }) {
         children: jsx(icons.Terminal, { size: ICON_SIZE })
       }),
       jsxs('span', {
-        className: `min-w-0 flex-1 ${active || hover ? labelBandOn : labelBand} ${live}`,
-        style: bandStyle,
+        className: `min-w-0 flex-1 ${labelBand} ${live}`,
+        style: bandFill,
         children: [
           jsxs('span', {
             className: 'flex items-baseline gap-2',
             children: [
-              jsx('span', { className: 'truncate font-mono text-[0.6875rem]', children: lane.lane }),
               jsx('span', {
-                className: `ml-auto shrink-0 text-[0.625rem] ${
-                  lane.state === 'running' ? 'text-(--ui-accent)' : 'text-(--ui-text-quaternary)'
-                }`,
+                className: `truncate font-mono text-[0.6875rem] ${asked ? 'font-medium' : ''}`,
+                style: asked ? { color: '#ffffff' } : undefined,
+                children: lane.lane
+              }),
+              jsx('span', {
+                className: 'ml-auto shrink-0 text-[0.625rem]',
+                style: { color: statusColor || 'var(--ui-text-quaternary)' },
                 children: lane.state
               })
             ]
           }),
           jsx('span', {
-            className: 'block truncate text-[0.625rem] text-(--ui-text-tertiary)',
+            className: 'block truncate text-[0.625rem]',
+            style: { color: asked ? 'rgba(255, 255, 255, 0.82)' : 'var(--ui-text-tertiary)' },
             children: snippet || '—'
           })
         ]
@@ -414,7 +436,7 @@ function LaneRow({ lane, active, onPick }) {
 const collapsedAtom = atom({})
 
 
-function ListHeader({ label, count, secondary, running, open, onToggle, dim }) {
+function ListHeader({ label, count, secondary, running, waiting, open, onToggle, dim }) {
   const [hover, setHover] = useState(false)
   return jsxs('div', {
     className: `flex items-center ${dim || ''}`,
@@ -435,14 +457,14 @@ function ListHeader({ label, count, secondary, running, open, onToggle, dim }) {
             children: jsx(FolderIcon, { open })
           }),
           jsxs('span', {
-            className: `flex min-w-0 flex-1 items-center gap-1 ${hover ? labelBandOn : labelBand}`,
-            style: bandStyle,
+            className: `flex min-w-0 flex-1 items-center gap-1 ${labelBand}`,
+            style: waiting ? { ...bandStyle, background: ASK_BG_SOFT } : hover ? { ...bandStyle, background: 'var(--chrome-action-hover)' } : bandStyle,
             children: [
               jsx('span', { className: 'truncate', style: TEXT_NUDGE, children: label }),
               running
                 ? jsxs('span', {
-                    className: 'ml-auto flex shrink-0 items-center gap-1 pl-2 text-(--ui-accent)',
-                    style: TEXT_NUDGE,
+                    className: 'ml-auto flex shrink-0 items-center gap-1 pl-2',
+                    style: { ...TEXT_NUDGE, color: RUN_COLOR },
                     children: [jsx(Pulse, {}), jsx('span', { children: `${running} running` })]
                   })
                 : jsxs('span', {
@@ -571,6 +593,7 @@ function LaneList({ ctx }) {
             count: items.length,
             // Open: the lanes show their own state, so the row keeps the plain count.
             running: gopen ? 0 : items.filter(lane => lane.state === 'running').length,
+            waiting: gopen ? 0 : items.filter(lane => lane.state === 'waiting').length,
             open: gopen,
             onToggle: () => toggle(gkey)
           }),
@@ -599,6 +622,7 @@ function LaneList({ ctx }) {
               label: 'shelf',
               count: shelved.length,
               running: shelfOpen ? 0 : shelved.filter(lane => lane.state === 'running').length,
+              waiting: shelfOpen ? 0 : shelved.filter(lane => lane.state === 'waiting').length,
               open: shelfOpen,
               onToggle: () => toggle(`s:${project}`)
             }),
@@ -629,6 +653,7 @@ function LaneList({ ctx }) {
           secondary: all.length,
           // Only while the project is closed: deeper levels report themselves.
           running: open ? 0 : all.filter(lane => lane.state === 'running').length,
+          waiting: open ? 0 : all.filter(lane => lane.state === 'waiting').length,
           open,
           onToggle: () => toggle(`p:${project}`)
         }),
