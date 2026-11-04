@@ -46,7 +46,7 @@ const LINE = {
 
 /** A ball that runs from a working lane's stub, up its line, into the feature's icon. */
 const BALL = 4
-const BALL_SHIFT = 1.5
+const BALL_SHIFT = 0.5
 
 function Runner() {
   return jsx('span', {
