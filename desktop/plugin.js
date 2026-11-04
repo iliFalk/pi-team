@@ -567,10 +567,8 @@ function LaneList({ ctx }) {
           trunk: gopen && items.length > 0,
           row: jsx(ListHeader, {
             label: groupKey || 'ungrouped',
-            count: items.length,
-            // Open: the lanes show their own state, so the row keeps the plain count.
-            running: gopen ? 0 : items.filter(lane => lane.state === 'running').length,
-            waiting: gopen ? 0 : items.filter(lane => lane.state === 'waiting').length,
+            // Open: its rows report themselves, so the counts belong to the closed state.
+            counts: gopen ? null : countStates(items),
             open: gopen,
             onToggle: () => toggle(gkey)
           }),
