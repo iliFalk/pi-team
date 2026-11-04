@@ -407,7 +407,7 @@ function LaneRow({ lane, active, onPick }) {
 const collapsedAtom = atom({})
 
 
-function ListHeader({ label, counts, plain, open, onToggle, dim }) {
+function ListHeader({ label, counts, plain, action, open, onToggle, dim }) {
   const [hover, setHover] = useState(false)
   const hasCounts = Boolean(counts && (counts.ask || counts.bad || counts.run || counts.done))
   const hasPlain = plain !== undefined && plain !== null
@@ -462,6 +462,20 @@ function ListHeader({ label, counts, plain, open, onToggle, dim }) {
                 : bandStyle,
             children: [
               jsx('span', { className: 'truncate', style: TEXT_NUDGE, children: label }),
+              action
+                ? jsx('button', {
+                    type: 'button',
+                    onClick: event => {
+                      event.stopPropagation()
+                      action.onClick()
+                    },
+                    title: action.title || '',
+                    className:
+                      'ml-auto shrink-0 rounded border border-(--ui-stroke-secondary) px-1 text-[0.5625rem] uppercase tracking-wide hover:bg-(--ui-fill-tertiary)',
+                    style: TEXT_NUDGE,
+                    children: action.label
+                  })
+                : null,
               hasCounts || hasPlain
                 ? jsxs('span', {
                     className: 'ml-auto flex shrink-0 items-center gap-1.5 pl-2',
@@ -618,6 +632,16 @@ function LaneList({ ctx }) {
             row: jsx(ListHeader, {
               label: 'review',
               plain: handed.length,
+              action: {
+                label: 'send',
+                title: 'put this queue into the chat for a check',
+                onClick: () =>
+                  ctx.rest('/review/send', {
+                    method: 'POST',
+                    body: { project, session_key: sessionId },
+                    timeoutMs: 15000
+                  }).then(() => query.refetch())
+              },
               open: handedOpen,
               onToggle: () => {
                 toggle(`h:${project}`)

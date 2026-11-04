@@ -679,6 +679,40 @@ def _plugin_ctx() -> Any:
     return getattr(module, "ctx", None) if module else None
 
 
+@router.post("/review/send")
+def send_review(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Put the whole review queue into the chat as one list, for the orchestrator to check."""
+    lanes = [entry for entry in _all_lanes() if entry.get("handed") and not entry.get("shelved")]
+    project = payload.get("project")
+    if project:
+        lanes = [entry for entry in lanes if entry.get("project") == project]
+    if not lanes:
+        raise HTTPException(status_code=409, detail="the review queue is empty")
+
+    lanes.sort(key=lambda entry: entry.get("handed_at") or 0)
+    lines = []
+    for entry in lanes:
+        change = f'{entry["files"]} files +{entry["insertions"]} −{entry["deletions"]}'
+        trouble = f' · failed: {entry["last_error"]}' if entry.get("last_error") else ""
+        lines.append(
+            f'- {entry.get("project")}/{entry.get("group") or "-"}/{entry["lane"]} — '
+            f'{entry["state"]} — {change}{trouble}'
+        )
+    text = (
+        f"Review queue: {len(lanes)} lane(s).\n"
+        + "\n".join(lines)
+        + "\n\nCheck each one, report what you found, and wait for my go before merging or closing."
+    )
+    sent = False
+    ctx = _plugin_ctx()
+    if ctx is not None:
+        try:
+            sent = bool(ctx.inject_message(text, session_key=payload.get("session_key") or None))
+        except Exception:
+            sent = False
+    return {"ok": True, "count": len(lanes), "message_sent": sent, "text": text}
+
+
 @router.post("/lanes/{lane}/hand")
 def hand_lane(lane: str, payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
     """Take a finished lane off the agent's hands: mark it handed and say so in the chat."""
