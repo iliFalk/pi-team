@@ -616,7 +616,7 @@ function LaneList({ ctx }) {
           {
             last: shelved.length === 0,
             row: jsx(ListHeader, {
-              label: 'handed',
+              label: 'review',
               plain: handed.length,
               open: handedOpen,
               onToggle: () => {
@@ -1074,7 +1074,7 @@ function LaneStatus({ ctx }) {
       lane => (groupKind === 'closed' ? lane.shelved : lane.handed) && lane.project === groupProject
     )
     return jsx(GroupList, {
-      title: `${groupKind} · ${groupProject}`,
+      title: `${groupKind === 'handed' ? 'review' : groupKind} · ${groupProject}`,
       rows,
       onPick: name => selectedLane.set(name)
     })
@@ -1137,11 +1137,11 @@ function LaneStatus({ ctx }) {
             title: 'send this lane to the orchestrator: check it, merge it, close it',
             className:
               'mx-2.5 my-1 shrink-0 rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.625rem] hover:bg-(--ui-fill-tertiary)',
-            children: 'hand over'
+            children: 'send for review'
           })
         : null,
       lane.handed
-        ? jsx(Row, { label: 'handed', value: 'waiting for a check and a merge', color: ASK_COLOR })
+        ? jsx(Row, { label: 'review', value: 'waiting for a check and a merge', color: ASK_COLOR })
         : null,
       lane.shelved ? jsx(Row, { label: 'closed', value: lane.shelved_reason }) : null,
       lane.merge ? jsx(Receipt, { merge: lane.merge }) : null,
