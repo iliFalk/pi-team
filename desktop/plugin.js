@@ -594,7 +594,7 @@ function LaneList({ ctx }) {
             last: true,
             trunk: shelfOpen,
             row: jsx(ListHeader, {
-              label: 'shelf',
+              label: 'closed',
               counts: null,
               open: shelfOpen,
               onToggle: () => toggle(`s:${project}`)
@@ -989,7 +989,7 @@ function LaneStatus({ ctx }) {
           })
         : null,
       jsx(Row, { label: 'state', value: lane.state, color: stateColour(lane) }),
-      lane.shelved ? jsx(Row, { label: 'shelf', value: lane.shelved_reason }) : null,
+      lane.shelved ? jsx(Row, { label: 'closed', value: lane.shelved_reason }) : null,
       jsx(Row, { label: 'branch', value: lane.branch || '—' }),
       jsx(Row, {
         label: 'changes',
