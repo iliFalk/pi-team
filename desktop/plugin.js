@@ -1092,8 +1092,8 @@ function LaneStatus({ ctx }) {
         ? jsx(Row, { label: 'error', value: lane.last_error, color: BAD_COLOR })
         : null,
 
-      jsx(Section, { title: `sessions · ${(lane.feature_sessions || []).length}` }),
-      (lane.feature_sessions || []).map(entry =>
+      lane.shelved ? null : jsx(Section, { title: `sessions · ${(lane.feature_sessions || []).length}` }),
+      lane.shelved ? null : (lane.feature_sessions || []).map(entry =>
         jsx(
           SessionTitle,
           {
@@ -1115,7 +1115,7 @@ function LaneStatus({ ctx }) {
         )
       ),
 
-      jsx(AddSessionRow, {
+      lane.shelved ? null : jsx(AddSessionRow, {
         ctx,
         project: lane.project,
         feature: lane.group,
@@ -1124,27 +1124,31 @@ function LaneStatus({ ctx }) {
         onDone: () => query.refetch()
       }),
 
-      jsx(Section, { title: 'task', band: true }),
-      jsx('div', {
-        className:
-          'shrink-0 overflow-y-auto whitespace-pre-wrap px-2.5 py-0.5 text-[0.625rem] leading-snug text-(--ui-text-secondary)',
-        style: { height: TEXT_H },
-        children: lane.task || '—'
-      }),
+      lane.shelved ? null : jsx(Section, { title: 'task', band: true }),
+      lane.shelved
+        ? null
+        : jsx('div', {
+            className:
+              'shrink-0 overflow-y-auto whitespace-pre-wrap px-2.5 py-0.5 text-[0.625rem] leading-snug text-(--ui-text-secondary)',
+            style: { height: TEXT_H },
+            children: lane.task || '—'
+          }),
 
-      jsx(Section, { title: 'last message', band: true }),
-      jsx('div', {
-        className:
-          'shrink-0 overflow-y-auto whitespace-pre-wrap break-words px-2.5 py-0.5 font-mono text-[0.625rem] leading-snug text-(--ui-text-secondary)',
-        style: { height: TEXT_H },
-        children: lane.last_text || 'nothing written yet'
-      }),
+      lane.shelved ? null : jsx(Section, { title: 'last message', band: true }),
+      lane.shelved
+        ? null
+        : jsx('div', {
+            className:
+              'shrink-0 overflow-y-auto whitespace-pre-wrap break-words px-2.5 py-0.5 font-mono text-[0.625rem] leading-snug text-(--ui-text-secondary)',
+            style: { height: TEXT_H },
+            children: lane.last_text || 'nothing written yet'
+          }),
 
-      status.length > 0 ? jsx(Section, { title: 'files' }) : null,
-      status.slice(0, 10).map(item => jsx(Row, { label: item.code, value: item.path }, item.path)),
+      !lane.shelved && status.length > 0 ? jsx(Section, { title: 'files' }) : null,
+      lane.shelved ? null : status.slice(0, 10).map(item => jsx(Row, { label: item.code, value: item.path }, item.path)),
 
-      jsx(Section, { title: plan ? `plan ${plan.done}/${plan.total}` : 'plan' }),
-      plan
+      lane.shelved ? null : jsx(Section, { title: plan ? `plan ${plan.done}/${plan.total}` : 'plan' }),
+      lane.shelved ? null : plan
         ? (plan.items || []).slice(0, 10).map((item, index) =>
             jsx(Row, { label: planGlyph(item.status), value: item.title }, `${index}-${item.title}`)
           )
