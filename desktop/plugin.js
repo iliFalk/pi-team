@@ -48,6 +48,7 @@ const LINE = {
 // One palette for the three states the tree reports.
 const RUN_COLOR = '#1A6543'
 const ASK_COLOR = '#0762B4'
+const ASK_OUTLINE = '#044A8A'
 const BAD_COLOR = '#8A1C0E'
 // 85%: white on this fill reaches 4.6:1, the threshold for text this small.
 const ASK_BG = 'rgba(7, 98, 180, 0.85)'
@@ -289,54 +290,9 @@ const REST = { timeoutMs: 8000 }
 
 const selectedLane = atom('')
 
-// Marching outline for a lane that works right now. Injected once; every colour
-// comes from the app's theme variables, so a theme switch needs no plugin change.
+// Only the pulse is left in the sheet: the lane outline is drawn inline, in the colour of
+// the lane's own state, so nothing depends on a class that may never load.
 const RUN_CSS = `
-@property --pi-angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
-
-@keyframes pi-team-run { to { --pi-angle: 360deg; } }
-
-.pi-team-run {
-  position: relative;
-}
-
-.pi-team-asks {
-  position: relative;
-}
-
-.pi-team-run::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  pointer-events: none;
-  background: conic-gradient(
-    from var(--pi-angle),
-    transparent 0deg 230deg,
-    ${RUN_COLOR} 320deg,
-    transparent 360deg
-  );
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  animation: pi-team-run 2.5s linear infinite;
-}
-
-.pi-team-asks::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  pointer-events: none;
-  background: ${ASK_COLOR};
-  opacity: 0.45;
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-}
-
 .pi-team-pulse {
   display: inline-block;
   width: 7px;
@@ -355,11 +311,6 @@ const RUN_CSS = `
 @media (prefers-reduced-motion: reduce) {
   .pi-team-pulse { animation: none; opacity: 1; }
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .pi-team-run::before { animation: none; opacity: 0.35; }
-}
-
 `
 
 function installRunStyle() {
@@ -419,7 +370,14 @@ function LaneRow({ lane, active, onPick }) {
   const dim = lane.shelved ? 'opacity-55' : ''
   const asked = lane.state === 'waiting'
   const bad = isBad(lane)
-  const live = lane.state === 'running' ? 'pi-team-run' : asked ? 'pi-team-asks' : ''
+  // The outline states the lane's condition once; the motion belongs to the gear and the ball.
+  const outline = lane.state === 'running'
+    ? RUN_COLOR
+    : asked
+      ? ASK_OUTLINE
+      : bad
+        ? BAD_COLOR
+        : null
   const bandFill = asked
     ? { ...bandStyle, background: ASK_BG }
     : active || hover
@@ -454,8 +412,8 @@ function LaneRow({ lane, active, onPick }) {
         children: jsx(icons.Terminal, { size: ICON_SIZE })
       }),
       jsxs('span', {
-        className: `min-w-0 flex-1 ${labelBand} ${live}`,
-        style: bandFill,
+        className: `min-w-0 flex-1 ${labelBand}`,
+        style: outline ? { ...bandFill, boxShadow: `inset 0 0 0 1px ${outline}` } : bandFill,
         children: [
           jsxs('span', {
             className: 'flex items-baseline gap-2',
