@@ -322,6 +322,8 @@ const BAND_PY = 4
 // Two lane paddings, so the air above the first project and between projects matches the
 // air between two lanes.
 const PROJECT_GAP = '12px'
+// The label rides a pixel lower inside its line box, which is where the eye wants it.
+const TEXT_NUDGE = { transform: 'translateY(1px)' }
 
 const rowClass = 'flex w-full items-start gap-1 px-2.5 text-left transition-colors'
 
@@ -428,14 +430,16 @@ function ListHeader({ label, count, secondary, running, open, onToggle, dim }) {
             className: `flex min-w-0 flex-1 items-center gap-1 ${hover ? labelBandOn : labelBand}`,
             style: bandStyle,
             children: [
-              jsx('span', { className: 'truncate', children: label }),
+              jsx('span', { className: 'truncate', style: TEXT_NUDGE, children: label }),
               running
                 ? jsxs('span', {
                     className: 'ml-auto flex shrink-0 items-center gap-1 pl-2 text-(--ui-accent)',
+                    style: TEXT_NUDGE,
                     children: [jsx(Pulse, {}), jsx('span', { children: `${running} running` })]
                   })
                 : jsxs('span', {
                     className: 'ml-auto flex shrink-0 items-baseline gap-1 pl-2',
+                    style: TEXT_NUDGE,
                     children: [
                       jsx('span', { children: String(count) }),
                       secondary === undefined || secondary === null
