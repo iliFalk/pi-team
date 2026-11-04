@@ -623,8 +623,8 @@ function LaneList({ ctx }) {
         trunk: open,
         row: jsx(ListHeader, {
           label: project,
-          // Only while the project is closed: deeper levels report themselves.
-          counts: open ? null : countStates(all),
+          // A project always sums its own lanes, open or closed.
+          counts: countStates(all),
           open,
           onToggle: () => toggle(`p:${project}`)
         }),
