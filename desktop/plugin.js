@@ -319,11 +319,15 @@ const RUN_CSS = `
 
 function installRunStyle() {
   if (typeof document === 'undefined') return
-  if (document.getElementById('pi-team-run-css')) return
-  const style = document.createElement('style')
-  style.id = 'pi-team-run-css'
+  // The sheet outlives a plugin reload, so its text is rewritten every time: skipping it
+  // when the element exists kept a stale palette alive across installs.
+  let style = document.getElementById('pi-team-run-css')
+  if (!style) {
+    style = document.createElement('style')
+    style.id = 'pi-team-run-css'
+    document.head.appendChild(style)
+  }
   style.textContent = RUN_CSS
-  document.head.appendChild(style)
 }
 
 
