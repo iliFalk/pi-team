@@ -412,7 +412,15 @@ function ListHeader({ label, count, secondary, running, waiting, open, onToggle,
                 ? jsxs('span', {
                     className: 'ml-auto flex shrink-0 items-center gap-1 pl-2',
                     style: { ...TEXT_NUDGE, color: RUN_COLOR },
-                    children: [jsx(Gear, {}), jsx('span', { children: String(running) })]
+                    children: [
+                      // A pixel down, the way the folder sits: an icon's ink centres higher
+                      // than a digit's, and the two share this line on every header.
+                      jsx('span', {
+                        style: { display: 'flex', transform: 'translateY(1px)' },
+                        children: jsx(Gear, {})
+                      }),
+                      jsx('span', { children: String(running) })
+                    ]
                   })
                 : jsxs('span', {
                     className: 'ml-auto flex shrink-0 items-baseline gap-1 pl-2',
