@@ -49,7 +49,8 @@ const LINE = {
 const RUN_COLOR = '#1A6543'
 const ASK_COLOR = '#0762B4'
 const BAD_COLOR = '#8A1C0E'
-const ASK_BG = 'rgba(7, 98, 180, 0.70)'
+// 85%: white on this fill reaches 4.6:1, the threshold for text this small.
+const ASK_BG = 'rgba(7, 98, 180, 0.85)'
 const ASK_BG_SOFT = 'rgba(7, 98, 180, 0.18)'
 const BAD_STATES = ['failed', 'error', 'stopped']
 
