@@ -97,34 +97,6 @@ function Gear() {
   })
 }
 
-/** A dot that breathes while work is going on in a lane of this node. */
-function Pulse() {
-  return jsx('span', {
-    'aria-hidden': true,
-    className: 'pi-team-pulse',
-    style: {
-      display: 'inline-block',
-      width: '7px',
-      height: '7px',
-      borderRadius: '999px',
-      background: RUN_COLOR,
-      flex: 'none'
-    },
-    ref: element => {
-      if (!element || element.dataset.piPulse) return
-      element.dataset.piPulse = '1'
-      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-      element.animate(
-        [
-          { opacity: 0.35, transform: 'scale(0.85)' },
-          { opacity: 1, transform: 'scale(1.1)', offset: 0.5 },
-          { opacity: 0.35, transform: 'scale(0.85)' }
-        ],
-        { duration: 1600, iterations: Infinity, easing: 'ease-in-out' }
-      )
-    }
-  })
-}
 
 /** A ball that runs from a working lane's stub, up its line, into the feature's icon. */
 const BALL = 4
@@ -290,41 +262,6 @@ const REST = { timeoutMs: 8000 }
 
 const selectedLane = atom('')
 
-// Only the pulse is left in the sheet: the lane outline is drawn inline, in the colour of
-// the lane's own state, so nothing depends on a class that may never load.
-const RUN_CSS = `
-.pi-team-pulse {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: ${RUN_COLOR};
-  box-shadow: 0 0 0 2px color-mix(in srgb, ${RUN_COLOR} 22%, transparent);
-  animation: pi-team-pulse 1.6s ease-in-out infinite;
-}
-
-@keyframes pi-team-pulse {
-  0%, 100% { opacity: 0.4; transform: scale(0.85); }
-  50% { opacity: 1; transform: scale(1.1); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .pi-team-pulse { animation: none; opacity: 1; }
-}
-`
-
-function installRunStyle() {
-  if (typeof document === 'undefined') return
-  // The sheet outlives a plugin reload, so its text is rewritten every time: skipping it
-  // when the element exists kept a stale palette alive across installs.
-  let style = document.getElementById('pi-team-run-css')
-  if (!style) {
-    style = document.createElement('style')
-    style.id = 'pi-team-run-css'
-    document.head.appendChild(style)
-  }
-  style.textContent = RUN_CSS
-}
 
 
 // Hover paint belongs to the label, not to the row: the icon must stay outside it.
@@ -475,7 +412,7 @@ function ListHeader({ label, count, secondary, running, waiting, open, onToggle,
                 ? jsxs('span', {
                     className: 'ml-auto flex shrink-0 items-center gap-1 pl-2',
                     style: { ...TEXT_NUDGE, color: RUN_COLOR },
-                    children: [jsx(Pulse, {}), jsx('span', { children: `${running} running` })]
+                    children: [jsx(Gear, {}), jsx('span', { children: String(running) })]
                   })
                 : jsxs('span', {
                     className: 'ml-auto flex shrink-0 items-baseline gap-1 pl-2',
@@ -1190,8 +1127,6 @@ export default {
   id: ID,
   name: 'pi-team',
   register(ctx) {
-    installRunStyle()
-
     ctx.i18n.register({
       en: { lanes: 'Lanes', status: 'Lane status', pick: 'Pick a lane on the left.' },
       ru: { lanes: 'Полосы', status: 'Статус полосы', pick: 'Выберите полосу слева.' }
