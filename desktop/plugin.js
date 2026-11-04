@@ -52,8 +52,9 @@ function Runner() {
       position: 'absolute',
       left: LINE_X,
       top: '50%',
-      width: '5px',
-      height: '5px',
+      // 4px with -2px margins: the centre lands exactly on the 1px line.
+      width: '4px',
+      height: '4px',
       marginLeft: '-2px',
       marginTop: '-2px',
       borderRadius: '999px',
@@ -74,14 +75,17 @@ function Runner() {
       const kidsBox = kids.getBoundingClientRect()
       const travel = Math.max(12, rowBox.top + rowBox.height / 2 - kidsBox.top)
 
+      const stub = parseInt(STUB_W, 10)
       element.animate(
         [
-          { transform: `translate(${parseInt(STUB_W, 10)}px, 0)`, opacity: 0 },
-          { transform: 'translate(4px, -2px)', opacity: 1, offset: 0.18 },
-          { transform: `translate(0, ${-travel}px)`, opacity: 0.9, offset: 0.9 },
-          { transform: `translate(0, ${-travel}px)`, opacity: 0 }
+          // Left along the stub, then straight up the line: the ball takes the elbow.
+          { transform: `translate(${stub}px, 0px)`, opacity: 0, offset: 0 },
+          { transform: `translate(${stub - 2}px, 0px)`, opacity: 1, offset: 0.06 },
+          { transform: 'translate(0px, 0px)', opacity: 1, offset: 0.24 },
+          { transform: `translate(0px, ${-travel}px)`, opacity: 0.9, offset: 0.94 },
+          { transform: `translate(0px, ${-travel}px)`, opacity: 0, offset: 1 }
         ],
-        { duration: 1900, iterations: Infinity, easing: 'ease-in-out' }
+        { duration: 2200, iterations: Infinity, easing: 'linear' }
       )
     }
   })
