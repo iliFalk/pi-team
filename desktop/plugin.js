@@ -116,8 +116,9 @@ function Runner() {
 
       // Up the line to the feature row, then into the folder: it ends on the folder's
       // bottom edge, under the glyph, where it is hidden and can vanish.
-      const besideFolder = featureRect.top + featureRect.height / 2 - rowMiddle
-      const intoFolder = iconRect ? iconRect.bottom - rowMiddle : besideFolder
+      const intoFolder = iconRect
+        ? iconRect.bottom - rowMiddle
+        : featureRect.top + featureRect.height / 2 - rowMiddle
       const underFolder = iconRect ? iconRect.left + iconRect.width / 2 - rowRect.left - base : 0
 
       element.animate(
@@ -126,8 +127,8 @@ function Runner() {
           { transform: `translate(${stubStart}px, 0px) scale(1)`, opacity: 0, offset: 0 },
           { transform: `translate(${stubStart - 2}px, 0px) scale(1)`, opacity: 1, offset: 0.05 },
           { transform: 'translate(0px, 0px) scale(1)', opacity: 1, offset: 0.2 },
-          { transform: `translate(0px, ${besideFolder}px) scale(1)`, opacity: 1, offset: 0.62 },
-          { transform: `translate(${underFolder}px, ${intoFolder}px) scale(1)`, opacity: 1, offset: 0.86 },
+          { transform: `translate(0px, ${intoFolder}px) scale(1)`, opacity: 1, offset: 0.7 },
+          { transform: `translate(${underFolder}px, ${intoFolder}px) scale(1)`, opacity: 1, offset: 0.88 },
           // Reached the folder's bottom edge: gone behind it, no fade in open space.
           { transform: `translate(${underFolder}px, ${intoFolder}px) scale(0.6)`, opacity: 1, offset: 0.97 },
           { transform: `translate(${underFolder}px, ${intoFolder}px) scale(0.2)`, opacity: 0, offset: 1 }
