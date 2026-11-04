@@ -119,7 +119,14 @@ function Runner() {
       const intoFolder = iconRect
         ? iconRect.bottom - rowMiddle
         : featureRect.top + featureRect.height / 2 - rowMiddle
-      const underFolder = iconRect ? iconRect.left + iconRect.width / 2 - rowRect.left - base : 0
+      // The folder sits on this line within a pixel or so; a nudge that small reads as a
+      // sideways twitch at the end, so it is dropped. A real offset still gets followed.
+      const underFolder = iconRect
+        ? (() => {
+            const dx = iconRect.left + iconRect.width / 2 - rowRect.left - base
+            return Math.abs(dx) > 2 ? dx : 0
+          })()
+        : 0
 
       element.animate(
         [
