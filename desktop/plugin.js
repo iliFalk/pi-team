@@ -540,7 +540,8 @@ function LaneList({ ctx }) {
           row: jsx(ListHeader, {
             label: groupKey || 'ungrouped',
             count: items.length,
-            running: items.filter(lane => lane.state === 'running').length,
+            // Open: the lanes show their own state, so the row keeps the plain count.
+            running: gopen ? 0 : items.filter(lane => lane.state === 'running').length,
             open: gopen,
             onToggle: () => toggle(gkey)
           }),
@@ -568,7 +569,7 @@ function LaneList({ ctx }) {
             row: jsx(ListHeader, {
               label: 'shelf',
               count: shelved.length,
-              running: shelved.filter(lane => lane.state === 'running').length,
+              running: shelfOpen ? 0 : shelved.filter(lane => lane.state === 'running').length,
               open: shelfOpen,
               onToggle: () => toggle(`s:${project}`)
             }),
