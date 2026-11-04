@@ -45,6 +45,8 @@ const LINE = {
 }
 
 /** A ball that runs from a working lane's stub, up its line, into the feature's icon. */
+const BALL = 6
+
 function Runner() {
   return jsx('span', {
     'aria-hidden': true,
@@ -52,11 +54,12 @@ function Runner() {
       position: 'absolute',
       left: LINE_X,
       top: '50%',
-      // 4px with -2px margins: the centre lands exactly on the 1px stroke.
-      width: '4px',
-      height: '4px',
-      marginLeft: '-1.5px',
-      marginTop: '-2px',
+      // Half the body as a margin on each side, so the ball's centre is the point that
+      // moves. The 1px stroke occupies LINE_X..LINE_X+1, so its centre is LINE_X+0.5.
+      width: `${BALL}px`,
+      height: `${BALL}px`,
+      marginLeft: `${-(BALL / 2) + 0.5}px`,
+      marginTop: `${-BALL / 2}px`,
       borderRadius: '999px',
       background: 'var(--ui-accent)',
       pointerEvents: 'none',
@@ -71,26 +74,27 @@ function Runner() {
       element.dataset.piRunner = '1'
       if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
 
-      // Every distance is read from the DOM: the row heights and the icon's place are
-      // what the geometry actually is, not what the styles claimed.
+      // Distances come from the DOM: the row heights and the icon's place are what the
+      // geometry actually is, not what the styles claimed.
       const rowRect = rowBox.getBoundingClientRect()
       const featureRect = featureBox.getBoundingClientRect()
       const icon = featureBox.querySelector('svg')
       const iconRect = icon ? icon.getBoundingClientRect() : null
 
+      const base = parseFloat(LINE_X) + 0.5
+      const stubStart = parseFloat(STUB_W) - 0.5
       const up = featureRect.top + featureRect.height / 2 - (rowRect.top + rowRect.height / 2)
-      const line = parseFloat(LINE_X)
-      const stub = parseFloat(STUB_W)
-      const intoIcon = iconRect ? iconRect.left + iconRect.width / 2 - rowRect.left - line : 0
+      const intoIcon = iconRect
+        ? iconRect.left + iconRect.width / 2 - rowRect.left - base
+        : 0
 
       element.animate(
         [
-          // Along the stub, up the line, then right into the folder and gone behind it.
-          { transform: `translate(${stub}px, 0px) scale(1)`, opacity: 0, offset: 0 },
-          { transform: `translate(${stub - 2}px, 0px) scale(1)`, opacity: 1, offset: 0.05 },
+          // Along the stub, up the line, then right into the folder and gone inside it.
+          { transform: `translate(${stubStart}px, 0px) scale(1)`, opacity: 0, offset: 0 },
+          { transform: `translate(${stubStart - 2}px, 0px) scale(1)`, opacity: 1, offset: 0.05 },
           { transform: 'translate(0px, 0px) scale(1)', opacity: 1, offset: 0.22 },
           { transform: `translate(0px, ${up}px) scale(1)`, opacity: 1, offset: 0.72 },
-          // Slips into the folder and is gone: a short cut, not a slow fade in place.
           { transform: `translate(${intoIcon}px, ${up}px) scale(1)`, opacity: 1, offset: 0.9 },
           { transform: `translate(${intoIcon}px, ${up}px) scale(0.9)`, opacity: 0.2, offset: 0.97 },
           { transform: `translate(${intoIcon}px, ${up}px) scale(0.9)`, opacity: 0, offset: 1 }
