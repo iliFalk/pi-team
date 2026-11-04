@@ -45,7 +45,8 @@ const LINE = {
 }
 
 /** A ball that runs from a working lane's stub, up its line, into the feature's icon. */
-const BALL = 6
+const BALL = 4
+const BALL_SHIFT = 1.5
 
 function Runner() {
   return jsx('span', {
@@ -54,11 +55,11 @@ function Runner() {
       position: 'absolute',
       left: LINE_X,
       top: '50%',
-      // Half the body as a margin on each side, so the ball's centre is the point that
-      // moves. The 1px stroke occupies LINE_X..LINE_X+1, so its centre is LINE_X+0.5.
+      // The margins put the ball's centre where it moves from, and BALL_SHIFT nudges it
+      // off the 1px stroke so the body reads to the right of the line.
       width: `${BALL}px`,
       height: `${BALL}px`,
-      marginLeft: `${-(BALL / 2) + 0.5}px`,
+      marginLeft: `${-(BALL / 2) + BALL_SHIFT}px`,
       marginTop: `${-BALL / 2}px`,
       borderRadius: '999px',
       background: 'var(--ui-accent)',
@@ -81,8 +82,8 @@ function Runner() {
       const icon = featureBox.querySelector('svg')
       const iconRect = icon ? icon.getBoundingClientRect() : null
 
-      const base = parseFloat(LINE_X) + 0.5
-      const stubStart = parseFloat(STUB_W) - 0.5
+      const base = parseFloat(LINE_X) + BALL_SHIFT
+      const stubStart = parseFloat(STUB_W) - BALL_SHIFT
       const up = featureRect.top + featureRect.height / 2 - (rowRect.top + rowRect.height / 2)
       const intoIcon = iconRect
         ? iconRect.left + iconRect.width / 2 - rowRect.left - base
