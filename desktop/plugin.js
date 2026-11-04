@@ -56,6 +56,15 @@ const BAD_STATES = ['failed', 'error', 'stopped']
 
 const isBad = lane => BAD_STATES.includes(lane.state) || Boolean(lane.last_error)
 
+/** The colour a state is written in, wherever the state is written. */
+function stateColour(lane) {
+  if (isBad(lane)) return BAD_COLOR
+  if (lane.state === 'running') return RUN_COLOR
+  if (lane.state === 'waiting') return ASK_COLOR
+  if (lane.state === 'done') return `color-mix(in srgb, ${RUN_COLOR} 70%, transparent)`
+  return undefined
+}
+
 /** A gear that turns while a lane works: the word is replaced by the motion. */
 function Gear() {
   return jsx('svg', {
@@ -790,13 +799,14 @@ function LaneList({ ctx }) {
   })
 }
 
-function Row({ label, value }) {
+function Row({ label, value, color }) {
   return jsxs('div', {
     className: 'flex items-baseline justify-between gap-2 px-2.5 py-[3px]',
     children: [
       jsx('span', { className: 'shrink-0 text-[0.625rem] text-(--ui-text-quaternary)', children: label }),
       jsx('span', {
-        className: 'truncate text-right font-mono text-[0.625rem] text-(--ui-text-secondary)',
+        className: 'truncate text-right font-mono text-[0.625rem]',
+        style: { color: color || 'var(--ui-text-secondary)' },
         children: value
       })
     ]
@@ -1068,7 +1078,7 @@ function LaneStatus({ ctx }) {
             onDone: () => query.refetch()
           })
         : null,
-      jsx(Row, { label: 'state', value: lane.state }),
+      jsx(Row, { label: 'state', value: lane.state, color: stateColour(lane) }),
       lane.shelved ? jsx(Row, { label: 'shelf', value: lane.shelved_reason }) : null,
       jsx(Row, { label: 'branch', value: lane.branch || '—' }),
       jsx(Row, {
@@ -1090,7 +1100,9 @@ function LaneStatus({ ctx }) {
               : lane.last_tool
           })
         : null,
-      lane.last_error ? jsx(Row, { label: 'error', value: lane.last_error }) : null,
+      lane.last_error
+        ? jsx(Row, { label: 'error', value: lane.last_error, color: BAD_COLOR })
+        : null,
 
       jsx(Section, { title: `sessions · ${(lane.feature_sessions || []).length}` }),
       (lane.feature_sessions || []).map(entry =>
