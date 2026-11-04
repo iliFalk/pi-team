@@ -428,7 +428,8 @@ function LaneRow({ lane, active, onPick }) {
               jsx('span', {
                 className: 'ml-auto shrink-0 text-[0.625rem]',
                 style: { color: statusColor || 'var(--ui-text-quaternary)' },
-                children: lane.state
+                // The same mark the header uses, so a question reads the same at both levels.
+                children: asked ? `? ${lane.state}` : lane.state
               })
             ]
           }),
