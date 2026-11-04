@@ -222,6 +222,12 @@ PY
 
 The `pi-team` right panel shows the same fields: last text, last tool call, turns, tokens and cost.
 
+**Closing is a decision, never a side effect.** A lane that finishes, or whose worktree disappears, stays in
+the list. Ilja hands it over from the lane's card (`hand over`): that moves it into the tree's `handed` group
+and asks the chat to look. Only after that does the orchestrator verify, merge, and run
+`pi-lane close <lane>`, which merges the branch, records the merge receipt, and puts the lane in `closed`.
+`pi-lane close --no-merge` records a close without merging; `--reason "…"` sets the wording.
+
 **The counts belong to the deepest visible level, and a project always sums its own.** A feature prints
 them while it is closed and hands over to its lane rows once it opens; a project prints them open or
 closed, because it is the row Ilja scans to see whether anything runs anywhere — hiding them while a
