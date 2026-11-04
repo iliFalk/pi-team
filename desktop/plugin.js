@@ -322,10 +322,12 @@ const BAND_PY = 4
 // Two lane paddings, so the air above the first project and between projects matches the
 // air between two lanes. A groove of the same family as the header band divides them.
 const PROJECT_GAP = '12px'
+// A line of its own with the shadow outside it: dark beside the line, fading away from it.
 const PROJECT_SEP_H = '4px'
-const PROJECT_SEP_BG =
-  'linear-gradient(to bottom, rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0) 50%), ' +
-  'linear-gradient(to top, rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0) 50%)'
+const PROJECT_SEP_SHADOW = '4px'
+const PROJECT_SEP_LINE = 'rgba(0, 0, 0, 0.22)'
+const PROJECT_SEP_UP = 'linear-gradient(to top, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0))'
+const PROJECT_SEP_DOWN = 'linear-gradient(to bottom, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0))'
 // The label rides a pixel lower inside its line box, which is where the eye wants it.
 const TEXT_NUDGE = { transform: 'translateY(1px)' }
 
@@ -647,9 +649,14 @@ function LaneList({ ctx }) {
       ? [block]
       : [
           block,
-          jsx('div', {
+          jsxs('div', {
             'aria-hidden': true,
-            style: { height: PROJECT_SEP_H, background: PROJECT_SEP_BG, pointerEvents: 'none' }
+            style: { pointerEvents: 'none' },
+            children: [
+              jsx('div', { style: { height: PROJECT_SEP_SHADOW, background: PROJECT_SEP_UP } }),
+              jsx('div', { style: { height: PROJECT_SEP_H, background: PROJECT_SEP_LINE } }),
+              jsx('div', { style: { height: PROJECT_SEP_SHADOW, background: PROJECT_SEP_DOWN } })
+            ]
           }, `sep:${index}`)
         ]
   )
@@ -681,7 +688,7 @@ function LaneList({ ctx }) {
       }),
       jsx('div', {
         className: 'min-h-0 flex-1 overflow-y-auto',
-        style: { display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: PROJECT_GAP },
+        style: { display: 'flex', flexDirection: 'column', gap: '2px', paddingTop: PROJECT_GAP },
         children: lanes.length === 0 ? emptyHint : projectTree
       }),
       askUpdate
