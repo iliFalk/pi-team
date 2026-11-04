@@ -101,7 +101,8 @@ function Runner() {
       width: `${BALL}px`,
       height: `${BALL}px`,
       marginLeft: `${-(BALL / 2) + BALL_SHIFT}px`,
-      marginTop: `${-BALL / 2}px`,
+      // One pixel down: the body reads low against the 1px stub once it is centred on it.
+      marginTop: `${-BALL / 2 + 1}px`,
       borderRadius: '999px',
       background: RUN_COLOR,
       pointerEvents: 'none',
