@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 2.5.0
+version: 2.5.1
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -222,9 +222,22 @@ PY
 
 The `pi-team` right panel shows the same fields: last text, last tool call, turns, tokens and cost.
 
-**The running count belongs to the deepest visible level.** A closed project sums the running lanes of
-all its features, an open project leaves that to its features, and a feature leaves it to its own rows
-once it is open. Never two levels at once: repeated counters in one column stop being read.
+**The counts belong to the deepest visible level, and a project always sums its own.** A feature prints
+them while it is closed and hands over to its lane rows once it opens; a project prints them open or
+closed, because it is the row Ilja scans to see whether anything runs anywhere — hiding them while a
+project happened to be open got the feature reported as missing from the panel. The right end of a header
+is four groups in fixed order: `? n` in `#0762B4`, `! n` in `#8A1C0E`, the gear with `n` in `#1A6543`,
+`✓ n` in `var(--ui-text-tertiary)`. A group at zero is absent, each lane counts in exactly ONE group by
+precedence (`isBad` → `waiting` → `running` → `done`), and a shelved lane counts nowhere. The old pair
+`3 · 2` (features · lanes) is gone: two numbers of different units on one 10-px row cannot be compared at
+a glance, and he removes them the moment the four groups exist. One `countStates(lanes)` serves every
+level; a header that draws nothing means a CALL SITE still passing the old props.
+
+**State colours follow the same deepest-visible rule.** Working is `#1A6543` (status word, pulse, ball,
+ring), a question paints the lane's label band `#0762B4` at 85% with white text, and its parents take the
+same hue as an 18% wash on the deepest visible level only. Failure is `#8A1C0E` for `failed`, `error`,
+`stopped` and any `last_error`, and it does not escalate to a parent unless he asks. Values, contrast maths
+and the constant block: `hermes-desktop-plugins` § `references/panel-visuals.md` § State colours.
 
 **Where the panel lives.** It sits on the right edge with `enforce: true`; the constraint behind that
 choice is in § Where the panel lives. Moving it means editing the dock hints in `plugin.js`.
@@ -278,8 +291,10 @@ empty spot, so the update control is the word `update`. **The list rows carry no
 project-focus `»` one by one, and every gesture lives on the detail side; any state a row would mark (this
 chat is linked) is already on the right. The rows DO carry level icons, which he asked for: a folder
 (closed/open) per project and feature, `icons.Terminal` for a lane, no chevrons — a whole-row click toggles,
-and the guide lines hang from the icons. A feature with working lanes shows a pulsing dot and `<n> running`
-at its right edge, and every working lane runs a ball up its line that ends behind the folder icon. Give both column headers one fixed height
+and the guide lines hang from the icons. A feature with working lanes shows the four state groups at its right edge while it is closed, and every
+working lane runs a ball up its line that ends behind the folder icon. A project row prints the same four
+groups, open or closed — the `3 · 2` size pair is gone, and a tag would read as a button in a 10-px row, so
+quantity never becomes one. Give both column headers one fixed height
 (`HEADER_H`, 28px), or their text size sets their heights and the two `border-b` lines land on different
 rows. Draw a shadow as a 3-px gradient strip across the full width (`BAND_H`, `BAND_BG`), never as
 `boxShadow`: on a zero- or 1-px-tall strip Chromium paints nothing, and two per-header shadows double up
@@ -352,8 +367,26 @@ To show the animation without spending a lane, write a simulated record and keep
   says, so probe `os.kill(pid, 0)` and read `/lanes` back before saying the animation is on.
 - **A background process started from an agent session dies with that session.** Re-arm it each time
   (`sleep 7200` through `terminal(background=true)`) and state in the report that it ends by itself.
-- Two records in one `group` exercise the feature's `<n> running` indicator; one record shows the ball
-  alone. Give the record a real `repo` and `worktree` so the detail side has fields to draw.
+- Two records in one `group` exercise the feature's `<n> running` indicator; one record shows the mark
+  alone. Give the record a real `repo` and a real, EXISTING `worktree` (the repository itself is enough):
+  the backend shelves any finished lane whose worktree is absent and reports it as `worktree gone`, so a
+  made-up path empties the active tree and the state you meant to demonstrate never renders.
+- A second project is how the spacing BETWEEN top-level blocks gets judged: `pi-project add <name> <path>`, two
+  features, one `done` record and one `running` record, then read `/lanes` back. It is a real repository on
+  disk and a real row in his panel — say where both live, and that the removal is `rm -rf` on the records plus
+  the project entry.
+- A question is simulatable too: set the record's `state` to `waiting` and write `question.json` beside it
+  (`id`, `method`, `title`, `message`, `options` as plain strings, `asked_at`). The panel draws one button per
+  option and an answer writes `answer.json`; `rm question.json` clears it without an answer. Prove the payload
+  with `TestClient` on `/lanes/<lane>` before telling him to look, and name the two files so he can answer it
+  himself.
+- A failure is a record with `state: failed`, a non-zero `exit`, and an `auto_retry_start` event carrying
+  `errorMessage` in `events.jsonl` — that event is where the panel's `last_error` comes from, so a bare
+  `failed` state shows a red word with no reason. Show all three states at once (running, waiting, failed)
+  in one panel: a colour is only judged against its neighbours.
+- `stopped` reads as a fault in the panel's colours, and the backend re-serves any record whose pid died as
+  `stopped`, so re-arm the pid before demonstrating a running row: two dead demo lanes otherwise paint red
+  and he reports a fault that is only the fixture.
 - Tear the demo down (`state: done`, or `rm -rf ~/.hermes/lanes/<lane>`) so it never reads as real work.
 
 ## Shelf
@@ -368,6 +401,19 @@ A finished lane leaves the active list and sits on the shelf when one of these i
 The left panel shows the shelf as a separate group. The record stays until the lane is closed, so the
 task and the last text survive. Close a shelved lane with the merge, worktree removal and record
 deletion from the section above.
+
+**A shelf row cannot be forced with a flag.** `shelved: true` in `lane.json` is ignored — the backend
+DERIVES the shelf from the repository every time it serves the list. To make a real shelf row, do the
+real thing in the demo project: `git worktree add .worktrees/<lane> -b lane/<lane>`, commit there, merge
+that branch into the default branch with `--no-ff`, and keep the worktree. The reason then reads
+`merged into <branch>`, and the branch name in that string is how you learn whether the default is `main`
+or `master`. The other two reasons need no work: a worktree path that does not exist gives `worktree
+gone`, and a `running` lane whose pid died is served as `stopped`.
+
+**Counts and the shelf answer different questions.** A shelved lane is not counted in any of the four
+header groups, so a project whose only finished lane was merged shows `✓` only if another active lane is
+`done` — verify the arithmetic from `/lanes` before reporting the numbers to Ilja, and name the shelved
+lanes that were excluded.
 
 ## Specs: pi-spec-graph
 
