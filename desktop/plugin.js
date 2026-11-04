@@ -320,8 +320,12 @@ const ROW_PY = '6px'
 const HEADER_PY = '4px'
 const BAND_PY = 4
 // Two lane paddings, so the air above the first project and between projects matches the
-// air between two lanes.
+// air between two lanes. A groove of the same family as the header band divides them.
 const PROJECT_GAP = '12px'
+const PROJECT_SEP_H = '4px'
+const PROJECT_SEP_BG =
+  'linear-gradient(to bottom, rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0) 50%), ' +
+  'linear-gradient(to top, rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0) 50%)'
 // The label rides a pixel lower inside its line box, which is where the eye wants it.
 const TEXT_NUDGE = { transform: 'translateY(1px)' }
 
@@ -637,6 +641,19 @@ function LaneList({ ctx }) {
     )
   })
 
+  // A groove between projects: the header band turned on its side.
+  const projectTree = projectBlocks.flatMap((block, index) =>
+    index === projectBlocks.length - 1
+      ? [block]
+      : [
+          block,
+          jsx('div', {
+            'aria-hidden': true,
+            style: { height: PROJECT_SEP_H, background: PROJECT_SEP_BG, pointerEvents: 'none' }
+          }, `sep:${index}`)
+        ]
+  )
+
   const emptyHint = jsx('div', {
     className: 'px-2.5 py-2 text-[0.625rem] leading-relaxed text-(--ui-text-quaternary)',
     children: 'No lane yet.'
@@ -664,8 +681,8 @@ function LaneList({ ctx }) {
       }),
       jsx('div', {
         className: 'min-h-0 flex-1 overflow-y-auto',
-        style: { display: 'flex', flexDirection: 'column', gap: PROJECT_GAP, paddingTop: PROJECT_GAP },
-        children: lanes.length === 0 ? emptyHint : projectBlocks
+        style: { display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: PROJECT_GAP },
+        children: lanes.length === 0 ? emptyHint : projectTree
       }),
       askUpdate
         ? jsx(ConfirmDialog, {
