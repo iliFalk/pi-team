@@ -44,6 +44,34 @@ const LINE = {
   pointerEvents: 'none'
 }
 
+/** A dot that breathes while work is going on in a lane of this node. */
+function Pulse() {
+  return jsx('span', {
+    'aria-hidden': true,
+    style: {
+      display: 'inline-block',
+      width: '6px',
+      height: '6px',
+      borderRadius: '999px',
+      background: 'var(--ui-accent)',
+      flex: 'none'
+    },
+    ref: element => {
+      if (!element || element.dataset.piPulse) return
+      element.dataset.piPulse = '1'
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+      element.animate(
+        [
+          { opacity: 0.35, transform: 'scale(0.85)' },
+          { opacity: 1, transform: 'scale(1.1)', offset: 0.5 },
+          { opacity: 0.35, transform: 'scale(0.85)' }
+        ],
+        { duration: 1600, iterations: Infinity, easing: 'ease-in-out' }
+      )
+    }
+  })
+}
+
 /** A ball that runs from a working lane's stub, up its line, into the feature's icon. */
 const BALL = 4
 const BALL_SHIFT = 0.5
@@ -339,7 +367,7 @@ function LaneRow({ lane, active, onPick }) {
 const collapsedAtom = atom({})
 
 
-function ListHeader({ label, count, open, onToggle, dim }) {
+function ListHeader({ label, count, running, open, onToggle, dim }) {
   const [hover, setHover] = useState(false)
   return jsxs('div', {
     className: `flex items-center ${dim || ''}`,
@@ -364,7 +392,12 @@ function ListHeader({ label, count, open, onToggle, dim }) {
             style: bandStyle,
             children: [
               jsx('span', { className: 'truncate', children: label }),
-              jsx('span', { className: 'ml-auto shrink-0 pl-2', children: String(count) })
+              running
+                ? jsxs('span', {
+                    className: 'ml-auto flex shrink-0 items-center gap-1 pl-2 text-(--ui-accent)',
+                    children: [jsx(Pulse, {}), jsx('span', { children: `${running} running` })]
+                  })
+                : jsx('span', { className: 'ml-auto shrink-0 pl-2', children: String(count) })
             ]
           })
         ]
@@ -503,6 +536,7 @@ function LaneList({ ctx }) {
             row: jsx(ListHeader, {
               label: 'shelf',
               count: shelved.length,
+              running: shelved.filter(lane => lane.state === 'running').length,
               open: shelfOpen,
               onToggle: () => toggle(`s:${project}`)
             }),
