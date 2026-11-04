@@ -141,7 +141,7 @@ function Runner() {
           })()
         : 0
 
-      element.animate(
+      const animation = element.animate(
         [
           // Along the stub, up the line, then right into the folder and gone inside it.
           { transform: `translate(${stubStart}px, 0px) scale(1)`, opacity: 0, offset: 0 },
@@ -155,6 +155,10 @@ function Runner() {
         ],
         { duration: 2400, iterations: Infinity, easing: 'linear' }
       )
+      // One clock for every ball: each one starts where the others already are, so two
+      // running lanes never show two different phases.
+      const origin = (window.__piTeamSpin ||= performance.now())
+      animation.currentTime = (performance.now() - origin) % 2400
     }
   })
 }
