@@ -20,8 +20,9 @@ const HEADER_H = '28px'
 // A short fall-off below each header and text block. Black alpha, because a shadow has no theme colour.
 const SOFT_SHADOW = '0 2px 4px -2px rgba(0, 0, 0, 0.55)'
 // A short band under a label or a header: the only shadow shape this panel uses.
-const BAND_H = '3px'
-const BAND_BG = 'linear-gradient(to bottom, rgba(0, 0, 0, 0.32), rgba(0, 0, 0, 0))'
+// The same soft gradient the project divider uses: 12% at the edge, gone in 4px.
+const BAND_H = '4px'
+const BAND_BG = 'linear-gradient(to bottom, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0))'
 // Both text blocks share one height and scroll inside it.
 const TEXT_H = '100px'
 // Tree geometry: a node owns its line, so a level cannot break into loose segments.
