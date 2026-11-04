@@ -609,6 +609,8 @@ function LaneList({ ctx }) {
           // Features first, lanes second and quieter.
           count: groupKeys.length,
           secondary: all.length,
+          // Only while the project is closed: deeper levels report themselves.
+          running: open ? 0 : all.filter(lane => lane.state === 'running').length,
           open,
           onToggle: () => toggle(`p:${project}`)
         }),
