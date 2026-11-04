@@ -398,7 +398,7 @@ function LaneRow({ lane, active, onPick }) {
 const collapsedAtom = atom({})
 
 
-function ListHeader({ label, count, running, open, onToggle, dim }) {
+function ListHeader({ label, count, secondary, running, open, onToggle, dim }) {
   const [hover, setHover] = useState(false)
   return jsxs('div', {
     className: `flex items-center ${dim || ''}`,
@@ -428,7 +428,18 @@ function ListHeader({ label, count, running, open, onToggle, dim }) {
                     className: 'ml-auto flex shrink-0 items-center gap-1 pl-2 text-(--ui-accent)',
                     children: [jsx(Pulse, {}), jsx('span', { children: `${running} running` })]
                   })
-                : jsx('span', { className: 'ml-auto shrink-0 pl-2', children: String(count) })
+                : jsxs('span', {
+                    className: 'ml-auto flex shrink-0 items-baseline gap-1 pl-2',
+                    children: [
+                      jsx('span', { children: String(count) }),
+                      secondary === undefined || secondary === null
+                        ? null
+                        : jsx('span', {
+                            style: { fontSize: '9px', color: 'var(--ui-text-quaternary)' },
+                            children: `· ${secondary}`
+                          })
+                    ]
+                  })
             ]
           })
         ]
@@ -595,7 +606,9 @@ function LaneList({ ctx }) {
         trunk: open,
         row: jsx(ListHeader, {
           label: project,
-          count: all.length,
+          // Features first, lanes second and quieter.
+          count: groupKeys.length,
+          secondary: all.length,
           open,
           onToggle: () => toggle(`p:${project}`)
         }),
