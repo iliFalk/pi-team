@@ -1110,14 +1110,14 @@ function TeamPane({ ctx }) {
     className: 'relative flex h-full min-h-0',
     children: [
       jsx('div', {
-        // 40 / 60, and inline: an arbitrary width class is not in the app's stylesheet.
+        // 50 / 50, and inline: an arbitrary width class is not in the app's stylesheet.
         className: 'flex shrink-0 flex-col border-r border-(--ui-stroke-secondary)',
-        style: { width: '40%', minWidth: 0 },
+        style: { width: '50%', minWidth: 0 },
         children: jsx(LaneList, { ctx })
       }),
       jsx('div', {
         className: 'flex min-w-0 flex-1 flex-col',
-        style: { width: '60%' },
+        style: { width: '50%' },
         children: jsx(LaneStatus, { ctx })
       }),
       // One shadow for the whole width: per-header shadows doubled up at the seam.
