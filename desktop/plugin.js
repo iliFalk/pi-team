@@ -413,7 +413,7 @@ function LaneRow({ lane, active, onPick }) {
       }),
       jsxs('span', {
         className: `min-w-0 flex-1 ${labelBand}`,
-        style: outline ? { ...bandFill, boxShadow: `inset 0 0 0 1px ${outline}` } : bandFill,
+        style: outline ? { ...bandFill, boxShadow: `inset 0 0 0 0.5px ${outline}` } : bandFill,
         children: [
           jsxs('span', {
             className: 'flex items-baseline gap-2',
