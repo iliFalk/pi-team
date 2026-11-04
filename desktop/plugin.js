@@ -325,7 +325,8 @@ const PROJECT_GAP = '12px'
 // A line of its own with the shadow outside it: dark beside the line, fading away from it.
 const PROJECT_SEP_H = '4px'
 const PROJECT_SEP_SHADOW = '4px'
-const PROJECT_SEP_LINE = 'rgba(0, 0, 0, 0.22)'
+// No paint of its own: the band shows the panel's own background between the two shadows.
+const PROJECT_SEP_LINE = 'transparent'
 const PROJECT_SEP_UP = 'linear-gradient(to top, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0))'
 const PROJECT_SEP_DOWN = 'linear-gradient(to bottom, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0))'
 // The label rides a pixel lower inside its line box, which is where the eye wants it.
