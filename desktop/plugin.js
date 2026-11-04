@@ -143,13 +143,12 @@ function Runner() {
 
       const animation = element.animate(
         [
-          // Sits on the stub long enough to be seen as a marker, then goes up the line.
+          // Along the stub, up the line, then right into the folder and gone inside it.
           { transform: `translate(${stubStart}px, 0px) scale(1)`, opacity: 0, offset: 0 },
-          { transform: `translate(${stubStart - 2}px, 0px) scale(1)`, opacity: 1, offset: 0.04 },
-          { transform: `translate(${stubStart - 4}px, 0px) scale(1)`, opacity: 1, offset: 0.3 },
-          { transform: 'translate(0px, 0px) scale(1)', opacity: 1, offset: 0.42 },
-          { transform: `translate(0px, ${intoFolder}px) scale(1)`, opacity: 1, offset: 0.78 },
-          { transform: `translate(${underFolder}px, ${intoFolder}px) scale(1)`, opacity: 1, offset: 0.9 },
+          { transform: `translate(${stubStart - 2}px, 0px) scale(1)`, opacity: 1, offset: 0.05 },
+          { transform: 'translate(0px, 0px) scale(1)', opacity: 1, offset: 0.2 },
+          { transform: `translate(0px, ${intoFolder}px) scale(1)`, opacity: 1, offset: 0.7 },
+          { transform: `translate(${underFolder}px, ${intoFolder}px) scale(1)`, opacity: 1, offset: 0.88 },
           // Reached the folder's bottom edge: gone behind it, no fade in open space.
           { transform: `translate(${underFolder}px, ${intoFolder}px) scale(0.6)`, opacity: 1, offset: 0.97 },
           { transform: `translate(${underFolder}px, ${intoFolder}px) scale(0.2)`, opacity: 0, offset: 1 }
