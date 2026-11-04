@@ -404,7 +404,7 @@ function LaneRow({ lane, active, onPick }) {
 const collapsedAtom = atom({})
 
 
-function ListHeader({ label, counts, open, onToggle, dim }) {
+function ListHeader({ label, counts, plain, open, onToggle, dim }) {
   const [hover, setHover] = useState(false)
   return jsxs('div', {
     className: `flex items-center ${dim || ''}`,
@@ -456,7 +456,10 @@ function ListHeader({ label, counts, open, onToggle, dim }) {
                       counts.done ? mark('✓', counts.done, DONE_COLOR) : null
                     ]
                   })
-                : null
+                : plain === undefined || plain === null
+                  ? null
+                  // A plain grey total, for a group whose lanes are all of one kind.
+                  : jsx('span', { className: 'ml-auto shrink-0 pl-2', style: TEXT_NUDGE, children: String(plain) })
             ]
           })
         ]
@@ -596,6 +599,7 @@ function LaneList({ ctx }) {
             row: jsx(ListHeader, {
               label: 'closed',
               counts: null,
+              plain: shelved.length,
               open: shelfOpen,
               onToggle: () => toggle(`s:${project}`)
             }),
