@@ -454,7 +454,12 @@ def _lane_entry(lane_dir: Path) -> Optional[Dict[str, Any]]:
         "last_error": events["last_error"],
         "turns": events["turns"],
         "usage": events["usage"],
+        "stderr": "",
     }
+
+    # Why a lane stopped: the runner's own stderr is the only place that says it.
+    if state in ("failed", "error", "stopped"):
+        entry["stderr"] = "\n".join(_tail_lines(lane_dir / "stderr.txt", 64 * 1024))[-TEXT_LIMIT:]
 
     if worktree and Path(worktree).is_dir():
         rc, branch = _run_git(worktree, "rev-parse", "--abbrev-ref", "HEAD")

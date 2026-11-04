@@ -69,7 +69,8 @@ const mark = (sign, count, color) =>
 function countStates(lanes) {
   const counts = { ask: 0, bad: 0, run: 0, done: 0 }
   for (const lane of lanes) {
-    if (!lane || lane.shelved) continue
+    // A closed lane is quiet only if it ended well: a failure survives the cleanup.
+    if (!lane || (lane.shelved && !isBad(lane))) continue
     if (isBad(lane)) counts.bad += 1
     else if (lane.state === 'waiting') counts.ask += 1
     else if (lane.state === 'running') counts.run += 1
@@ -406,6 +407,32 @@ const collapsedAtom = atom({})
 
 function ListHeader({ label, counts, plain, open, onToggle, dim }) {
   const [hover, setHover] = useState(false)
+  const hasCounts = Boolean(counts && (counts.ask || counts.bad || counts.run || counts.done))
+  const hasPlain = plain !== undefined && plain !== null
+  const groups = hasCounts
+    ? [
+        counts.ask ? mark('?', counts.ask, ASK_COLOR) : null,
+        counts.bad ? mark('!', counts.bad, BAD_COLOR) : null,
+        counts.run
+          ? jsxs(
+              'span',
+              {
+                className: 'flex items-center gap-0.5',
+                style: { color: RUN_COLOR },
+                children: [
+                  jsx('span', {
+                    style: { display: 'flex', transform: 'translateY(-2px)' },
+                    children: jsx(Gear, {})
+                  }),
+                  jsx('span', { children: String(counts.run) })
+                ]
+              },
+              'run'
+            )
+          : null,
+        counts.done ? mark('✓', counts.done, DONE_COLOR) : null
+      ]
+    : null
   return jsxs('div', {
     className: `flex items-center ${dim || ''}`,
     style: { position: 'relative' },
@@ -433,33 +460,23 @@ function ListHeader({ label, counts, plain, open, onToggle, dim }) {
                 : bandStyle,
             children: [
               jsx('span', { className: 'truncate', style: TEXT_NUDGE, children: label }),
-              counts && (counts.ask || counts.bad || counts.run || counts.done)
+              hasCounts || hasPlain
                 ? jsxs('span', {
                     className: 'ml-auto flex shrink-0 items-center gap-1.5 pl-2',
                     style: TEXT_NUDGE,
                     children: [
-                      counts.ask ? mark('?', counts.ask, ASK_COLOR) : null,
-                      counts.bad ? mark('!', counts.bad, BAD_COLOR) : null,
-                      counts.run
-                        ? jsxs('span', {
-                            className: 'flex items-center gap-0.5',
-                            style: { color: RUN_COLOR },
-                            children: [
-                              jsx('span', {
-                                style: { display: 'flex', transform: 'translateY(-2px)' },
-                                children: jsx(Gear, {})
-                              }),
-                              jsx('span', { children: String(counts.run) })
-                            ]
+                      hasCounts ? groups : null,
+                      // A plain grey total stands next to the marks, for a group that is
+                      // one kind by definition.
+                      hasPlain
+                        ? jsx('span', {
+                            style: { color: 'var(--ui-text-quaternary)' },
+                            children: String(plain)
                           })
-                        : null,
-                      counts.done ? mark('✓', counts.done, DONE_COLOR) : null
+                        : null
                     ]
                   })
-                : plain === undefined || plain === null
-                  ? null
-                  // A plain grey total, for a group whose lanes are all of one kind.
-                  : jsx('span', { className: 'ml-auto shrink-0 pl-2', style: TEXT_NUDGE, children: String(plain) })
+                : null
             ]
           })
         ]
@@ -598,7 +615,10 @@ function LaneList({ ctx }) {
             trunk: shelfOpen,
             row: jsx(ListHeader, {
               label: 'closed',
-              counts: null,
+              counts: (() => {
+                const bad = shelved.filter(isBad).length
+                return bad ? { ask: 0, bad, run: 0, done: 0 } : null
+              })(),
               plain: shelved.length,
               open: shelfOpen,
               onToggle: () => {
@@ -1068,6 +1088,29 @@ function LaneStatus({ ctx }) {
       jsx(Row, { label: 'state', value: lane.state, color: stateColour(lane) }),
       lane.shelved ? jsx(Row, { label: 'closed', value: lane.shelved_reason }) : null,
       lane.merge ? jsx(Receipt, { merge: lane.merge }) : null,
+      // A closed lane that did not end well still says why, even after its worktree is gone.
+      lane.shelved && isBad(lane)
+        ? jsxs('div', {
+            children: [
+              jsx(Section, { title: 'why', band: true }),
+              jsx('div', {
+                className:
+                  'shrink-0 overflow-y-auto whitespace-pre-wrap break-words px-2.5 py-0.5 font-mono text-[0.625rem] leading-snug text-(--ui-text-secondary)',
+                style: { height: TEXT_H },
+                children: lane.last_text || '—'
+              }),
+              lane.stderr ? jsx(Section, { title: 'stderr' }) : null,
+              lane.stderr
+                ? jsx('div', {
+                    className:
+                      'shrink-0 overflow-y-auto whitespace-pre-wrap break-words px-2.5 py-0.5 font-mono text-[0.625rem] leading-snug',
+                    style: { maxHeight: TEXT_H, color: BAD_COLOR },
+                    children: lane.stderr
+                  })
+                : null
+            ]
+          })
+        : null,
       jsx(Row, { label: 'branch', value: lane.branch || '—' }),
       jsx(Row, {
         label: 'changes',
