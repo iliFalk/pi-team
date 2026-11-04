@@ -164,9 +164,9 @@ function FolderIcon({ open }) {
     strokeLinecap: 'round',
     strokeLinejoin: 'round',
     'aria-hidden': true,
-    // The folder's ink sits above the middle of its 24-grid, while cap-height text sits
-    // below the middle of its line box; one pixel down puts the two on the same centre.
-    style: { display: 'block', transform: 'translateY(1px)' },
+    // Measured against the label: the glyph's ink centres half a pixel under the cap
+    // height of the name, so it comes up by that half.
+    style: { display: 'block', transform: 'translateY(-0.5px)' },
     children: jsx('path', { d: open ? FOLDER_OPEN : FOLDER_CLOSED })
   })
 }
