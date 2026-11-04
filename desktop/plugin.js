@@ -54,8 +54,29 @@ const BAD_COLOR = '#8A1C0E'
 const ASK_BG = 'rgba(7, 98, 180, 0.85)'
 const ASK_BG_SOFT = 'rgba(7, 98, 180, 0.18)'
 const BAD_STATES = ['failed', 'error', 'stopped']
+const DONE_COLOR = 'var(--ui-text-tertiary)'
 
 const isBad = lane => BAD_STATES.includes(lane.state) || Boolean(lane.last_error)
+
+const mark = (sign, count, color) =>
+  jsxs('span', {
+    className: 'flex items-baseline gap-0.5',
+    style: { color },
+    children: [jsx('span', { style: { fontWeight: 600 }, children: sign }), jsx('span', { children: String(count) })]
+  }, sign)
+
+/** How many lanes of a node sit in each of the four groups. Shelved lanes count nowhere. */
+function countStates(lanes) {
+  const counts = { ask: 0, bad: 0, run: 0, done: 0 }
+  for (const lane of lanes) {
+    if (!lane || lane.shelved) continue
+    if (isBad(lane)) counts.bad += 1
+    else if (lane.state === 'waiting') counts.ask += 1
+    else if (lane.state === 'running') counts.run += 1
+    else if (lane.state === 'done') counts.done += 1
+  }
+  return counts
+}
 
 /** The colour a state is written in, wherever the state is written. */
 function stateColour(lane) {
@@ -383,7 +404,7 @@ function LaneRow({ lane, active, onPick }) {
 const collapsedAtom = atom({})
 
 
-function ListHeader({ label, count, secondary, running, waiting, open, onToggle, dim }) {
+function ListHeader({ label, counts, open, onToggle, dim }) {
   const [hover, setHover] = useState(false)
   return jsxs('div', {
     className: `flex items-center ${dim || ''}`,
@@ -405,43 +426,37 @@ function ListHeader({ label, count, secondary, running, waiting, open, onToggle,
           }),
           jsxs('span', {
             className: `flex min-w-0 flex-1 items-center gap-1 ${labelBand}`,
-            style: waiting ? { ...bandStyle, background: ASK_BG_SOFT } : hover ? { ...bandStyle, background: 'var(--chrome-action-hover)' } : bandStyle,
+            style: counts && counts.ask
+              ? { ...bandStyle, background: ASK_BG_SOFT }
+              : hover
+                ? { ...bandStyle, background: 'var(--chrome-action-hover)' }
+                : bandStyle,
             children: [
               jsx('span', { className: 'truncate', style: TEXT_NUDGE, children: label }),
-              running
+              counts && (counts.ask || counts.bad || counts.run || counts.done)
                 ? jsxs('span', {
-                    className: 'ml-auto flex shrink-0 items-center gap-1 pl-2',
-                    style: { ...TEXT_NUDGE, color: RUN_COLOR },
-                    children: [
-                      // A pixel down, the way the folder sits: an icon's ink centres higher
-                      // than a digit's, and the two share this line on every header.
-                      jsx('span', {
-                        style: { display: 'flex', transform: 'translateY(-2px)' },
-                        children: jsx(Gear, {})
-                      }),
-                      jsx('span', { children: String(running) })
-                    ]
-                  })
-                : jsxs('span', {
-                    className: 'ml-auto flex shrink-0 items-baseline gap-1 pl-2',
+                    className: 'ml-auto flex shrink-0 items-center gap-1.5 pl-2',
                     style: TEXT_NUDGE,
                     children: [
-                      // One question mark per waiting lane under this row, three at most.
-                      waiting
-                        ? jsx('span', {
-                            style: { color: ASK_COLOR, fontWeight: 600 },
-                            children: '?'.repeat(Math.min(waiting, 3))
+                      counts.ask ? mark('?', counts.ask, ASK_COLOR) : null,
+                      counts.bad ? mark('!', counts.bad, BAD_COLOR) : null,
+                      counts.run
+                        ? jsxs('span', {
+                            className: 'flex items-center gap-0.5',
+                            style: { color: RUN_COLOR },
+                            children: [
+                              jsx('span', {
+                                style: { display: 'flex', transform: 'translateY(-2px)' },
+                                children: jsx(Gear, {})
+                              }),
+                              jsx('span', { children: String(counts.run) })
+                            ]
                           })
                         : null,
-                      jsx('span', { children: String(count) }),
-                      secondary === undefined || secondary === null
-                        ? null
-                        : jsx('span', {
-                            style: { fontSize: '9px', color: 'var(--ui-text-quaternary)' },
-                            children: `· ${secondary}`
-                          })
+                      counts.done ? mark('✓', counts.done, DONE_COLOR) : null
                     ]
                   })
+                : null
             ]
           })
         ]
@@ -582,9 +597,7 @@ function LaneList({ ctx }) {
             trunk: shelfOpen,
             row: jsx(ListHeader, {
               label: 'shelf',
-              count: shelved.length,
-              running: shelfOpen ? 0 : shelved.filter(lane => lane.state === 'running').length,
-              waiting: shelfOpen ? 0 : shelved.filter(lane => lane.state === 'waiting').length,
+              counts: null,
               open: shelfOpen,
               onToggle: () => toggle(`s:${project}`)
             }),
@@ -610,12 +623,8 @@ function LaneList({ ctx }) {
         trunk: open,
         row: jsx(ListHeader, {
           label: project,
-          // Features first, lanes second and quieter.
-          count: groupKeys.length,
-          secondary: all.length,
           // Only while the project is closed: deeper levels report themselves.
-          running: open ? 0 : all.filter(lane => lane.state === 'running').length,
-          waiting: open ? 0 : all.filter(lane => lane.state === 'waiting').length,
+          counts: open ? null : countStates(all),
           open,
           onToggle: () => toggle(`p:${project}`)
         }),
