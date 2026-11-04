@@ -540,6 +540,7 @@ function LaneList({ ctx }) {
           row: jsx(ListHeader, {
             label: groupKey || 'ungrouped',
             count: items.length,
+            running: items.filter(lane => lane.state === 'running').length,
             open: gopen,
             onToggle: () => toggle(gkey)
           }),
