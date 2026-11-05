@@ -234,7 +234,8 @@ function TreeRow({ last, orphan, trunk, runner, row, children }) {
   // The last row stops at its own middle, so its half is measured inside the row.
   // Every other row runs on beside its children, so its line spans the whole node.
   const insideRow = last ? { ...LINE, left: LINE_X, top: 0, height: '50%' } : null
-  const wholeNode = last || orphan ? null : { ...LINE, left: LINE_X, top: 0, bottom: 0 }
+  // Runs on past the row so the air between rows does not cut the line.
+  const wholeNode = last || orphan ? null : { ...LINE, left: LINE_X, top: 0, bottom: `-${FEATURE_GAP}` }
 
   return jsxs('div', {
     // The node is the box the full-height line is measured against.
@@ -268,7 +269,7 @@ function TreeRow({ last, orphan, trunk, runner, row, children }) {
                   ...LINE,
                   left: ICON_CENTER,
                   top: `calc(50% + ${ICON_SIZE / 2}px)`,
-                  bottom: 0
+                  bottom: `-${FEATURE_GAP}`
                 }
               })
             : null,
