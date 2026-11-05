@@ -476,7 +476,8 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim }) {
                     className:
                       'ml-auto shrink-0 rounded border border-(--ui-stroke-secondary) text-[0.5625rem] uppercase hover:bg-(--ui-fill-tertiary)',
                     style: {
-                      ...TEXT_NUDGE,
+                      // Two pixels above where the text sits: the label rides low in its line.
+                      transform: 'translateY(-1px)',
                       display: 'flex',
                       alignItems: 'center',
                       height: '14px',
