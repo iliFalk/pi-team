@@ -463,16 +463,26 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim }) {
             children: [
               jsx('span', { className: 'truncate', style: TEXT_NUDGE, children: label }),
               action
-                ? jsx('button', {
-                    type: 'button',
+                ? jsx('span', {
+                    // Not a button: the whole header is already one, and a button inside a
+                    // button is invalid — the browser rearranges it and the row drifts.
+                    role: 'button',
+                    tabIndex: 0,
                     onClick: event => {
                       event.stopPropagation()
                       action.onClick()
                     },
                     title: action.title || '',
                     className:
-                      'ml-auto shrink-0 rounded border border-(--ui-stroke-secondary) px-1 text-[0.5625rem] uppercase tracking-wide hover:bg-(--ui-fill-tertiary)',
-                    style: TEXT_NUDGE,
+                      'ml-auto shrink-0 rounded border border-(--ui-stroke-secondary) text-[0.5625rem] uppercase hover:bg-(--ui-fill-tertiary)',
+                    style: {
+                      ...TEXT_NUDGE,
+                      display: 'flex',
+                      alignItems: 'center',
+                      height: '14px',
+                      padding: '0 4px',
+                      lineHeight: 1
+                    },
                     children: action.label
                   })
                 : null,
