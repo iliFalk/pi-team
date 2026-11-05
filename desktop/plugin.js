@@ -295,6 +295,8 @@ const BAND_PY = 4
 // One value for both: the air under the panel header and the air around the divider are
 // the same 4px, so the first project and the next one start from the same place.
 const PROJECT_GAP = '4px'
+// Air between the rows of one project, so a feature does not sit on the project's edge.
+const FEATURE_GAP = '4px'
 // A line of its own with the shadow outside it: dark beside the line, fading away from it.
 const PROJECT_SEP_H = '4px'
 const PROJECT_SEP_SHADOW = '4px'
@@ -676,7 +678,7 @@ function LaneList({ ctx }) {
             gopen && items.length
               ? jsx('div', {
                   'data-pi-kids': '',
-                  style: { paddingLeft: GUIDE_STEP },
+                  style: { paddingLeft: GUIDE_STEP, paddingTop: FEATURE_GAP },
                   children: items.map((lane, i) => renderLane(lane, i === items.length - 1))
                 })
               : null
@@ -774,7 +776,13 @@ function LaneList({ ctx }) {
         children: [
           open
             ? jsx('div', {
-                style: { paddingLeft: GUIDE_STEP },
+                style: {
+                  paddingLeft: GUIDE_STEP,
+                  paddingTop: FEATURE_GAP,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: FEATURE_GAP
+                },
                 children: [...featureNodes, handedNode, shelfNode]
               })
             : null
