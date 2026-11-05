@@ -477,13 +477,13 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim }) {
                             event.stopPropagation()
                             setAsking(false)
                           },
-                          className:
-                            'flex items-center justify-center rounded border text-[0.625rem]',
+                          className: 'flex items-center justify-center rounded border',
                           style: {
                             color: BAD_COLOR,
                             borderColor: BAD_COLOR,
-                            width: '14px',
-                            height: '14px',
+                            width: '18px',
+                            height: '18px',
+                            fontSize: '13px',
                             lineHeight: 1
                           },
                           children: '✕'
@@ -497,13 +497,13 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim }) {
                             setAsking(false)
                             action.onClick()
                           },
-                          className:
-                            'flex items-center justify-center rounded border text-[0.625rem]',
+                          className: 'flex items-center justify-center rounded border',
                           style: {
                             color: RUN_COLOR,
                             borderColor: RUN_COLOR,
-                            width: '14px',
-                            height: '14px',
+                            width: '18px',
+                            height: '18px',
+                            fontSize: '13px',
                             lineHeight: 1
                           },
                           children: '✓'
@@ -521,14 +521,15 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim }) {
                       },
                       title: action.title || '',
                       className:
-                        'shrink-0 rounded border border-(--ui-stroke-secondary) text-[0.5625rem] uppercase hover:bg-(--ui-fill-tertiary)',
+                        'shrink-0 rounded border border-(--ui-stroke-secondary) uppercase hover:bg-(--ui-fill-tertiary)',
                       style: {
                         // The box sits half a pixel above the text's axis.
                         transform: 'translateY(-0.5px)',
                         display: 'flex',
                         alignItems: 'center',
-                        height: '14px',
-                        padding: '0 4px',
+                        height: '18px',
+                        padding: '0 5px',
+                        fontSize: '11.5px',
                         lineHeight: 1
                       },
                       children: jsx('span', {
