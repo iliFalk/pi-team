@@ -486,7 +486,7 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim }) {
                     },
                     children: jsx('span', {
                       // The box stays where it is; only the word drops one pixel inside it.
-                      style: { display: 'block', transform: 'translateY(1px)' },
+                      style: { display: 'block', transform: 'translate(0.5px, 1px)' },
                       children: action.label
                     })
                   })
