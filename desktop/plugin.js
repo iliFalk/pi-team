@@ -409,6 +409,7 @@ const collapsedAtom = atom({})
 
 function ListHeader({ label, counts, plain, action, open, onToggle, dim }) {
   const [hover, setHover] = useState(false)
+  const [asking, setAsking] = useState(false)
   const hasCounts = Boolean(counts && (counts.ask || counts.bad || counts.run || counts.done))
   const hasPlain = plain !== undefined && plain !== null
   const groups = hasCounts
@@ -463,33 +464,79 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim }) {
             children: [
               jsx('span', { className: 'truncate', style: TEXT_NUDGE, children: label }),
               action
-                ? jsx('span', {
-                    // Not a button: the whole header is already one, and a button inside a
-                    // button is invalid — the browser rearranges it and the row drifts.
-                    role: 'button',
-                    tabIndex: 0,
-                    onClick: event => {
-                      event.stopPropagation()
-                      action.onClick()
-                    },
-                    title: action.title || '',
-                    className:
-                      'ml-auto shrink-0 rounded border border-(--ui-stroke-secondary) text-[0.5625rem] uppercase hover:bg-(--ui-fill-tertiary)',
-                    style: {
-                      // The box sits half a pixel above the text's axis.
-                      transform: 'translateY(-0.5px)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      height: '14px',
-                      padding: '0 4px',
-                      lineHeight: 1
-                    },
-                    children: jsx('span', {
-                      // The box stays where it is; only the word drops one pixel inside it.
-                      style: { display: 'block', transform: 'translate(0.5px, 0.5px)' },
-                      children: action.label
+                ? asking
+                  ? jsxs('span', {
+                      className: 'flex shrink-0 items-center gap-1',
+                      style: { transform: 'translateY(-0.5px)' },
+                      children: [
+                        jsx('span', {
+                          role: 'button',
+                          tabIndex: 0,
+                          title: 'cancel',
+                          onClick: event => {
+                            event.stopPropagation()
+                            setAsking(false)
+                          },
+                          className:
+                            'flex items-center justify-center rounded border text-[0.625rem]',
+                          style: {
+                            color: BAD_COLOR,
+                            borderColor: BAD_COLOR,
+                            width: '14px',
+                            height: '14px',
+                            lineHeight: 1
+                          },
+                          children: '✕'
+                        }),
+                        jsx('span', {
+                          role: 'button',
+                          tabIndex: 0,
+                          title: action.title || '',
+                          onClick: event => {
+                            event.stopPropagation()
+                            setAsking(false)
+                            action.onClick()
+                          },
+                          className:
+                            'flex items-center justify-center rounded border text-[0.625rem]',
+                          style: {
+                            color: RUN_COLOR,
+                            borderColor: RUN_COLOR,
+                            width: '14px',
+                            height: '14px',
+                            lineHeight: 1
+                          },
+                          children: '✓'
+                        })
+                      ]
                     })
-                  })
+                  : jsx('span', {
+                      // Not a button: the whole header is already one, and a button inside a
+                      // button is invalid — the browser rearranges it and the row drifts.
+                      role: 'button',
+                      tabIndex: 0,
+                      onClick: event => {
+                        event.stopPropagation()
+                        setAsking(true)
+                      },
+                      title: action.title || '',
+                      className:
+                        'shrink-0 rounded border border-(--ui-stroke-secondary) text-[0.5625rem] uppercase hover:bg-(--ui-fill-tertiary)',
+                      style: {
+                        // The box sits half a pixel above the text's axis.
+                        transform: 'translateY(-0.5px)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        height: '14px',
+                        padding: '0 4px',
+                        lineHeight: 1
+                      },
+                      children: jsx('span', {
+                        // The box stays where it is; only the word drops one pixel inside it.
+                        style: { display: 'block', transform: 'translate(0.5px, 0.5px)' },
+                        children: action.label
+                      })
+                    })
                 : null,
               hasCounts || hasPlain
                 ? jsxs('span', {
