@@ -526,6 +526,45 @@ function visibleFrame(rawTop, rawBottom, limit) {
 }
 
 
+/** The figure's path from a box: the band's frame open on the right, joined to the pane. */
+function framePath(box) {
+  const radius = 4
+  const top = box.top
+  const bottom = box.top + box.rowHeight
+  const seam = box.seam
+  return (
+    `M ${box.left + radius} ${top} L ${seam} ${top} L ${seam} ${radius} Q ${seam} 0 ${seam + radius} 0 ` +
+    `L ${box.width - radius} 0 Q ${box.width} 0 ${box.width} ${radius} ` +
+    `L ${box.width} ${box.height - radius} Q ${box.width} ${box.height} ${box.width - radius} ${box.height} ` +
+    `L ${seam + radius} ${box.height} Q ${seam} ${box.height} ${seam} ${box.height - radius} ` +
+    `L ${seam} ${bottom} L ${box.left + radius} ${bottom} ` +
+    `Q ${box.left} ${bottom} ${box.left} ${bottom - radius} ` +
+    `L ${box.left} ${top + radius} Q ${box.left} ${top} ${box.left + radius} ${top} Z`
+  )
+}
+
+
+/** Paint an existing figure without React: the same frame, in the same frame as the scroll. */
+function paintFrame(box) {
+  const root = document.querySelector('[data-pi-root]')
+  const svg = root && root.querySelector('[data-pi-frame]')
+  if (!svg) return false
+  const path = svg.querySelector('[data-pi-path]')
+  const up = svg.querySelector('[data-pi-seam-top]')
+  const down = svg.querySelector('[data-pi-seam-bottom]')
+  if (!path || !up || !down) return false
+  const seam = box.seam + 0.5
+  const top = box.top
+  const bottom = box.top + box.rowHeight
+  path.setAttribute('d', framePath(box))
+  up.setAttribute('x1', seam); up.setAttribute('x2', seam)
+  up.setAttribute('y1', 0); up.setAttribute('y2', top)
+  down.setAttribute('x1', seam); down.setAttribute('x2', seam)
+  down.setAttribute('y1', bottom); down.setAttribute('y2', box.height)
+  return true
+}
+
+
 function measureSelection() {
   const root = document.querySelector('[data-pi-root]')
   const row = root && root.querySelector('[data-pi-selected]')
@@ -562,15 +601,14 @@ function measureSelection() {
     color: row.getAttribute('data-pi-colour') || 'var(--ui-text-tertiary)'
   }
   const current = selectedBox.get()
-  if (
+  const sameShape =
     current &&
     current.width === next.width &&
     current.height === next.height &&
-    current.left === next.left &&
-    current.top === next.top &&
-    current.rowHeight === next.rowHeight &&
     current.color === next.color
-  ) {
+  if (sameShape) {
+    // Same box, new place: paint it straight into the SVG, one frame, no render.
+    paintFrame(next)
     return
   }
   selectedBox.set(next)
@@ -602,22 +640,10 @@ function SelectionOutline() {
       else measureSelection()
     }
   })
-  const radius = 4
   const seam = box ? box.seam : 0
   const top = box ? box.top : 0
   const bottom = box ? box.top + box.rowHeight : 0
-  // Open path: it starts at the band's top-right corner, runs round the pane and returns to the
-  // band's bottom-right corner. The row's own ring closes the figure on its left side.
-  // Closed figure: the band's frame (open on the right) plus the pane, one line around both.
-  const figure = box
-    ? `M ${box.left + radius} ${top} L ${seam} ${top} L ${seam} ${radius} Q ${seam} 0 ${seam + radius} 0 ` +
-      `L ${box.width - radius} 0 Q ${box.width} 0 ${box.width} ${radius} ` +
-      `L ${box.width} ${box.height - radius} Q ${box.width} ${box.height} ${box.width - radius} ${box.height} ` +
-      `L ${seam + radius} ${box.height} Q ${seam} ${box.height} ${seam} ${box.height - radius} ` +
-      `L ${seam} ${bottom} L ${box.left + radius} ${bottom} ` +
-      `Q ${box.left} ${bottom} ${box.left} ${bottom - radius} ` +
-      `L ${box.left} ${top + radius} Q ${box.left} ${top} ${box.left + radius} ${top} Z`
-    : ''
+  const figure = box ? framePath(box) : ''
 
   return jsxs('div', {
     'aria-hidden': true,
@@ -626,6 +652,7 @@ function SelectionOutline() {
       probe,
       box
         ? jsxs('svg', {
+            'data-pi-frame': '',
             width: box.width,
             height: box.height,
             viewBox: `0 0 ${box.width} ${box.height}`,
@@ -633,6 +660,7 @@ function SelectionOutline() {
             children: [
               // The seam above the row, and below it: the selected row is the only gap.
               jsx('line', {
+                'data-pi-seam-top': '',
                 x1: seam + 0.5,
                 y1: 0,
                 x2: seam + 0.5,
@@ -641,6 +669,7 @@ function SelectionOutline() {
                 strokeWidth: 1
               }),
               jsx('line', {
+                'data-pi-seam-bottom': '',
                 x1: seam + 0.5,
                 y1: bottom,
                 x2: seam + 0.5,
@@ -649,6 +678,7 @@ function SelectionOutline() {
                 strokeWidth: 1
               }),
               jsx('path', {
+                'data-pi-path': '',
                 d: figure,
                 fill: 'none',
                 stroke: box.color,
@@ -700,6 +730,8 @@ function reportScroll(side, element) {
       const { side: which, progress, span: room } = pendingScroll
       pendingScroll = null
       scrollPill.set({ ...scrollPill.get(), [which]: progress, visible: room > 0 })
+      // The tree moved: put the frame back on its row now, not on the next render.
+      measureSelection()
     })
   }
   if (pillTimer) clearTimeout(pillTimer)
