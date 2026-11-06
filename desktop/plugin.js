@@ -446,6 +446,29 @@ function pillTarget(side) {
 }
 
 
+/** A scroll area with no native bar: the bar is drawn into a strip this box clips away.
+
+    CSS cannot hide it here — the app styles ::-webkit-scrollbar, and a styled scrollbar ignores
+    scrollbar-width. Fourteen pixels of negative margin put the bar outside the visible edge.
+ */
+function Scroller({ side, grow, className, style, children }) {
+  return jsx('div', {
+    style: {
+      overflow: 'hidden',
+      minHeight: 0,
+      ...(grow ? { flex: '1 1 auto' } : { height: '100%' })
+    },
+    children: jsx('div', {
+      className: `h-full ${className || ''}`,
+      'data-pi-scroll': side,
+      style: { ...(style || {}), marginRight: '-14px', paddingRight: '14px', overflowY: 'auto' },
+      onScroll: event => reportScroll(side, event.currentTarget),
+      children
+    })
+  })
+}
+
+
 function ScrollPill() {
   const state = useValue(scrollPill)
   if (!state.visible) return null
@@ -1054,11 +1077,9 @@ function LaneList({ ctx }) {
 
         ]
       }),
-      jsx('div', {
-        className: 'min-h-0 flex-1 overflow-y-auto',
-        'data-pi-scroll': 'tree',
-        style: { scrollbarWidth: 'none' },
-        onScroll: event => reportScroll('tree', event.currentTarget),
+      jsx(Scroller, {
+        side: 'tree',
+        grow: true,
         style: { display: 'flex', flexDirection: 'column', gap: PROJECT_GAP, paddingTop: PROJECT_GAP },
         children: lanes.length === 0 ? emptyHint : projectTree
       }),
@@ -1434,11 +1455,9 @@ function Receipt({ merge }) {
 
 /** Every closed lane of one project, when its group row is picked. */
 function GroupList({ title, rows, onPick }) {
-  return jsxs('div', {
-    className: 'flex h-full flex-col overflow-y-auto pb-2 text-xs',
-    'data-pi-scroll': 'pane',
-    style: { scrollbarWidth: 'none' },
-    onScroll: event => reportScroll('pane', event.currentTarget),
+  return jsxs(Scroller, {
+    side: 'pane',
+    className: 'flex flex-col pb-2 text-xs',
     children: [
       jsx('div', {
         className:
@@ -1534,11 +1553,9 @@ function LaneStatus({ ctx }) {
   const usage = lane.usage || {}
   const status = lane.status || []
 
-  return jsxs('div', {
-    className: 'flex h-full flex-col overflow-y-auto pb-2 text-xs',
-    'data-pi-scroll': 'pane',
-    style: { scrollbarWidth: 'none' },
-    onScroll: event => reportScroll('pane', event.currentTarget),
+  return jsxs(Scroller, {
+    side: 'pane',
+    className: 'flex flex-col pb-2 text-xs',
     children: [
       jsx('div', {
         className:
@@ -1783,11 +1800,10 @@ function CardShell({ title, children }) {
         style: { height: HEADER_H },
         children: title
       }),
-      jsx('div', {
-        className: 'flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2.5 py-2',
-        'data-pi-scroll': 'pane',
-        style: { scrollbarWidth: 'none' },
-        onScroll: event => reportScroll('pane', event.currentTarget),
+      jsx(Scroller, {
+        side: 'pane',
+        grow: true,
+        className: 'flex min-h-0 flex-col gap-2 px-2.5 py-2',
         children
       })
     ]
@@ -2140,7 +2156,16 @@ function TeamPane({ ctx }) {
             : jsx(LaneStatus, { ctx })
       }),
       jsx('div', {
-        style: { position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 5 },
+        // The track starts under the header: a pill in the header would sit on the title.
+        style: {
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          top: HEADER_H,
+          bottom: 0,
+          pointerEvents: 'none',
+          zIndex: 5
+        },
         children: jsx(ScrollPill, {})
       }),
       // One shadow for the whole width: per-header shadows doubled up at the seam.
