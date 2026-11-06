@@ -713,7 +713,13 @@ function LaneList({ ctx }) {
           trunk: gopen && items.length > 0,
           row: jsx(ListHeader, {
             label: preparing ? meta.title || groupKey : groupKey || 'ungrouped',
-            tag: preparing ? 'preparation' : '',
+            // How long it has been waiting for me: a placeholder nobody picked up must show it.
+            tag: preparing
+              ? (() => {
+                  const minutes = Math.floor((Date.now() / 1000 - Number(meta.created || 0)) / 60)
+                  return minutes >= 1 ? `preparation · ${minutes}m` : 'preparation'
+                })()
+              : '',
             dim: preparing ? 'italic' : '',
             // Open: its rows report themselves, so the counts belong to the closed state.
             counts: preparing || gopen ? null : countStates(items),
@@ -913,7 +919,7 @@ function LaneList({ ctx }) {
                           body: { session_key: sessionId },
                           timeoutMs: 15000
                         })
-                        .then(() => host.notify({ kind: 'info', message: 'update: просьба ушла в чат' }))
+                        .then(() => host.notify({ kind: 'info', message: 'update: the request went to the chat' }))
                     },
                     className: 'flex items-center justify-center rounded border text-[0.625rem]',
                     style: { color: RUN_COLOR, borderColor: RUN_COLOR, width: '16px', height: '16px', lineHeight: 1 },
@@ -1028,8 +1034,8 @@ function AddSessionRow({ ctx, project, feature, sessionId, linked, onDone }) {
                 className: 'min-w-0 flex-1',
                 style: { color: 'var(--ui-text-secondary)' },
                 children: sessionId
-                  ? `Чат ${sessionId.slice(0, 18)}… будет привязан к фиче ${project}/${feature}.`
-                  : 'Открытого чата нет: откройте чат и повторите.'
+                  ? `Chat ${sessionId.slice(0, 18)}… will be linked to ${project}/${feature}.`
+                  : 'No chat is open: open one and try again.'
               }),
               jsx('span', {
                 role: 'button',
@@ -1482,7 +1488,7 @@ function LaneStatus({ ctx }) {
               ctx
                 .rest(`/lanes/${encodeURIComponent(lane.lane)}/say`, {
                   method: 'POST',
-                  body: { text: 'Закрой полосу: покажи план и ничего не удаляй без моего да.' },
+                  body: { text: 'Close this lane: show the plan first, and delete nothing without my go.' },
                   timeoutMs: 15000
                 })
                 .then(() => query.refetch()),
@@ -1659,8 +1665,8 @@ function FeatureCompose({ ctx, project, sessionId, onDone }) {
       host.notify({
         kind: result.message_sent ? 'info' : 'error',
         message: result.message_sent
-          ? `${project}: фича заведена, просьба ушла в чат`
-          : `${project}: фича заведена, но сообщение не доставлено — напишите мне в чат`
+          ? `${project}: feature created, the request went to the chat`
+          : `${project}: feature created, but the message was not delivered — write to me in the chat`
       })
       setText('')
       onDone()
@@ -1674,17 +1680,17 @@ function FeatureCompose({ ctx, project, sessionId, onDone }) {
   return jsxs('div', {
     className: 'flex h-full min-h-0 flex-col gap-2 p-3',
     children: [
-      jsx(Section, { title: `новая фича · ${project}` }),
+      jsx(Section, { title: `new feature · ${project}` }),
       jsx('div', {
         className: 'text-[0.6875rem] text-(--ui-text-quaternary)',
-        children: 'Опишите, что хотите. Фича появится сразу как preparation — имя и задачу для pi дам я.'
+        children: 'Write what you want. The feature appears at once as preparation; I give it a name and the task for pi.'
       }),
       jsx('textarea', {
         value: text,
         onChange: event => setText(event.target.value),
         rows: 5,
         autoFocus: true,
-        placeholder: 'например: страница архива с поиском по заголовкам',
+        placeholder: 'for example: an archive page with search by title',
         className:
           'min-h-0 w-full resize-none rounded border border-(--ui-stroke-secondary) bg-transparent px-2 py-1.5 text-[0.6875rem] outline-none focus:border-(--ui-accent)',
         style: { color: 'var(--ui-text-primary)' }
@@ -1749,7 +1755,7 @@ function FeatureView({ ctx, project, feature, onDone }) {
       }),
       jsx(Row, {
         label: 'chat',
-        value: chats.length ? `${chats.length} · привязан` : 'нет чата',
+        value: chats.length ? `${chats.length} · linked` : 'no chat',
         color: chats.length ? undefined : 'var(--ui-text-quaternary)'
       }),
       meta.request
@@ -1761,7 +1767,7 @@ function FeatureView({ ctx, project, feature, onDone }) {
         : null,
       jsx('div', {
         className: 'text-[0.6875rem] text-(--ui-text-quaternary)',
-        children: 'Ждёт: имя по конвенциям, задача для pi, первая полоса. Пока полосы нет, фичу можно отменить.'
+        children: 'Waiting for a name, a task for pi and its first lane. Until it has a lane, the feature can be dropped.'
       }),
       jsx('span', {
         role: 'button',
@@ -1769,7 +1775,7 @@ function FeatureView({ ctx, project, feature, onDone }) {
         onClick: drop,
         className: 'mt-auto flex w-fit items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
         style: { color: BAD_COLOR, borderColor: BAD_COLOR },
-        children: 'отменить фичу'
+        children: 'drop feature'
       })
     ]
   })
@@ -1832,8 +1838,7 @@ export default {
   name: 'pi-team',
   register(ctx) {
     ctx.i18n.register({
-      en: { lanes: 'Lanes', status: 'Lane status', pick: 'Pick a lane on the left.' },
-      ru: { lanes: 'Полосы', status: 'Статус полосы', pick: 'Выберите полосу слева.' }
+      en: { lanes: 'Lanes', status: 'Lane status', pick: 'Pick a lane on the left.' }
     })
 
     ctx.register({

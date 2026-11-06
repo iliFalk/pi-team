@@ -642,6 +642,7 @@ def _registry() -> List[Dict[str, Any]]:
                         # name yet. The panel shows it as preparation, not as a feature.
                         "state": str(item.get("state") or "") if isinstance(item, dict) else "",
                         "request": str(item.get("request") or "") if isinstance(item, dict) else "",
+                        "created": int(item.get("created") or 0) if isinstance(item, dict) else 0,
                     }
                 )
         out.append({"name": name, "repo": str(entry.get("repo") or ""), "features": features})
@@ -720,33 +721,26 @@ def list_lanes() -> Dict[str, Any]:
 
 
 def _registry_write(project: str, feature: str, session: str, add: bool) -> Dict[str, Any]:
-    """Attach or drop one Hermes session on a feature, in the registry file."""
-    path = _hermes_home() / "plugin-data" / "pi-team" / "projects.json"
-    data = _read_json(path) or {}
-    projects = data.get("projects")
-    if not isinstance(projects, dict) or not isinstance(projects.get(project), dict):
-        raise HTTPException(status_code=404, detail="unknown project")
-    entry = projects[project]
-    features = entry.get("features")
-    if not isinstance(features, dict) or not isinstance(features.get(feature), dict):
-        raise HTTPException(status_code=404, detail="unknown feature")
-    item = features[feature]
-    sessions = [s for s in (item.get("sessions") or []) if isinstance(s, dict) and s.get("id")]
-    if add:
-        if not any(s.get("id") == session for s in sessions):
-            sessions.append({"id": session, "linked_at": int(time.time())})
-    else:
-        sessions = [s for s in sessions if s.get("id") != session]
-    item["sessions"] = sessions
-    features[feature] = item
-    entry["features"] = features
-    projects[project] = entry
-    data["projects"] = projects
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    tmp.replace(path)
-    return {"project": project, "feature": feature, "sessions": sessions}
+    """Attach or drop one Hermes session on a feature.
+
+    One writer for the registry: the rules live in pireg, the same module the CLI uses.
+    A chat is an address, so it can belong to one feature only, and a feature has one chat.
+    """
+    try:
+        item = (
+            pireg.link_session(project, feature, session)
+            if add
+            else pireg.unlink_session(project, feature, session)
+        )
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error.args[0]))
+    except pireg.ChatTaken as error:
+        raise HTTPException(status_code=409, detail=f"this chat already belongs to {error.where}")
+    except pireg.ChatBusy:
+        raise HTTPException(
+            status_code=409, detail="this feature already has a chat: unlink it first"
+        )
+    return {"project": project, "feature": feature, "sessions": item.get("sessions") or []}
 
 
 @router.post("/link")
@@ -839,19 +833,19 @@ def say_to_lane(lane: str, payload: Dict[str, Any] = Body(default={})) -> Dict[s
 
 
 UPDATE_PROMPT = (
-    "Обнови плагин pi-team: подтяни репозиторий и разложи файлы по местам — "
-    "desktop/plugin.js в ~/.hermes/desktop-plugins/pi-team/, "
-    "plugin/dashboard/plugin_api.py в ~/.hermes/plugins/pi-team/, "
-    "runner/pi-lane в ~/.hermes/scripts/. Перезапусти бэкенд, раздай панель клиентам "
-    "и покажи, что изменилось."
+    "Update the pi-team plugin: pull the repository and put the files in place — "
+    "desktop/plugin.js into ~/.hermes/desktop-plugins/pi-team/, "
+    "plugin/dashboard/plugin_api.py into ~/.hermes/plugins/pi-team/, "
+    "runner/pi-lane into ~/.hermes/scripts/. Restart the backend, share the panel with the "
+    "clients and show what changed."
 )
 
 
 PREPARE_PROMPT = (
     "[feature {where} · preparation]\n{text}\n\n"
-    "Эту фичу завели из панели одной строкой. Дай ей имя по конвенциям проекта, "
-    "сформулируй задачу для pi и открой полосу. Заготовка станет обычной фичей, "
-    "как только в ней появится полоса."
+    "This feature was asked for in one line from the panel. Give it a name that fits the "
+    "project, write the task for pi and open a lane. The placeholder becomes a normal "
+    "feature as soon as it has a lane."
 )
 
 

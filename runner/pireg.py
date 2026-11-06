@@ -97,16 +97,58 @@ def _feature(data: Dict[str, Any], name: str, feature: str) -> Optional[Dict[str
     return item if isinstance(item, dict) else None
 
 
-def link_session(project: str, feature: str, session: str) -> Dict[str, Any]:
-    """Attach a Hermes session to a feature. One session may serve many features."""
+class ChatTaken(Exception):
+    """The chat already belongs to another feature: a chat is one address, not a label."""
+
+    def __init__(self, where: str) -> None:
+        self.where = where
+        super().__init__(where)
+
+
+class ChatBusy(Exception):
+    """The feature already has its chat; a second one would make the address ambiguous."""
+
+    def __init__(self, session: str) -> None:
+        self.session = session
+        super().__init__(session)
+
+
+def _owner_of(data: Dict[str, Any], session: str) -> Optional[tuple]:
+    for project_name, project_entry in (data.get("projects") or {}).items():
+        if not isinstance(project_entry, dict):
+            continue
+        for feature_name, feature_entry in (project_entry.get("features") or {}).items():
+            if not isinstance(feature_entry, dict):
+                continue
+            for linked in feature_entry.get("sessions") or []:
+                if isinstance(linked, dict) and linked.get("id") == session:
+                    return project_name, feature_name
+    return None
+
+
+def link_session(
+    project: str, feature: str, session: str, move: bool = False
+) -> Dict[str, Any]:
+    """Attach a chat to a feature. One chat per feature, and one feature per chat."""
     data = load()
     item = _feature(data, project, feature)
     if item is None:
         raise KeyError(f"unknown feature: {project}/{feature}")
-    sessions = item.get("sessions")
-    if not isinstance(sessions, list):
-        sessions = []
-    if not any(isinstance(s, dict) and s.get("id") == session for s in sessions):
+    owner = _owner_of(data, session)
+    if owner and owner != (project, feature):
+        if not move:
+            raise ChatTaken(f"{owner[0]}/{owner[1]}")
+        previous = _feature(data, owner[0], owner[1])
+        if isinstance(previous, dict):
+            previous["sessions"] = [
+                s
+                for s in (previous.get("sessions") or [])
+                if not (isinstance(s, dict) and s.get("id") == session)
+            ]
+    sessions = [s for s in (item.get("sessions") or []) if isinstance(s, dict)]
+    if sessions and not any(s.get("id") == session for s in sessions):
+        raise ChatBusy(str(sessions[0].get("id") or ""))
+    if not any(s.get("id") == session for s in sessions):
         sessions.append({"id": session, "linked_at": int(time.time())})
     item["sessions"] = sessions
     save(data)
