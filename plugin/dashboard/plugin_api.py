@@ -192,6 +192,41 @@ def _status_lines(worktree: str) -> List[Dict[str, str]]:
     return rows
 
 
+def _diff_files(worktree: str) -> List[Dict[str, Any]]:
+    """Per file counts against HEAD, biggest change first, untracked files included."""
+    rows: List[Dict[str, Any]] = []
+    rc, out = _run_git(worktree, "diff", "HEAD", "--numstat")
+    if rc != 0:
+        return rows
+    for line in out.splitlines():
+        parts = line.split("\t")
+        if len(parts) != 3:
+            continue
+        added, removed, path = parts
+        if path.startswith(".thinkrail/"):
+            continue
+        rows.append({
+            "path": path,
+            "insertions": int(added) if added.isdigit() else 0,
+            "deletions": int(removed) if removed.isdigit() else 0,
+            "binary": added == "-",
+        })
+    rc_u, untracked = _run_git(worktree, "ls-files", "--others", "--exclude-standard")
+    if rc_u == 0:
+        for path in untracked.splitlines():
+            path = path.strip()
+            if not path or path.startswith(".thinkrail/"):
+                continue
+            try:
+                with open(Path(worktree) / path, "r", encoding="utf-8", errors="replace") as handle:
+                    lines = sum(1 for _ in handle)
+            except OSError:
+                lines = 0
+            rows.append({"path": path, "insertions": lines, "deletions": 0, "untracked": True})
+    rows.sort(key=lambda row: (row["insertions"] + row["deletions"]), reverse=True)
+    return rows
+
+
 def _diffstat(worktree: str) -> Dict[str, int]:
     """Insertions and deletions against HEAD, staged work included."""
     rc, out = _run_git(worktree, "diff", "HEAD", "--stat")
@@ -443,6 +478,7 @@ def _lane_entry(lane_dir: Path) -> Optional[Dict[str, Any]]:
         "files": 0,
         "insertions": 0,
         "deletions": 0,
+        "diff_files": [],
         "specs": [],
         "spec_tree": [],
         "plan": None,
@@ -472,6 +508,7 @@ def _lane_entry(lane_dir: Path) -> Optional[Dict[str, Any]]:
         entry["files"] = len(status)
         entry["insertions"] = stat["insertions"]
         entry["deletions"] = stat["deletions"]
+        entry["diff_files"] = _diff_files(worktree)
         entry["specs"] = _specs_touched(worktree)
         entry["spec_tree"] = _spec_tree(worktree)
         entry["plan"] = _plan(worktree)

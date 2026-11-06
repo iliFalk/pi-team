@@ -1349,8 +1349,42 @@ function LaneStatus({ ctx }) {
             children: lane.last_text || 'nothing written yet'
           }),
 
-      !lane.shelved && status.length > 0 ? jsx(Section, { title: 'files' }) : null,
-      lane.shelved ? null : status.slice(0, 10).map(item => jsx(Row, { label: item.code, value: item.path }, item.path)),
+      // The receipt: what this run changed, file by file, biggest first.
+      !lane.shelved && (lane.diff_files || []).length
+        ? jsxs('div', {
+            children: [
+              jsx(Section, {
+                title: `diff · ${lane.files} files  +${lane.insertions} −${lane.deletions}`
+              }),
+              (lane.diff_files || []).slice(0, 12).map(file =>
+                jsxs(
+                  'div',
+                  {
+                    className: 'flex items-baseline gap-2 px-2.5 py-[2px] font-mono text-[0.625rem]',
+                    children: [
+                      jsx('span', {
+                        className: 'truncate',
+                        style: { color: 'var(--ui-text-secondary)' },
+                        children: file.path
+                      }),
+                      jsx('span', {
+                        style: { color: RUN_COLOR, marginLeft: 'auto' },
+                        children: file.binary ? 'bin' : `+${file.insertions}`
+                      }),
+                      jsx('span', {
+                        style: {
+                          color: file.deletions ? BAD_COLOR : 'var(--ui-text-quaternary)'
+                        },
+                        children: `−${file.deletions}`
+                      })
+                    ]
+                  },
+                  file.path
+                )
+              )
+            ]
+          })
+        : null,
 
       lane.shelved ? null : jsx(Section, { title: plan ? `plan ${plan.done}/${plan.total}` : 'plan' }),
       lane.shelved ? null : plan
