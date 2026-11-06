@@ -164,6 +164,13 @@ another element.
 
 Rules:
 
+- **The selected row and the right pane are one figure.** The seam stops at the row's top and starts
+  again at its bottom, so the row opens into the pane; the outline runs around the union, not around two
+  boxes. Colour it with the row's own state colour — the same value the row already shows — so selection
+  and condition cannot disagree.
+- **Measure the row, not the data.** The notch comes from the row's real box in the DOM, clamped to the
+  visible strip between the header and the panel's bottom edge; a scrolled-away row draws no notch rather
+  than a figure outside the panel.
 - **One shadow shape for the whole panel.** A gradient band, not a `box-shadow`, because a shadow
   belongs to a box and would cut off at the seam.
 - **An inset ring does not work for the frame**: it paints under the children. A real border on the
@@ -184,6 +191,7 @@ Rules:
 | Card shell | one header strip of `HEADER_H` and content starting at `ROW_PAD` |
 | Scroll pill | `44px` long, `3px` wide, radius `999px`, `var(--ui-text-quaternary)` at 0.55 |
 | Panel frame | one border, no corner radius: the app's pane is square |
+| Selection figure | one `1px` line with a `4px` radius joins the selected row to the right pane, in the row's state colour; the seam opens over the row's height |
 
 ## Motion
 

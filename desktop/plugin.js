@@ -375,6 +375,8 @@ function LaneRow({ lane, active, onPick }) {
       ? { ...bandStyle, background: 'var(--chrome-action-hover)' }
       : bandStyle
   const statusColor = asked ? '#ffffff' : bad ? BAD_COLOR : lane.state === 'running' ? RUN_COLOR : undefined
+  // The frame colour, not the text colour: a question row writes white on blue.
+  const frameColor = asked ? ASK_COLOR : bad ? BAD_COLOR : lane.state === 'running' ? RUN_COLOR : DONE_COLOR
   const className = [rowClass, dim]
     .filter(Boolean)
     .join(' ')
@@ -384,6 +386,9 @@ function LaneRow({ lane, active, onPick }) {
     onClick: onPick,
     onMouseEnter: () => setHover(true),
     onMouseLeave: () => setHover(false),
+    // The right pane is framed in this row's colour: the box and the colour are measured there.
+    'data-pi-selected': active ? '1' : undefined,
+    'data-pi-colour': active ? frameColor : undefined,
     className,
     // The highlight starts at the icon, so the stub and the line stay outside it.
     style: {
@@ -438,6 +443,121 @@ function LaneRow({ lane, active, onPick }) {
 }
 
 const collapsedAtom = atom({})
+
+// What the right pane is framed by: the selected row's own box, in the row's own colour.
+const selectedBox = atom(null)
+
+
+function measureSelection() {
+  const root = document.querySelector('[data-pi-root]')
+  const row = root && root.querySelector('[data-pi-selected]')
+  if (!root || !row) {
+    if (selectedBox.get()) selectedBox.set(null)
+    return
+  }
+  const outer = root.getBoundingClientRect()
+  const box = row.getBoundingClientRect()
+  // A scrolled-away row would put the notch outside the panel: keep it inside the visible strip.
+  const header = 28
+  const top = Math.max(Math.round(box.top - outer.top), header)
+  const bottom = Math.min(Math.round(box.bottom - outer.top), Math.round(outer.height))
+  if (bottom - top < 10) {
+    if (selectedBox.get()) selectedBox.set(null)
+    return
+  }
+  const next = {
+    width: Math.round(outer.width),
+    height: Math.round(outer.height),
+    seam: Math.round(outer.width / 2),
+    left: Math.round(box.left - outer.left),
+    top,
+    rowHeight: bottom - top,
+    color: row.getAttribute('data-pi-colour') || 'var(--ui-text-tertiary)'
+  }
+  const current = selectedBox.get()
+  if (
+    current &&
+    current.width === next.width &&
+    current.height === next.height &&
+    current.left === next.left &&
+    current.top === next.top &&
+    current.rowHeight === next.rowHeight &&
+    current.color === next.color
+  ) {
+    return
+  }
+  selectedBox.set(next)
+}
+
+
+/** One line around the selected row and the right pane: the seam opens where the row is. */
+function SelectionOutline() {
+  const box = useValue(selectedBox)
+  // Measure after every commit: the row moves on scroll, and a poll re-renders the tree.
+  const probe = jsx('span', { style: { display: 'none' }, ref: () => measureSelection() })
+  const radius = 4
+  const seam = box ? box.seam : 0
+  const top = box ? box.top : 0
+  const bottom = box ? box.top + box.rowHeight : 0
+  const figure = box
+    ? `M ${box.left} ${top} L ${seam} ${top} L ${seam} ${radius} Q ${seam} 0 ${seam + radius} 0 ` +
+      `L ${box.width - radius} 0 Q ${box.width} 0 ${box.width} ${radius} ` +
+      `L ${box.width} ${box.height - radius} Q ${box.width} ${box.height} ${box.width - radius} ${box.height} ` +
+      `L ${seam + radius} ${box.height} Q ${seam} ${box.height} ${seam} ${box.height - radius} ` +
+      `L ${seam} ${bottom} L ${box.left} ${bottom} Z`
+    : ''
+
+  return jsxs('div', {
+    'aria-hidden': true,
+    style: { position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 4 },
+    children: [
+      probe,
+      box
+        ? jsxs('svg', {
+            width: box.width,
+            height: box.height,
+            viewBox: `0 0 ${box.width} ${box.height}`,
+            style: { position: 'absolute', inset: 0 },
+            children: [
+              // The seam above the row, and below it: the selected row is the only gap.
+              jsx('line', {
+                x1: seam + 0.5,
+                y1: 0,
+                x2: seam + 0.5,
+                y2: top,
+                stroke: 'var(--ui-stroke-secondary)',
+                strokeWidth: 1
+              }),
+              jsx('line', {
+                x1: seam + 0.5,
+                y1: bottom,
+                x2: seam + 0.5,
+                y2: box.height,
+                stroke: 'var(--ui-stroke-secondary)',
+                strokeWidth: 1
+              }),
+              jsx('path', {
+                d: figure,
+                fill: 'none',
+                stroke: box.color,
+                strokeWidth: 1,
+                strokeLinejoin: 'round'
+              })
+            ]
+          })
+        : jsx('div', {
+            style: {
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              left: '50%',
+              width: '1px',
+              background: 'var(--ui-stroke-secondary)'
+            }
+          })
+    ]
+  })
+}
 
 // A thin pill on the divider: the side under the cursor, 44px, drag to scroll.
 const scrollPill = atom({ hover: 'tree', tree: 0, pane: 0, visible: false })
@@ -560,7 +680,7 @@ function ScrollPill() {
 }
 
 
-function ListHeader({ label, counts, plain, action, open, onToggle, dim, tag }) {
+function ListHeader({ label, counts, plain, action, open, onToggle, dim, tag, selected, colour }) {
   const [hover, setHover] = useState(false)
   const [asking, setAsking] = useState(false)
   const hasCounts = Boolean(counts && (counts.ask || counts.bad || counts.run || counts.done))
@@ -598,6 +718,8 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim, tag }) 
         onClick: onToggle,
         onMouseEnter: () => setHover(true),
         onMouseLeave: () => setHover(false),
+        'data-pi-selected': selected ? '1' : undefined,
+        'data-pi-colour': selected ? colour : undefined,
         className:
           'flex min-w-0 flex-1 items-center gap-1 pr-2.5 text-left text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary)',
         style: { marginLeft: ROW_PAD, width: `calc(100% - ${ROW_PAD})`, paddingTop: HEADER_PY, paddingBottom: HEADER_PY },
@@ -764,6 +886,7 @@ function LaneList({ ctx }) {
     refetchInterval: POLL_MS
   })
   const current = useValue(selectedLane)
+  const pickedFeature = useValue(selectedFeature)
   const cwd = useValue(host.state.cwd)
   // Stored ids survive a reload; runtime ids do not, and openSession takes the stored one.
   // Both hooks run unconditionally: a conditional one makes the count vary per render.
@@ -852,12 +975,24 @@ function LaneList({ ctx }) {
       // A placeholder has no name and no lanes yet: it opens its own card, not a list.
       const preparing = Boolean(meta && meta.state === 'preparation')
 
+      // A feature's frame takes the worst news among its lanes, the same rule the counters use.
+      const colour = items.some(isBad)
+        ? BAD_COLOR
+        : items.some(lane => lane.state === 'waiting')
+          ? ASK_COLOR
+          : items.some(lane => lane.state === 'running')
+            ? RUN_COLOR
+            : DONE_COLOR
+      const chosen = pickedFeature && pickedFeature.feature === groupKey && pickedFeature.project === project
+
       return jsx(
         TreeRow,
         {
           last,
           trunk: gopen && items.length > 0,
           row: jsx(ListHeader, {
+            selected: chosen,
+            colour,
             label: preparing ? meta.title || groupKey : groupKey || 'ungrouped',
             // How long it has been waiting for me: a placeholder nobody picked up must show it.
             tag: preparing
@@ -871,12 +1006,9 @@ function LaneList({ ctx }) {
             counts: preparing || gopen ? null : countStates(items),
             open: gopen,
             onToggle: () => {
-              if (preparing) {
-                selectedLane.set('')
-                selectedFeature.set({ project, feature: groupKey })
-                return
-              }
-              toggle(gkey)
+              selectedLane.set('')
+              selectedFeature.set({ project, feature: groupKey })
+              if (!preparing) toggle(gkey)
             }
           }),
           children: [
@@ -2131,12 +2263,16 @@ function FeatureView({ ctx, project, feature, onDone }) {
   const entry = registry.find(item => item.name === project)
   const meta = ((entry && entry.features) || []).find(item => item.name === feature) || {}
   const chats = meta.sessions || []
+  const preparing = meta.state === 'preparation'
+  const lanes = ((query.data && query.data.lanes) || []).filter(
+    lane => lane.project === project && lane.group === feature && !lane.shelved
+  )
 
   const drop = async () => {
     try {
-      await ctx.rest('/features/cancel', {
+      await ctx.rest(preparing ? '/features/cancel' : '/projects/cancel', {
         method: 'POST',
-        body: { project, feature },
+        body: preparing ? { project, feature } : { name: project },
         timeoutMs: 8000
       })
       onDone()
@@ -2146,38 +2282,77 @@ function FeatureView({ ctx, project, feature, onDone }) {
   }
 
   return jsx(CardShell, {
-    title: `${project} / ${feature} · preparation`,
+    title: `${project} / ${feature}${preparing ? ' · preparation' : ''}`,
     children: [
-      jsx('div', {
-        className: 'text-[0.8125rem] break-words',
-        style: { color: 'var(--ui-text-primary)' },
-        children: meta.title || feature
-      }),
+      preparing
+        ? jsx('div', {
+            className: 'whitespace-pre-wrap break-words text-[0.8125rem]',
+            style: { color: 'var(--ui-text-primary)' },
+            children: meta.title || feature
+          })
+        : jsx(Row, { label: 'feature', value: feature }),
       jsx(Row, {
         label: 'chat',
         value: chats.length ? 'linked' : 'no chat',
         color: chats.length ? undefined : 'var(--ui-text-quaternary)'
       }),
-      meta.request
+      jsx(Row, { label: 'lanes', value: String(lanes.length) }),
+      lanes.length
         ? jsx('div', {
-            className: 'whitespace-pre-wrap break-words rounded border border-(--ui-stroke-secondary) p-2 text-[0.6875rem] leading-relaxed',
+            className: 'flex flex-col',
+            children: lanes.map(lane =>
+              jsx(
+                'button',
+                {
+                  type: 'button',
+                  onClick: () => {
+                    selectedFeature.set(null)
+                    selectedLane.set(lane.lane)
+                  },
+                  className: 'flex items-center gap-2 py-[3px] text-left text-[0.6875rem]',
+                  children: [
+                    jsx('span', {
+                      className: 'min-w-0 flex-1 truncate font-mono',
+                      style: { color: 'var(--ui-text-secondary)' },
+                      children: lane.lane
+                    }),
+                    jsx('span', {
+                      className: 'shrink-0 text-[0.625rem]',
+                      style: { color: stateColour(lane) || 'var(--ui-text-quaternary)' },
+                      children: lane.state
+                    })
+                  ]
+                },
+                lane.lane
+              )
+            )
+          })
+        : null,
+      preparing && meta.request
+        ? jsx('div', {
+            className:
+              'whitespace-pre-wrap break-words rounded border border-(--ui-stroke-secondary) p-2 text-[0.6875rem] leading-relaxed',
             style: { color: 'var(--ui-text-secondary)' },
             children: meta.request
           })
         : null,
       jsx('div', {
         className: 'text-[0.6875rem] leading-relaxed text-(--ui-text-quaternary)',
-        children:
-          'Waiting for a name, a task for pi and its first lane. Until it has a lane, the feature can be dropped.'
+        children: preparing
+          ? 'Waiting for a name, a task for pi and its first lane. Until it has a lane, the feature can be dropped.'
+          : 'Pick a lane below, or write in the thread of one to send work back.'
       }),
-      jsx('span', {
-        role: 'button',
-        tabIndex: 0,
-        onClick: drop,
-        className: 'mt-auto flex w-fit items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
-        style: { color: BAD_COLOR, borderColor: BAD_COLOR },
-        children: 'drop feature'
-      })
+      preparing
+        ? jsx('span', {
+            role: 'button',
+            tabIndex: 0,
+            onClick: drop,
+            className:
+              'mt-auto flex w-fit items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
+            style: { color: BAD_COLOR, borderColor: BAD_COLOR },
+            children: 'drop feature'
+          })
+        : null
     ]
   })
 }
@@ -2192,6 +2367,7 @@ function TeamPane({ ctx }) {
   const sessionId = storedSessionId || runtimeSessionId
   return jsxs('div', {
     className: 'relative flex h-full min-h-0 overflow-hidden',
+    'data-pi-root': '',
     // One frame for the whole panel. A single border on the root, not four on the pieces:
     // an inset ring would be painted under the columns and never show.
     style: { border: '1px solid var(--ui-stroke-secondary)', boxSizing: 'border-box' },
@@ -2203,7 +2379,7 @@ function TeamPane({ ctx }) {
       }),
       jsx('div', {
         // 50 / 50, and inline: an arbitrary width class is not in the app's stylesheet.
-        className: 'flex shrink-0 flex-col border-r border-(--ui-stroke-secondary)',
+        className: 'flex shrink-0 flex-col',
         'data-pi-side': 'tree',
         // Clip at the seam: the scroll area runs fourteen pixels wide to lose its native bar,
         // and without this a row's highlight paints over the divider.
@@ -2244,6 +2420,7 @@ function TeamPane({ ctx }) {
               })
             : jsx(LaneStatus, { ctx })
       }),
+      jsx(SelectionOutline, {}),
       jsx('div', {
         // The track starts under the header: a pill in the header would sit on the title.
         style: {
