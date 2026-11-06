@@ -392,8 +392,11 @@ before `pi-lane close` runs; afterwards there is nothing left to read it from.
 
 The desktop plugin registers **one** pane, `pi team`, tiled into the right sidebar
 (`placement: 'right'`, `dock: { pane: 'workspace', pos: 'right', enforce: true }`, 620px). Inside it two
-areas sit side by side: the lane list as a fixed 240px column with a border on its right, and the selected
-lane filling the rest.
+areas sit side by side at fifty fifty — the lane list `flex: '0 0 50%'`, the selected lane `flex: '1 1 50%'`,
+both with `minWidth: 0` and `overflow: 'hidden'`, and ONE `border` on the pane root so the frame closes on
+all four sides. A fixed 240-px list beside a flexible card measured 122 / 283 in a 405-px pane and read as a
+broken layout; the root border is a border, not an inset ring, because an inset ring is painted under the
+columns and never shows.
 
 Settle this before rearranging it again:
 
@@ -426,13 +429,19 @@ fixed height (`TEXT_H`, 100px) with scrolling inside — a block that grows with
 below it off screen. Hierarchy rows carry guide lines drawn INLINE, one element per node: `TreeNode` owns the vertical run of
 its subtree, `TreeRow` the row plus its elbow (a rounded `╰` box for the last row, a straight `├` tee
 above), and both are appended AFTER the row so a selected row's background cannot paint over them. No
-class may carry that geometry — an injected stylesheet does not reach the panel. The indent comes from
+No class may carry that geometry — an injected stylesheet does not reach the panel (the one exception is a
+`<style>` element rendered inside the pane's tree, used only to hide the native scroll bars; see
+`hermes-desktop-plugins` for that rule and for why a scroll area keeps `width: '100%'`).
 nesting the children in a `paddingLeft: GUIDE_STEP` box, and a row's highlight starts where the elbow ends
 (`marginLeft: 9px`, `width: calc(100% - 9px)`), so every label sits 16px from its level line. Changing the
 step, the radius or that 16 moves every level at once: it is one constant, not per-row padding. Put sizes and heights in inline
 `style`: the app ships its CSS prebuilt, so a class it never saw in its own source may do nothing, while
 an inline value always applies. Keep every one of these numbers in the constant block at the top of
-`plugin.js`, so "half that big" or "64 → 100" is one edit in one place. Recipes and the pixel check:
+`plugin.js`, so "half that big" or "64 → 100" is one edit in one place. `~/work/pi-team/DESIGN.md` mirrors
+that block as tables with the reason behind each number (its first line says it is development-only and
+changes nothing at runtime): change a constant and its table in one commit, because the doc is what the
+next session reads before it reads the code. Structure and the cross-check rule:
+`hermes-desktop-plugins` § Document the visual system. Recipes and the pixel check:
 `hermes-desktop-plugins` § `references/panel-visuals.md`.
 
 **Updating a client.** The control at the right end of the `projects` header says `update plugin`; a click
@@ -587,6 +596,9 @@ mv ~/src/thinkrail/packages/spec-graph/node_modules/package \
 3. **Keep `--session-id` stable.** The runner derives it from repository and lane; a follow-up depends on it.
 4. **Keep one `in_progress` item in the plan.** A step is a task, not a thought.
 5. **The writer never accepts the work.** The orchestrator verifies in the main session.
+6. **A lane that touches the panel follows `DESIGN.md`.** The repository ships the accepted numbers —
+   spacing, state colours, shadows, line weights — and a lane that invents its own value contradicts
+   the panel even when its own tests pass.
 6. **The orchestrator merges the branch.** A lane never pushes to the main line.
 7. **A waiting lane is not a stuck lane.** Answer it or cancel it; do not open a second lane on the same
    worktree while it waits, and do not report it as finished.
