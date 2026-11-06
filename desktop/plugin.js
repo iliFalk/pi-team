@@ -476,7 +476,9 @@ function Scroller({ side, grow, className, style, children }) {
     children: jsx('div', {
       className: `h-full ${className || ''}`,
       'data-pi-scroll': side,
-      style: { ...(style || {}), marginRight: '-14px', paddingRight: '14px', overflowY: 'auto' },
+      // Wider than the column by the bar's own width: the bar lands outside the clipped edge,
+      // and the content keeps the full width, so a row reaches the divider.
+      style: { ...(style || {}), width: 'calc(100% + 14px)', overflowY: 'auto' },
       onScroll: event => reportScroll(side, event.currentTarget),
       children
     })
