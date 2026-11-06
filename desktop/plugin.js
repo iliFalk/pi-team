@@ -1093,10 +1093,14 @@ function LaneList({ ctx }) {
                 showFeature(project, groupKey)
                 return
               }
-              // A feature has no card of its own: the click opens or closes it and empties the pane,
-              // so the selection figure never hangs on a row nobody is reading.
+              // A feature has no card of its own. The click opens or closes it and keeps the lane you
+              // were reading — unless that lane lives in THIS feature: then the pick is done and the
+              // pane empties, which is how the selection is released.
               toggle(gkey)
-              clearPane()
+              const chosen = (lanes || []).find(lane => lane.lane === current)
+              if (chosen && chosen.project === project && (chosen.group || '') === groupKey) {
+                clearPane()
+              }
             }
           }),
           children: [
