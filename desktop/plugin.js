@@ -412,6 +412,7 @@ function LaneRow({ lane, active, onPick }) {
       }),
       jsxs('span', {
         className: `min-w-0 flex-1 ${labelBand}`,
+        'data-pi-band': '',
         style: outline ? { ...bandFill, boxShadow: `inset 0 0 0 0.5px ${outline}` } : bandFill,
         children: [
           jsxs('span', {
@@ -503,8 +504,11 @@ function measureSelection() {
     if (selectedBox.get()) selectedBox.set(null)
     return
   }
+  // The band, not the row: the row keeps its own state ring and the figure continues from that ring's
+  // right edge into the pane.
+  const band = row.querySelector('[data-pi-band]') || row
   const outer = root.getBoundingClientRect()
-  const box = row.getBoundingClientRect()
+  const box = band.getBoundingClientRect()
   // A scrolled-away row would put the notch outside the panel: keep it inside the visible strip.
   const header = 28
   const top = Math.max(Math.round(box.top - outer.top), header)
@@ -518,6 +522,7 @@ function measureSelection() {
     height: Math.round(outer.height),
     seam: Math.round(outer.width / 2),
     left: Math.round(box.left - outer.left),
+    right: Math.round(box.right - outer.left),
     top,
     rowHeight: bottom - top,
     color: row.getAttribute('data-pi-colour') || 'var(--ui-text-tertiary)'
@@ -559,12 +564,17 @@ function SelectionOutline() {
   const seam = box ? box.seam : 0
   const top = box ? box.top : 0
   const bottom = box ? box.top + box.rowHeight : 0
+  // Open path: it starts at the band's top-right corner, runs round the pane and returns to the
+  // band's bottom-right corner. The row's own ring closes the figure on its left side.
+  // A pixel of overlap: the band's ring is rounded, so a stub that starts exactly at its edge leaves a
+  // hairline gap at the corner.
+  const join = box ? box.right - 1 : 0
   const figure = box
-    ? `M ${box.left} ${top} L ${seam} ${top} L ${seam} ${radius} Q ${seam} 0 ${seam + radius} 0 ` +
+    ? `M ${join} ${top} L ${seam} ${top} L ${seam} ${radius} Q ${seam} 0 ${seam + radius} 0 ` +
       `L ${box.width - radius} 0 Q ${box.width} 0 ${box.width} ${radius} ` +
       `L ${box.width} ${box.height - radius} Q ${box.width} ${box.height} ${box.width - radius} ${box.height} ` +
       `L ${seam + radius} ${box.height} Q ${seam} ${box.height} ${seam} ${box.height - radius} ` +
-      `L ${seam} ${bottom} L ${box.left} ${bottom} Z`
+      `L ${seam} ${bottom} L ${join} ${bottom}`
     : ''
 
   return jsxs('div', {
@@ -791,6 +801,7 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim, tag, se
           }),
           jsxs('span', {
             className: `flex min-w-0 flex-1 items-center gap-1 ${labelBand}`,
+            'data-pi-band': '',
             style: counts && counts.ask
               ? { ...bandStyle, background: ASK_BG_SOFT }
               : hover
