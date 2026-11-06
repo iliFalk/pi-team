@@ -482,6 +482,16 @@ function showProject(name) {
 }
 
 
+/** Nothing is selected: the right pane says so and no figure is drawn. */
+function clearPane() {
+  composeAtom.set(null)
+  composeProject.set(false)
+  selectedProject.set(null)
+  selectedFeature.set(null)
+  selectedLane.set('')
+}
+
+
 function showComposeFeature(project) {
   composeProject.set(false)
   selectedLane.set('')
@@ -1079,8 +1089,14 @@ function LaneList({ ctx }) {
             counts: preparing || gopen ? null : countStates(items),
             open: gopen,
             onToggle: () => {
-              showFeature(project, groupKey)
-              if (!preparing) toggle(gkey)
+              if (preparing) {
+                showFeature(project, groupKey)
+                return
+              }
+              // A feature has no card of its own: the click opens or closes it and empties the pane,
+              // so the selection figure never hangs on a row nobody is reading.
+              toggle(gkey)
+              clearPane()
             }
           }),
           children: [
@@ -2333,9 +2349,10 @@ function FeatureView({ ctx, project, feature, onDone }) {
 
   const drop = async () => {
     try {
-      await ctx.rest(preparing ? '/features/cancel' : '/projects/cancel', {
+      // Only a placeholder reaches this card, so only its own route is called.
+      await ctx.rest('/features/cancel', {
         method: 'POST',
-        body: preparing ? { project, feature } : { name: project },
+        body: { project, feature },
         timeoutMs: 8000
       })
       onDone()
