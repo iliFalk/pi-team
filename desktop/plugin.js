@@ -373,7 +373,7 @@ function LaneRow({ lane, active, onPick }) {
       paddingLeft: 0,
       // The header rows keep 8px on the right; a lane's class would leave 10 and its box
       // would end two pixels short of theirs.
-      paddingRight: '8px'
+      paddingRight: '10px'
     },
     children: [
       // Centre of the row, which is where the stub arrives: a two-line row put the
@@ -577,7 +577,7 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim, tag }) 
         onMouseEnter: () => setHover(true),
         onMouseLeave: () => setHover(false),
         className:
-          'flex min-w-0 flex-1 items-center gap-1 pr-2 text-left text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary)',
+          'flex min-w-0 flex-1 items-center gap-1 pr-2.5 text-left text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary)',
         style: { marginLeft: ROW_PAD, width: `calc(100% - ${ROW_PAD})`, paddingTop: HEADER_PY, paddingBottom: HEADER_PY },
         children: [
           jsx('span', {
@@ -1097,7 +1097,14 @@ function LaneList({ ctx }) {
       jsx(Scroller, {
         side: 'tree',
         grow: true,
-        style: { display: 'flex', flexDirection: 'column', gap: PROJECT_GAP, paddingTop: PROJECT_GAP },
+        style: {
+          display: 'flex',
+          flexDirection: 'column',
+          gap: PROJECT_GAP,
+          // The same air the rows keep left and right, at the two ends as well.
+          paddingTop: '10px',
+          paddingBottom: '10px'
+        },
         children: lanes.length === 0 ? emptyHint : projectTree
       }),
       query.error
