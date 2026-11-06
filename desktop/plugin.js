@@ -493,8 +493,20 @@ function measureSelection() {
 /** One line around the selected row and the right pane: the seam opens where the row is. */
 function SelectionOutline() {
   const box = useValue(selectedBox)
-  // Measure after every commit: the row moves on scroll, and a poll re-renders the tree.
-  const probe = jsx('span', { style: { display: 'none' }, ref: () => measureSelection() })
+  // Subscribe to what moves the box. Without these two reads the outline stays on the row that was
+  // selected when this component last rendered — the box is measured in a ref, and a ref only runs
+  // on a render.
+  useValue(selectedLane)
+  useValue(selectedFeature)
+  // Measure after the frame, not during the commit: the row's final box is only settled once the
+  // whole panel has painted.
+  const probe = jsx('span', {
+    style: { display: 'none' },
+    ref: () => {
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => measureSelection())
+      else measureSelection()
+    }
+  })
   const radius = 4
   const seam = box ? box.seam : 0
   const top = box ? box.top : 0
@@ -517,7 +529,7 @@ function SelectionOutline() {
             width: box.width,
             height: box.height,
             viewBox: `0 0 ${box.width} ${box.height}`,
-            style: { position: 'absolute', inset: 0 },
+            style: { position: 'absolute', inset: 0, pointerEvents: 'none' },
             children: [
               // The seam above the row, and below it: the selected row is the only gap.
               jsx('line', {
