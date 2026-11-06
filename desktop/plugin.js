@@ -417,6 +417,86 @@ function LaneRow({ lane, active, onPick }) {
 
 const collapsedAtom = atom({})
 
+// A thin pill on the divider: the side under the cursor, 44px, drag to scroll.
+const scrollPill = atom({ hover: 'tree', tree: 0, pane: 0, visible: false })
+const PILL_H = 44
+let pillTimer = null
+
+
+function noteHover(side) {
+  scrollPill.set({ ...scrollPill.get(), hover: side })
+}
+
+
+function reportScroll(side, element) {
+  if (!element) return
+  const span = element.scrollHeight - element.clientHeight
+  const progress = span > 0 ? element.scrollTop / span : 0
+  scrollPill.set({ ...scrollPill.get(), [side]: progress, visible: span > 0 })
+  if (pillTimer) clearTimeout(pillTimer)
+  pillTimer = setTimeout(() => {
+    scrollPill.set({ ...scrollPill.get(), visible: false })
+  }, 1000)
+}
+
+
+function pillTarget(side) {
+  const column = document.querySelector(`[data-pi-side="${side}"]`)
+  return column ? column.querySelector('[data-pi-scroll]') : null
+}
+
+
+function ScrollPill() {
+  const state = useValue(scrollPill)
+  if (!state.visible) return null
+  const side = state.hover === 'pane' ? 'pane' : 'tree'
+  const progress = Math.min(1, Math.max(0, Number(state[side]) || 0))
+
+  const onDown = event => {
+    const element = pillTarget(side)
+    const track = event.currentTarget.parentElement
+    if (!element || !track) return
+    event.preventDefault()
+    const box = track.getBoundingClientRect()
+    const move = moveEvent => {
+      const ratio = (moveEvent.clientY - box.top - PILL_H / 2) / Math.max(1, box.height - PILL_H)
+      const clamped = Math.min(1, Math.max(0, ratio))
+      const span = element.scrollHeight - element.clientHeight
+      element.scrollTop = clamped * span
+      scrollPill.set({ ...scrollPill.get(), [side]: clamped, visible: true })
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      if (pillTimer) clearTimeout(pillTimer)
+      pillTimer = setTimeout(() => scrollPill.set({ ...scrollPill.get(), visible: false }), 700)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+
+  return jsx('div', {
+    title: 'drag to scroll',
+    onPointerDown: onDown,
+    style: {
+      position: 'absolute',
+      left: 'calc(50% - 1.5px)',
+      width: '3px',
+      height: `${PILL_H}px`,
+      top: `calc(${progress} * (100% - ${PILL_H}px))`,
+      borderRadius: '999px',
+      background: 'var(--ui-text-quaternary)',
+      opacity: 0.55,
+      cursor: 'grab',
+      touchAction: 'none',
+      // The wrapper ignores the mouse so the columns keep their clicks; the pill takes them back.
+      pointerEvents: 'auto',
+      zIndex: 6,
+      transition: 'opacity 180ms linear'
+    }
+  })
+}
+
 
 function ListHeader({ label, counts, plain, action, open, onToggle, dim, tag }) {
   const [hover, setHover] = useState(false)
@@ -976,6 +1056,9 @@ function LaneList({ ctx }) {
       }),
       jsx('div', {
         className: 'min-h-0 flex-1 overflow-y-auto',
+        'data-pi-scroll': 'tree',
+        style: { scrollbarWidth: 'none' },
+        onScroll: event => reportScroll('tree', event.currentTarget),
         style: { display: 'flex', flexDirection: 'column', gap: PROJECT_GAP, paddingTop: PROJECT_GAP },
         children: lanes.length === 0 ? emptyHint : projectTree
       }),
@@ -1353,6 +1436,9 @@ function Receipt({ merge }) {
 function GroupList({ title, rows, onPick }) {
   return jsxs('div', {
     className: 'flex h-full flex-col overflow-y-auto pb-2 text-xs',
+    'data-pi-scroll': 'pane',
+    style: { scrollbarWidth: 'none' },
+    onScroll: event => reportScroll('pane', event.currentTarget),
     children: [
       jsx('div', {
         className:
@@ -1450,6 +1536,9 @@ function LaneStatus({ ctx }) {
 
   return jsxs('div', {
     className: 'flex h-full flex-col overflow-y-auto pb-2 text-xs',
+    'data-pi-scroll': 'pane',
+    style: { scrollbarWidth: 'none' },
+    onScroll: event => reportScroll('pane', event.currentTarget),
     children: [
       jsx('div', {
         className:
@@ -1696,6 +1785,9 @@ function CardShell({ title, children }) {
       }),
       jsx('div', {
         className: 'flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2.5 py-2',
+        'data-pi-scroll': 'pane',
+        style: { scrollbarWidth: 'none' },
+        onScroll: event => reportScroll('pane', event.currentTarget),
         children
       })
     ]
@@ -2009,12 +2101,16 @@ function TeamPane({ ctx }) {
       jsx('div', {
         // 50 / 50, and inline: an arbitrary width class is not in the app's stylesheet.
         className: 'flex shrink-0 flex-col border-r border-(--ui-stroke-secondary)',
+        'data-pi-side': 'tree',
         style: { width: '50%', minWidth: 0 },
+        onMouseEnter: () => noteHover('tree'),
         children: jsx(LaneList, { ctx })
       }),
       jsx('div', {
         className: 'flex min-w-0 flex-1 flex-col overflow-hidden',
+        'data-pi-side': 'pane',
         style: { width: '50%', minWidth: 0 },
+        onMouseEnter: () => noteHover('pane'),
         children: newProject
           ? jsx(ProjectCompose, {
               ctx,
@@ -2042,6 +2138,10 @@ function TeamPane({ ctx }) {
                 onDone: () => selectedFeature.set(null)
               })
             : jsx(LaneStatus, { ctx })
+      }),
+      jsx('div', {
+        style: { position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 5 },
+        children: jsx(ScrollPill, {})
       }),
       // One shadow for the whole width: per-header shadows doubled up at the seam.
       jsx('div', {
