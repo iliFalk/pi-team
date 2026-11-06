@@ -67,6 +67,8 @@ def add_project(name: str, repo: str, remote: str = "") -> Dict[str, Any]:
     if remote:
         entry["remote"] = remote
     entry.setdefault("created", int(time.time()))
+    # A registered path means the clone exists: the placeholder is done.
+    entry.pop("state", None)
     projects[name] = entry
     save(data)
     return entry
@@ -230,3 +232,39 @@ def finish_feature(name: str, feature: str, new_name: str, title: str = "") -> D
                 lane["group"] = new_name
                 lane_file.write_text(json.dumps(lane, indent=2) + "\n")
     return item
+
+
+def prepare_project(name: str, remote: str, request: str = "") -> Dict[str, Any]:
+    """Register a project the person asked for, before anything is on disk.
+
+    The tree answers the click at once; the agent checks the repository, clones it and
+    registers the path, which clears the placeholder.
+    """
+    data = load()
+    projects = data.setdefault("projects", {})
+    if name in projects:
+        raise KeyError(f"project already exists: {name}")
+    item: Dict[str, Any] = {
+        "remote": remote,
+        "features": {},
+        "created": int(time.time()),
+        "state": "preparation",
+    }
+    if request:
+        item["request"] = request
+    projects[name] = item
+    save(data)
+    return item
+
+
+def cancel_project(name: str) -> bool:
+    """Drop a placeholder project. Refuses as soon as it has a feature."""
+    data = load()
+    entry = project(data, name)
+    if entry is None or entry.get("state") != "preparation":
+        return False
+    if entry.get("features"):
+        return False
+    del data["projects"][name]
+    save(data)
+    return True

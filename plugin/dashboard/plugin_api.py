@@ -645,7 +645,16 @@ def _registry() -> List[Dict[str, Any]]:
                         "created": int(item.get("created") or 0) if isinstance(item, dict) else 0,
                     }
                 )
-        out.append({"name": name, "repo": str(entry.get("repo") or ""), "features": features})
+        out.append(
+            {
+                "name": name,
+                "repo": str(entry.get("repo") or ""),
+                "remote": str(entry.get("remote") or ""),
+                "state": str(entry.get("state") or ""),
+                "created": int(entry.get("created") or 0),
+                "features": features,
+            }
+        )
     return out
 
 
@@ -847,6 +856,144 @@ PREPARE_PROMPT = (
     "project, write the task for pi and open a lane. The placeholder becomes a normal "
     "feature as soon as it has a lane."
 )
+
+
+REPO_RE = re.compile(r"(?:github\.com[:/]+)?(?P<owner>[\w.-]+)/(?P<name>[\w.-]+?)(?:\.git)?/?$")
+
+
+def _parse_repo(url: str) -> Optional[tuple]:
+    """Take owner and name out of any form the person may paste."""
+    text = (url or "").strip()
+    if not text:
+        return None
+    match = REPO_RE.search(text)
+    if not match:
+        return None
+    return match.group("owner"), match.group("name")
+
+
+def _check_repo(url: str) -> Dict[str, Any]:
+    """Does the repository exist, and can this machine read it?
+
+    gh first: it knows private repos and the default branch. git ls-remote second: it works
+    without gh, but only for what the credentials already allow.
+    """
+    parsed = _parse_repo(url)
+    if not parsed:
+        return {"ok": False, "error": "not a GitHub repository: paste owner/repo or the full URL"}
+    owner, name = parsed
+    slug = f"{owner}/{name}"
+    note = ""
+    try:
+        done = subprocess.run(
+            ["gh", "repo", "view", slug, "--json", "name,isPrivate,defaultBranchRef"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        if done.returncode == 0:
+            info = json.loads(done.stdout or "{}")
+            return {
+                "ok": True,
+                "slug": slug,
+                "name": str(info.get("name") or name),
+                "private": bool(info.get("isPrivate")),
+                "branch": str(((info.get("defaultBranchRef") or {}).get("name")) or ""),
+                "source": "gh",
+            }
+        note = (done.stderr or "").strip().splitlines()[:1]
+        note = note[0] if note else "gh could not read it"
+    except (OSError, subprocess.SubprocessError, ValueError) as error:
+        note = str(error)
+    try:
+        done = subprocess.run(
+            ["git", "ls-remote", "--heads", f"https://github.com/{slug}.git"],
+            capture_output=True,
+            text=True,
+            timeout=25,
+            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+        )
+        if done.returncode == 0 and done.stdout.strip():
+            branches = [
+                line.split("refs/heads/")[-1]
+                for line in done.stdout.splitlines()
+                if "refs/heads/" in line
+            ]
+            return {
+                "ok": True,
+                "slug": slug,
+                "name": name,
+                "private": False,
+                "branch": branches[0] if branches else "",
+                "source": "ls-remote",
+            }
+        note = (done.stderr or note or "not reachable").strip().splitlines()[0]
+    except (OSError, subprocess.SubprocessError) as error:
+        note = str(error)
+    return {"ok": False, "error": f"{slug}: {note}"}
+
+
+@router.post("/projects/check")
+def check_project(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Check the repository before anything is promised to the person."""
+    result = _check_repo(str(payload.get("url") or ""))
+    if result.get("ok"):
+        home = Path.home() / "work" / str(result.get("name") or "")
+        result["clone_target"] = str(home)
+        result["clone_exists"] = home.exists()
+    return result
+
+
+PROJECT_PROMPT = (
+    "[project {name} · preparation]\n{url}\n\n"
+    "The person asked for this project from the panel. It is checked but not cloned: "
+    "clone {slug} into ~/work/{name}, then register the path with "
+    "`pi-project add {name} <repo>` so the project stops being a placeholder."
+)
+
+
+@router.post("/projects/prepare")
+def prepare_project(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """A project asked for by its repository: it appears at once, the agent clones it."""
+    url = str(payload.get("url") or "").strip()
+    checked = _check_repo(url)
+    if not checked.get("ok"):
+        raise HTTPException(status_code=400, detail=checked.get("error") or "repository not found")
+    name = str(checked.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="could not read a repository name")
+    try:
+        pireg.prepare_project(name, url)
+    except KeyError:
+        raise HTTPException(status_code=409, detail=f"project already exists: {name}")
+    sent = False
+    ctx = _plugin_ctx()
+    if ctx is not None:
+        try:
+            sent = bool(
+                ctx.inject_message(
+                    PROJECT_PROMPT.format(name=name, url=url, slug=checked.get("slug") or url),
+                    session_key=payload.get("session_key") or None,
+                )
+            )
+        except Exception:
+            sent = False
+    return {
+        "ok": True,
+        "name": name,
+        "slug": checked.get("slug"),
+        "branch": checked.get("branch"),
+        "message_sent": sent,
+    }
+
+
+@router.post("/projects/cancel")
+def cancel_project(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Drop a project placeholder that was never cloned."""
+    name = str(payload.get("name") or "").strip()
+    if not pireg.cancel_project(name):
+        raise HTTPException(status_code=409, detail="only an empty placeholder project can be dropped")
+    return {"ok": True}
 
 
 @router.post("/features/prepare")

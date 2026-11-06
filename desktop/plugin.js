@@ -289,6 +289,8 @@ const selectedLane = atom('')
 // Where a feature asked for in one line is written, and which feature the right pane shows.
 const composeAtom = atom(null)
 const selectedFeature = atom(null)
+const selectedProject = atom(null)
+const composeProject = atom(false)
 
 
 
@@ -681,6 +683,7 @@ function LaneList({ ctx }) {
     const active = all.filter(lane => !lane.shelved && !lane.handed)
 
     const registered = registryByName.get(project)
+    const placing = Boolean(registered && registered.state === 'preparation')
     const featureByName = new Map(
       ((registered && registered.features) || []).map(feature => [feature.name, feature])
     )
@@ -827,8 +830,16 @@ function LaneList({ ctx }) {
         trunk: open,
         row: jsx(ListHeader, {
           label: project,
+          // A project that is only a repository link: it has no lanes and nothing to open yet.
+          tag: placing
+            ? (() => {
+                const minutes = Math.floor((Date.now() / 1000 - Number((registered || {}).created || 0)) / 60)
+                return minutes >= 1 ? `preparation · ${minutes}m` : 'preparation'
+              })()
+            : '',
+          dim: placing ? 'italic' : '',
           // A project always sums its own lanes, open or closed.
-          counts: countStates(all),
+          counts: placing ? null : countStates(all),
           open,
           action: {
             label: '+',
@@ -841,7 +852,16 @@ function LaneList({ ctx }) {
               composeAtom.set({ project })
             }
           },
-          onToggle: () => toggle(`p:${project}`)
+          onToggle: () => {
+            if (placing) {
+              selectedLane.set('')
+              selectedFeature.set(null)
+              composeAtom.set(null)
+              selectedProject.set(project)
+              return
+            }
+            toggle(`p:${project}`)
+          }
         }),
         children: [
           open
@@ -894,6 +914,21 @@ function LaneList({ ctx }) {
         style: { height: HEADER_H },
         children: [
           jsx('span', { children: `projects · ${projects.length}` }),
+          jsx('span', {
+            role: 'button',
+            tabIndex: 0,
+            title: 'add a project by its repository',
+            onClick: () => {
+              selectedLane.set('')
+              selectedFeature.set(null)
+              selectedProject.set(null)
+              composeProject.set(true)
+            },
+            className:
+              'flex shrink-0 items-center justify-center rounded border border-(--ui-stroke-secondary) hover:bg-(--ui-fill-tertiary)',
+            style: { width: '16px', height: '16px', lineHeight: 1, fontSize: '11.5px' },
+            children: '+'
+          }),
           askUpdate
             ? jsxs('span', {
                 className: 'ml-auto flex shrink-0 items-center gap-1',
@@ -1648,6 +1683,168 @@ function LaneStatus({ ctx }) {
 }
 
 /** One panel, two areas: the lane list on the left, the selected lane on the right. */
+function ProjectCompose({ ctx, sessionId, onDone }) {
+  const [url, setUrl] = useState('')
+  const [check, setCheck] = useState(null)
+  const [busy, setBusy] = useState(false)
+
+  const runCheck = async () => {
+    if (!url.trim() || busy) return
+    setBusy(true)
+    try {
+      const result = await ctx.rest('/projects/check', {
+        method: 'POST',
+        body: { url: url.trim() },
+        timeoutMs: 30000
+      })
+      setCheck(result)
+    } catch (error) {
+      setCheck({ ok: false, error: (error && error.message) || String(error) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const send = async () => {
+    if (!check || !check.ok || busy) return
+    setBusy(true)
+    try {
+      const result = await ctx.rest('/projects/prepare', {
+        method: 'POST',
+        body: { url: url.trim(), session_key: sessionId },
+        timeoutMs: 40000
+      })
+      host.notify({
+        kind: result.message_sent ? 'info' : 'error',
+        message: result.message_sent
+          ? `${result.name}: project created, the request went to the chat`
+          : `${result.name}: project created, but the message was not delivered — write to me in the chat`
+      })
+      setUrl('')
+      setCheck(null)
+      onDone()
+    } catch (error) {
+      host.notify({ kind: 'error', message: `prepare failed: ${(error && error.message) || error}` })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return jsxs('div', {
+    className: 'flex h-full min-h-0 flex-col gap-2 p-3',
+    children: [
+      jsx(Section, { title: 'new project' }),
+      jsx('div', {
+        className: 'text-[0.6875rem] text-(--ui-text-quaternary)',
+        children:
+          'Paste a GitHub repository. I check that it exists and that this machine can read it, then clone it into ~/work, register it, and the project appears in the tree.'
+      }),
+      jsx('input', {
+        value: url,
+        autoFocus: true,
+        placeholder: 'owner/repo or https://github.com/owner/repo',
+        onChange: event => {
+          setUrl(event.target.value)
+          setCheck(null)
+        },
+        onKeyDown: event => {
+          if (event.key === 'Enter') runCheck()
+        },
+        className:
+          'w-full rounded border border-(--ui-stroke-secondary) bg-transparent px-2 py-1.5 text-[0.6875rem] outline-none focus:border-(--ui-accent)',
+        style: { color: 'var(--ui-text-primary)' }
+      }),
+      check
+        ? jsx('div', {
+            className: 'rounded border border-(--ui-stroke-secondary) p-2 text-[0.6875rem]',
+            style: { color: check.ok ? 'var(--ui-text-secondary)' : BAD_COLOR },
+            children: check.ok
+              ? `${check.slug} · ${check.private ? 'private' : 'public'} · ${check.branch || 'default branch unknown'} · clone to ${check.clone_target}${check.clone_exists ? ' (folder already exists!)' : ''}`
+              : check.error
+          })
+        : null,
+      jsxs('div', {
+        className: 'flex shrink-0 items-center gap-2',
+        children: [
+          jsx('span', {
+            role: 'button',
+            tabIndex: 0,
+            onClick: runCheck,
+            className: 'flex items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
+            style: { color: ASK_COLOR, borderColor: ASK_COLOR, opacity: busy || !url.trim() ? 0.5 : 1 },
+            children: busy ? 'checking…' : 'check'
+          }),
+          jsx('span', {
+            role: 'button',
+            tabIndex: 0,
+            onClick: send,
+            className: 'flex items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
+            style: {
+              color: RUN_COLOR,
+              borderColor: RUN_COLOR,
+              opacity: busy || !check || !check.ok ? 0.5 : 1
+            },
+            children: 'send'
+          }),
+          jsx('span', {
+            role: 'button',
+            tabIndex: 0,
+            onClick: onDone,
+            className: 'flex items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
+            style: { color: BAD_COLOR, borderColor: BAD_COLOR },
+            children: 'cancel'
+          })
+        ]
+      })
+    ]
+  })
+}
+
+function ProjectView({ ctx, project, onDone }) {
+  const query = useQuery({
+    queryKey: ['pi-team', 'lanes'],
+    queryFn: () => ctx.rest('/lanes', REST),
+    refetchInterval: POLL_MS
+  })
+  const entry = ((query.data && query.data.registry) || []).find(item => item.name === project) || {}
+  const minutes = Math.floor((Date.now() / 1000 - Number(entry.created || 0)) / 60)
+
+  const drop = async () => {
+    try {
+      await ctx.rest('/projects/cancel', {
+        method: 'POST',
+        body: { name: project },
+        timeoutMs: 8000
+      })
+      onDone()
+    } catch (error) {
+      host.notify({ kind: 'error', message: `cancel failed: ${(error && error.message) || error}` })
+    }
+  }
+
+  return jsxs('div', {
+    className: 'flex h-full min-h-0 flex-col gap-2 overflow-auto p-3',
+    children: [
+      jsx(Section, { title: `${project} · preparation` }),
+      jsx(Row, { label: 'repository', value: entry.remote || '—' }),
+      jsx(Row, { label: 'waiting', value: minutes >= 1 ? `${minutes} min` : 'just now' }),
+      jsx('div', {
+        className: 'text-[0.6875rem] text-(--ui-text-quaternary)',
+        children:
+          'Waiting for the clone. When it lands in ~/work and the project is registered, this placeholder becomes the project itself — nothing is lost, the tree keeps its place.'
+      }),
+      jsx('span', {
+        role: 'button',
+        tabIndex: 0,
+        onClick: drop,
+        className: 'mt-auto flex w-fit items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
+        style: { color: BAD_COLOR, borderColor: BAD_COLOR },
+        children: 'drop project'
+      })
+    ]
+  })
+}
+
 function FeatureCompose({ ctx, project, sessionId, onDone }) {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -1784,6 +1981,8 @@ function FeatureView({ ctx, project, feature, onDone }) {
 function TeamPane({ ctx }) {
   const compose = useValue(composeAtom)
   const feature = useValue(selectedFeature)
+  const project = useValue(selectedProject)
+  const newProject = useValue(composeProject)
   const storedSessionId = useValue(host.state.focusedStoredSessionId)
   const runtimeSessionId = useValue(host.state.activeSessionId)
   const sessionId = storedSessionId || runtimeSessionId
@@ -1799,7 +1998,19 @@ function TeamPane({ ctx }) {
       jsx('div', {
         className: 'flex min-w-0 flex-1 flex-col',
         style: { width: '50%' },
-        children: compose
+        children: newProject
+          ? jsx(ProjectCompose, {
+              ctx,
+              sessionId,
+              onDone: () => composeProject.set(false)
+            })
+          : project
+            ? jsx(ProjectView, {
+                ctx,
+                project,
+                onDone: () => selectedProject.set(null)
+              })
+            : compose
           ? jsx(FeatureCompose, {
               ctx,
               project: compose.project,
