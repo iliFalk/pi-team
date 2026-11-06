@@ -1429,6 +1429,24 @@ function LaneStatus({ ctx }) {
         ? null
         : jsx(ThreadView, { ctx, lane, draft, setDraft, onSent: () => query.refetch() }),
 
+      !lane.shelved && ['done', 'stopped', 'failed', 'error'].includes(lane.state)
+        ? jsx('span', {
+            role: 'button',
+            tabIndex: 0,
+            onClick: () =>
+              ctx
+                .rest(`/lanes/${encodeURIComponent(lane.lane)}/say`, {
+                  method: 'POST',
+                  body: { text: 'Закрой полосу: покажи план и ничего не удаляй без моего да.' },
+                  timeoutMs: 15000
+                })
+                .then(() => query.refetch()),
+            title: 'ask the orchestrator to close this lane; it shows the plan first',
+            className:
+              'mx-2.5 my-1 shrink-0 self-start rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.625rem] hover:bg-(--ui-fill-tertiary)',
+            children: 'close'
+          })
+        : null,
       // The receipt: what this run changed, file by file, biggest first.
       !lane.shelved && (lane.diff_files || []).length
         ? jsxs('div', {

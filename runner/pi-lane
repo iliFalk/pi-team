@@ -233,6 +233,12 @@ def close_lanes(argv: list) -> int:
             print(f"  delete  branch {branch}")
             print(f"  delete  folder {lane_dir} ({size // 1024}K)")
             print(f"  keep    one receipt line in {(root / 'closed.jsonl')}")
+            print("")
+            print("  Nothing is lost. The work lands in the main branch as commits, and every one of")
+            print("  them stays in the history: it can be shown, copied or turned into a new branch")
+            print("  later. The worktree, the branch and the folder go only to free space and to keep")
+            print("  the panel free of dead lanes — the code itself lives on in the main branch.")
+            print("")
             print(f"  rerun with --yes to carry it out")
             continue
 
