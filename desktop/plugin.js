@@ -568,6 +568,11 @@ function SelectionOutline() {
   // on a render.
   useValue(selectedLane)
   useValue(selectedFeature)
+  // Collapsing a feature takes its lane rows out of the DOM: without this read the frame keeps the box
+  // it measured before the rows left, which reads as an outline stuck in the old place.
+  useValue(collapsedAtom)
+  // And the panel's own size: a resized pane moves both the seam and the row.
+  useValue(host.state.viewport)
   // Measure after the frame, not during the commit: the row's final box is only settled once the
   // whole panel has painted.
   const probe = jsx('span', {
