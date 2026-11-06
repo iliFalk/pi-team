@@ -286,6 +286,9 @@ const POLL_MS = 3000
 const REST = { timeoutMs: 8000 }
 
 const selectedLane = atom('')
+// Where a feature asked for in one line is written, and which feature the right pane shows.
+const composeAtom = atom(null)
+const selectedFeature = atom(null)
 
 
 
@@ -413,7 +416,7 @@ function LaneRow({ lane, active, onPick }) {
 const collapsedAtom = atom({})
 
 
-function ListHeader({ label, counts, plain, action, open, onToggle, dim }) {
+function ListHeader({ label, counts, plain, action, open, onToggle, dim, tag }) {
   const [hover, setHover] = useState(false)
   const [asking, setAsking] = useState(false)
   const hasCounts = Boolean(counts && (counts.ask || counts.bad || counts.run || counts.done))
@@ -475,7 +478,41 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim }) {
                 style: { ...TEXT_NUDGE, flex: '0 1 auto', minWidth: 0 },
                 children: label
               }),
-              action
+              tag
+                ? jsx('span', {
+                    className: 'shrink-0 uppercase',
+                    style: { ...TEXT_NUDGE, color: 'var(--ui-text-quaternary)', fontSize: '10.5px' },
+                    children: tag
+                  })
+                : null,
+              // A create action has nothing to confirm: one click opens the field.
+              action && action.instant
+                ? jsx('span', {
+                    role: 'button',
+                    tabIndex: 0,
+                    title: action.title || '',
+                    onClick: event => {
+                      event.stopPropagation()
+                      action.onClick()
+                    },
+                    className:
+                      'shrink-0 rounded border border-(--ui-stroke-secondary) uppercase hover:bg-(--ui-fill-tertiary)',
+                    style: {
+                      transform: 'translateY(-0.5px)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      height: '18px',
+                      padding: '0 5px',
+                      fontSize: '11.5px',
+                      lineHeight: 1
+                    },
+                    children: jsx('span', {
+                      style: { display: 'block', transform: 'translate(0.5px, 0.5px)' },
+                      children: action.label
+                    })
+                  })
+                : null,
+              action && !action.instant
                 ? asking
                   ? jsxs('span', {
                       className: 'flex shrink-0 items-center gap-1',
@@ -627,7 +664,10 @@ function LaneList({ ctx }) {
         row: jsx(LaneRow, {
           lane,
           active: lane.lane === current,
-          onPick: () => selectedLane.set(lane.lane)
+          onPick: () => {
+            selectedFeature.set(null)
+            selectedLane.set(lane.lane)
+          }
         })
       },
       lane.lane
@@ -641,6 +681,9 @@ function LaneList({ ctx }) {
     const active = all.filter(lane => !lane.shelved && !lane.handed)
 
     const registered = registryByName.get(project)
+    const featureByName = new Map(
+      ((registered && registered.features) || []).map(feature => [feature.name, feature])
+    )
     const groups = new Map()
     for (const feature of (registered && registered.features) || []) {
       groups.set(feature.name, [])
@@ -659,17 +702,30 @@ function LaneList({ ctx }) {
       const gopen = isOpen(gkey)
       const last = index === groupKeys.length - 1 && shelved.length === 0 && handed.length === 0
 
+      const meta = featureByName.get(groupKey)
+      // A placeholder has no name and no lanes yet: it opens its own card, not a list.
+      const preparing = Boolean(meta && meta.state === 'preparation')
+
       return jsx(
         TreeRow,
         {
           last,
           trunk: gopen && items.length > 0,
           row: jsx(ListHeader, {
-            label: groupKey || 'ungrouped',
+            label: preparing ? meta.title || groupKey : groupKey || 'ungrouped',
+            tag: preparing ? 'preparation' : '',
+            dim: preparing ? 'italic' : '',
             // Open: its rows report themselves, so the counts belong to the closed state.
-            counts: gopen ? null : countStates(items),
+            counts: preparing || gopen ? null : countStates(items),
             open: gopen,
-            onToggle: () => toggle(gkey)
+            onToggle: () => {
+              if (preparing) {
+                selectedLane.set('')
+                selectedFeature.set({ project, feature: groupKey })
+                return
+              }
+              toggle(gkey)
+            }
           }),
           children: [
             gopen && items.length
@@ -768,6 +824,17 @@ function LaneList({ ctx }) {
           // A project always sums its own lanes, open or closed.
           counts: countStates(all),
           open,
+          action: {
+            label: '+',
+            instant: true,
+            title: 'ask for a feature in one line',
+            onClick: () => {
+              setAskUpdate(false)
+              selectedLane.set('')
+              selectedFeature.set(null)
+              composeAtom.set({ project })
+            }
+          },
           onToggle: () => toggle(`p:${project}`)
         }),
         children: [
@@ -921,6 +988,8 @@ function Section({ title, band }) {
 
 /** The one way to link the open chat to this lane's feature, from the right pane. */
 function AddSessionRow({ ctx, project, feature, sessionId, linked, onDone }) {
+  const [asking, setAsking] = useState(false)
+
   const link = async () => {
     if (!sessionId) {
       host.notify({ kind: 'error', message: 'no chat session is open' })
@@ -932,19 +1001,58 @@ function AddSessionRow({ ctx, project, feature, sessionId, linked, onDone }) {
         body: { project, feature, session: sessionId },
         timeoutMs: 8000
       })
+      setAsking(false)
       onDone()
     } catch (error) {
       host.notify({ kind: 'error', message: `link failed: ${(error && error.message) || error}` })
     }
   }
 
-  return jsx('button', {
-    type: 'button',
-    onClick: link,
-    title: linked ? 'this chat session is already linked' : 'link this chat session to the feature',
-    className:
-      'w-full px-2.5 py-[3px] text-left text-[0.625rem] text-(--ui-text-quaternary) hover:text-(--ui-accent)',
-    children: 'add this session +'
+  // Linking is a decision about a chat: say which chat and which feature before it happens.
+  return jsxs('div', {
+    className: 'flex flex-col gap-1 px-2.5 py-[3px]',
+    children: [
+      jsx('button', {
+        type: 'button',
+        onClick: () => setAsking(!asking),
+        title: linked ? 'this chat session is already linked' : 'link this chat session to the feature',
+        className:
+          'w-full text-left text-[0.625rem] text-(--ui-text-quaternary) hover:text-(--ui-accent)',
+        children: linked ? 'this session is linked' : 'add this session +'
+      }),
+      asking
+        ? jsxs('div', {
+            className: 'flex items-start gap-1 text-[0.625rem]',
+            children: [
+              jsx('span', {
+                className: 'min-w-0 flex-1',
+                style: { color: 'var(--ui-text-secondary)' },
+                children: sessionId
+                  ? `Чат ${sessionId.slice(0, 18)}… будет привязан к фиче ${project}/${feature}.`
+                  : 'Открытого чата нет: откройте чат и повторите.'
+              }),
+              jsx('span', {
+                role: 'button',
+                tabIndex: 0,
+                title: 'cancel',
+                onClick: () => setAsking(false),
+                className: 'flex shrink-0 items-center justify-center rounded border',
+                style: { color: BAD_COLOR, borderColor: BAD_COLOR, width: '16px', height: '16px', lineHeight: 1 },
+                children: '✕'
+              }),
+              jsx('span', {
+                role: 'button',
+                tabIndex: 0,
+                title: 'link',
+                onClick: link,
+                className: 'flex shrink-0 items-center justify-center rounded border',
+                style: { color: RUN_COLOR, borderColor: RUN_COLOR, width: '16px', height: '16px', lineHeight: 1 },
+                children: '✓'
+              })
+            ]
+          })
+        : null
+    ]
   })
 }
 
@@ -1534,7 +1642,145 @@ function LaneStatus({ ctx }) {
 }
 
 /** One panel, two areas: the lane list on the left, the selected lane on the right. */
+function FeatureCompose({ ctx, project, sessionId, onDone }) {
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const send = async () => {
+    const body = text.trim()
+    if (!body || busy) return
+    setBusy(true)
+    try {
+      const result = await ctx.rest('/features/prepare', {
+        method: 'POST',
+        body: { project, text: body, session_key: sessionId },
+        timeoutMs: 15000
+      })
+      host.notify({
+        kind: result.message_sent ? 'info' : 'error',
+        message: result.message_sent
+          ? `${project}: фича заведена, просьба ушла в чат`
+          : `${project}: фича заведена, но сообщение не доставлено — напишите мне в чат`
+      })
+      setText('')
+      onDone()
+    } catch (error) {
+      host.notify({ kind: 'error', message: `prepare failed: ${(error && error.message) || error}` })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return jsxs('div', {
+    className: 'flex h-full min-h-0 flex-col gap-2 p-3',
+    children: [
+      jsx(Section, { title: `новая фича · ${project}` }),
+      jsx('div', {
+        className: 'text-[0.6875rem] text-(--ui-text-quaternary)',
+        children: 'Опишите, что хотите. Фича появится сразу как preparation — имя и задачу для pi дам я.'
+      }),
+      jsx('textarea', {
+        value: text,
+        onChange: event => setText(event.target.value),
+        rows: 5,
+        autoFocus: true,
+        placeholder: 'например: страница архива с поиском по заголовкам',
+        className:
+          'min-h-0 w-full resize-none rounded border border-(--ui-stroke-secondary) bg-transparent px-2 py-1.5 text-[0.6875rem] outline-none focus:border-(--ui-accent)',
+        style: { color: 'var(--ui-text-primary)' }
+      }),
+      jsxs('div', {
+        className: 'flex shrink-0 items-center gap-2',
+        children: [
+          jsx('span', {
+            role: 'button',
+            tabIndex: 0,
+            onClick: send,
+            className: 'flex items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
+            style: { color: RUN_COLOR, borderColor: RUN_COLOR, opacity: busy || !text.trim() ? 0.5 : 1 },
+            children: busy ? 'sending…' : 'send'
+          }),
+          jsx('span', {
+            role: 'button',
+            tabIndex: 0,
+            onClick: onDone,
+            className: 'flex items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
+            style: { color: BAD_COLOR, borderColor: BAD_COLOR },
+            children: 'cancel'
+          })
+        ]
+      })
+    ]
+  })
+}
+
+function FeatureView({ ctx, project, feature, onDone }) {
+  const query = useQuery({
+    queryKey: ['pi-team', 'lanes'],
+    queryFn: () => ctx.rest('/lanes', REST),
+    refetchInterval: POLL_MS
+  })
+  const registry = (query.data && query.data.registry) || []
+  const entry = registry.find(item => item.name === project)
+  const meta = ((entry && entry.features) || []).find(item => item.name === feature) || {}
+  const chats = meta.sessions || []
+
+  const drop = async () => {
+    try {
+      await ctx.rest('/features/cancel', {
+        method: 'POST',
+        body: { project, feature },
+        timeoutMs: 8000
+      })
+      onDone()
+    } catch (error) {
+      host.notify({ kind: 'error', message: `cancel failed: ${(error && error.message) || error}` })
+    }
+  }
+
+  return jsxs('div', {
+    className: 'flex h-full min-h-0 flex-col gap-2 overflow-auto p-3',
+    children: [
+      jsx(Section, { title: `${project} / preparation` }),
+      jsx('div', {
+        className: 'text-[0.8125rem]',
+        style: { color: 'var(--ui-text-primary)' },
+        children: meta.title || feature
+      }),
+      jsx(Row, {
+        label: 'chat',
+        value: chats.length ? `${chats.length} · привязан` : 'нет чата',
+        color: chats.length ? undefined : 'var(--ui-text-quaternary)'
+      }),
+      meta.request
+        ? jsx('div', {
+            className: 'whitespace-pre-wrap rounded border border-(--ui-stroke-secondary) p-2 text-[0.6875rem]',
+            style: { color: 'var(--ui-text-secondary)' },
+            children: meta.request
+          })
+        : null,
+      jsx('div', {
+        className: 'text-[0.6875rem] text-(--ui-text-quaternary)',
+        children: 'Ждёт: имя по конвенциям, задача для pi, первая полоса. Пока полосы нет, фичу можно отменить.'
+      }),
+      jsx('span', {
+        role: 'button',
+        tabIndex: 0,
+        onClick: drop,
+        className: 'mt-auto flex w-fit items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
+        style: { color: BAD_COLOR, borderColor: BAD_COLOR },
+        children: 'отменить фичу'
+      })
+    ]
+  })
+}
+
 function TeamPane({ ctx }) {
+  const compose = useValue(composeAtom)
+  const feature = useValue(selectedFeature)
+  const storedSessionId = useValue(host.state.focusedStoredSessionId)
+  const runtimeSessionId = useValue(host.state.activeSessionId)
+  const sessionId = storedSessionId || runtimeSessionId
   return jsxs('div', {
     className: 'relative flex h-full min-h-0',
     children: [
@@ -1547,7 +1793,21 @@ function TeamPane({ ctx }) {
       jsx('div', {
         className: 'flex min-w-0 flex-1 flex-col',
         style: { width: '50%' },
-        children: jsx(LaneStatus, { ctx })
+        children: compose
+          ? jsx(FeatureCompose, {
+              ctx,
+              project: compose.project,
+              sessionId,
+              onDone: () => composeAtom.set(null)
+            })
+          : feature
+            ? jsx(FeatureView, {
+                ctx,
+                project: feature.project,
+                feature: feature.feature,
+                onDone: () => selectedFeature.set(null)
+              })
+            : jsx(LaneStatus, { ctx })
       }),
       // One shadow for the whole width: per-header shadows doubled up at the seam.
       jsx('div', {

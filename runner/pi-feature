@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+"""pi-feature — register a feature inside a pi-team project.
+
+    pi-feature add <project> <feature> [--title "Settings menu"]
+    pi-feature list <project>
+
+A feature is the middle level of the tree (Project → Feature → Lanes). It exists
+before its first lane, so an empty feature is visible in the panel.
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import pireg  # noqa: E402
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(prog="pi-feature")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    add = sub.add_parser("add", help="register a feature")
+    add.add_argument("project")
+    add.add_argument("feature")
+    add.add_argument("--title", default="")
+
+    rename = sub.add_parser("rename", help="name a feature that was asked for in one line")
+    rename.add_argument("project")
+    rename.add_argument("feature")
+    rename.add_argument("new_name")
+    rename.add_argument("--title", default="")
+
+    listing = sub.add_parser("list", help="features of a project")
+    listing.add_argument("project")
+
+    args = parser.parse_args()
+    data = pireg.load()
+
+    if args.command == "rename":
+        try:
+            item = pireg.finish_feature(args.project, args.feature, args.new_name, args.title)
+        except KeyError as error:
+            raise SystemExit(f"pi-feature: {error.args[0]}")
+        print(f"{args.project}/{args.new_name}: {item.get('title')}")
+        return 0
+
+    if args.command == "list":
+        entry = pireg.project(data, args.project)
+        if entry is None:
+            raise SystemExit(f"pi-feature: unknown project: {args.project}")
+        features = sorted((entry.get("features") or {}).items())
+        if not features:
+            print("no features yet")
+            return 0
+        for name, item in features:
+            print(f"{name:<24} {item.get('title','')}")
+        return 0
+
+    try:
+        item = pireg.add_feature(args.project, args.feature, args.title)
+    except KeyError as exc:
+        raise SystemExit(f"pi-feature: {exc.args[0]}")
+    print(f"feature registered: {args.project}/{args.feature} ({item.get('title','')})")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

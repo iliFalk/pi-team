@@ -27,6 +27,13 @@ from fastapi import APIRouter, Body, HTTPException
 
 router = APIRouter()
 
+# The registry's rules live with the CLI helpers; import them by path so the panel and
+# `pi-feature` write the same file the same way.
+_SCRIPTS = Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes") / "scripts"
+if str(_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS))
+import pireg  # noqa: E402
+
 TAIL_BYTES = 1024 * 1024
 MAX_LANES = 64
 TEXT_LIMIT = 4000
@@ -627,7 +634,15 @@ def _registry() -> List[Dict[str, Any]]:
                         if isinstance(s, dict) and s.get("id")
                     ]
                 features.append(
-                    {"name": feature, "title": str(title or feature), "sessions": sessions}
+                    {
+                        "name": feature,
+                        "title": str(title or feature),
+                        "sessions": sessions,
+                        # A placeholder is a feature asked for in one line: it has a request and no
+                        # name yet. The panel shows it as preparation, not as a feature.
+                        "state": str(item.get("state") or "") if isinstance(item, dict) else "",
+                        "request": str(item.get("request") or "") if isinstance(item, dict) else "",
+                    }
                 )
         out.append({"name": name, "repo": str(entry.get("repo") or ""), "features": features})
     return out
@@ -830,6 +845,50 @@ UPDATE_PROMPT = (
     "runner/pi-lane в ~/.hermes/scripts/. Перезапусти бэкенд, раздай панель клиентам "
     "и покажи, что изменилось."
 )
+
+
+PREPARE_PROMPT = (
+    "[feature {where} · preparation]\n{text}\n\n"
+    "Эту фичу завели из панели одной строкой. Дай ей имя по конвенциям проекта, "
+    "сформулируй задачу для pi и открой полосу. Заготовка станет обычной фичей, "
+    "как только в ней появится полоса."
+)
+
+
+@router.post("/features/prepare")
+def prepare_feature(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """A feature asked for in one line: it appears at once, the agent names it after."""
+    project_name = str(payload.get("project") or "").strip()
+    text = str(payload.get("text") or "").strip()
+    if not project_name or not text:
+        raise HTTPException(status_code=400, detail="project and text are required")
+    try:
+        slug, item = pireg.prepare_feature(project_name, text, str(payload.get("session_key") or ""))
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"unknown project: {project_name}")
+    sent = False
+    ctx = _plugin_ctx()
+    if ctx is not None:
+        try:
+            sent = bool(
+                ctx.inject_message(
+                    PREPARE_PROMPT.format(where=f"{project_name}/{slug}", text=text),
+                    session_key=payload.get("session_key") or None,
+                )
+            )
+        except Exception:
+            sent = False
+    return {"ok": True, "project": project_name, "feature": slug, "title": item["title"], "message_sent": sent}
+
+
+@router.post("/features/cancel")
+def cancel_feature(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Drop a placeholder that never became a feature. Refused once it has lanes."""
+    project_name = str(payload.get("project") or "").strip()
+    feature = str(payload.get("feature") or "").strip()
+    if not pireg.cancel_preparation(project_name, feature):
+        raise HTTPException(status_code=409, detail="only a feature still in preparation can be dropped")
+    return {"ok": True}
 
 
 @router.post("/update/request")
