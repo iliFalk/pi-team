@@ -559,8 +559,9 @@ function paintFrame(box) {
   const down = svg.querySelector('[data-pi-seam-bottom]')
   if (!path || !up || !down) return false
   const seam = box.seam + 0.5
-  const top = box.top
-  const bottom = box.top + box.rowHeight
+  const radius = 4
+  const top = box.top - radius
+  const bottom = box.top + box.rowHeight + radius
   path.setAttribute('d', framePath(box))
   up.setAttribute('x1', seam); up.setAttribute('x2', seam)
   up.setAttribute('y1', 0); up.setAttribute('y2', top)
@@ -669,14 +670,15 @@ function SelectionOutline() {
                 x1: seam + 0.5,
                 y1: 0,
                 x2: seam + 0.5,
-                y2: top,
+                // Stops where the fillet starts, or its end pokes into the rounded corner.
+                y2: top - 4,
                 stroke: 'var(--ui-stroke-secondary)',
                 strokeWidth: 1
               }),
               jsx('line', {
                 'data-pi-seam-bottom': '',
                 x1: seam + 0.5,
-                y1: bottom,
+                y1: bottom + 4,
                 x2: seam + 0.5,
                 y2: box.height,
                 stroke: 'var(--ui-stroke-secondary)',

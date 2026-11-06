@@ -192,7 +192,7 @@ Rules:
 | Card shell | one header strip of `HEADER_H` and content starting at `ROW_PAD` |
 | Scroll pill | `44px` long, `3px` wide, radius `999px`, `var(--ui-text-quaternary)` at 0.55 |
 | Panel frame | one border, no corner radius: the app's pane is square |
-| Selection figure | one `1px` line around the selected row and the right pane, in the row's state colour; every turn carries the same `4px` radius, the two turns at the seam included; the row's own ring is suppressed while it is selected, and the seam opens over the band's height |
+| Selection figure | one `1px` line around the selected row and the right pane, in the row's state colour; every turn carries the same `4px` radius, the two turns at the seam included, and each seam segment stops a radius short of the corner so no straight stub sits inside the curve; the row's own ring is suppressed while it is selected, and the seam opens over the band's height |
 | What can be selected | a lane, or a feature still in preparation. A finished feature has no card: its click opens or closes it and never touches the selection. A second click on the selected lane releases it |
 
 ## Motion
