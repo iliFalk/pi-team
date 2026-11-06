@@ -1098,6 +1098,11 @@ function LaneList({ ctx }) {
               // pane empties, which is how the selection is released.
               toggle(gkey)
               const chosen = (lanes || []).find(lane => lane.lane === current)
+              // TEMP diagnostic: says what the click saw, so a mismatch is visible without a debugger.
+              host.notify({
+                kind: 'info',
+                message: `feature ${project}/${groupKey} · lane ${current || '—'} · group ${chosen ? (chosen.group || '—') : 'no lane'}`
+              })
               if (chosen && chosen.project === project && (chosen.group || '') === groupKey) {
                 clearPane()
               }
