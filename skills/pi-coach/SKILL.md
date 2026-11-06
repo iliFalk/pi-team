@@ -137,6 +137,37 @@ rejects it. Mark every addition (`<!-- +ADDED … -->`, `<!-- ~CHANGED: was … 
 text in chat before writing the file. Deleting or rewriting a line he wrote needs his explicit word,
 even when the line looks dead in the target context — name the reason and let him decide.
 
+## Placeholders: a project or a feature asked for in one line
+
+The person does not create structure by hand: the panel does, and the agent finishes it.
+
+| Asked from the panel | What exists at once | What the agent does |
+|---|---|---|
+| `+` on a project (feature) | the feature, named by the person's text, `state: preparation` | `pi-feature rename <project> <prep-key> <name> --title "…"`, then open the first lane |
+| `+` in the tree header (project) | the project with `remote` and `state: preparation` | clone to `~/work/<name>`, then `pi-project add <name> <path>` — that clears the placeholder |
+
+Rules:
+
+- A placeholder never has lanes. Dropping it is safe while it has none; both `cancel` endpoints refuse after that.
+- The request arrives in the chat as `[feature … · preparation]` or `[project … · preparation]`. Answer by finishing the structure, not by describing it.
+- `pi-feature rename` moves lanes already filed under the old key, so nothing is orphaned.
+- The row shows how long it has waited, so a forgotten placeholder is visible.
+
+## Failures reach the chat
+
+A lane that fails is reported once: the backend watches `lane.json` every 10 s and on the
+`running` → `failed` edge it writes the failure into the lane's thread and tries to deliver it.
+
+| Where it goes | When |
+|---|---|
+| the feature's chat | the feature has exactly one chat |
+| any open chat | the feature has no chat yet |
+| the thread only, with `✉` on the row | no chat accepted it |
+
+- A lane already failed when the backend starts is recorded without a message: history, not news.
+- `✉ deliver` in the lane card hands the missed failure to the chat that is open.
+- `stopped` is never reported: the person stopped it.
+
 ## Lane: open
 
 ```sh

@@ -400,7 +400,18 @@ function LaneRow({ lane, active, onPick }) {
                 style: { color: statusColor || 'var(--ui-text-quaternary)' },
                 // A working lane says it with motion; the rest keep their word, and a
                 // question carries the same mark the headers use.
-                children: lane.state === 'running' ? jsx(Gear, {}) : asked ? `? ${lane.state}` : lane.state
+                children: [
+                  // A failure whose message never reached a chat keeps a mark: the panel is the
+                  // only place that knows it is still unread.
+                  lane.undelivered
+                    ? jsx('span', {
+                        title: 'the failure was not delivered to a chat',
+                        style: { color: BAD_COLOR },
+                        children: '✉'
+                      })
+                    : null,
+                  lane.state === 'running' ? jsx(Gear, {}) : asked ? `? ${lane.state}` : lane.state
+                ]
               })
             ]
           }),
@@ -1531,6 +1542,41 @@ function LaneStatus({ ctx }) {
             className:
               'mx-2.5 my-1 shrink-0 self-start rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.625rem] hover:bg-(--ui-fill-tertiary)',
             children: 'close'
+          })
+        : null,
+      lane.undelivered
+        ? jsxs('div', {
+            className: 'flex items-center gap-1.5 text-[0.625rem]',
+            children: [
+              jsx('span', {
+                className: 'flex-1',
+                style: { color: 'var(--ui-text-quaternary)' },
+                children: 'The failure never reached a chat.'
+              }),
+              jsx('span', {
+                role: 'button',
+                tabIndex: 0,
+                title: 'put this failure into the chat that is open',
+                onClick: () =>
+                  ctx
+                    .rest('/deliver', {
+                      method: 'POST',
+                      body: { lane: lane.lane, session_key: sessionId },
+                      timeoutMs: 15000
+                    })
+                    .then(result => {
+                      const sent = Boolean(result && (result.delivered || []).length)
+                      host.notify({
+                        kind: sent ? 'info' : 'error',
+                        message: sent ? 'failure delivered to the chat' : 'no chat accepted it'
+                      })
+                      query.refetch()
+                    }),
+                className: 'shrink-0 rounded border px-1.5 py-0.5',
+                style: { color: ASK_COLOR, borderColor: ASK_COLOR },
+                children: '✉ deliver'
+              })
+            ]
           })
         : null,
       jsx(Row, { label: 'branch', value: lane.branch || '—' }),
