@@ -191,6 +191,7 @@ def close_lanes(argv: list) -> int:
     parser.add_argument("lanes", nargs="+")
     parser.add_argument("--no-merge", action="store_true", help="record the close without merging")
     parser.add_argument("--reason", default="", help="why it is closed; defaults to the merge")
+    parser.add_argument("--keep", action="store_true", help="keep the worktree, branch and lane folder")
     args = parser.parse_args(argv)
 
     root = hermes_home() / "lanes"
@@ -207,11 +208,25 @@ def close_lanes(argv: list) -> int:
             continue
         repo = str(record.get("repo") or "")
         branch = str(record.get("branch") or f"lane/{name}")
+        worktree = Path(str(record.get("worktree") or ""))
         state = str(record.get("state") or "")
         if state == "running" and pid_alive(record.get("pid")):
             print(f"{name}: still running — stop it first", file=sys.stderr)
             failed += 1
             continue
+
+        # A lane does not commit, so its work is still uncommitted here: commit it on the lane
+        # branch before the merge, or the merge would carry nothing.
+        if worktree.is_dir():
+            rc_s, dirty, _ = _git(str(worktree), "status", "--porcelain")
+            if rc_s == 0 and dirty.strip():
+                _git(str(worktree), "add", "-A")
+                summary = str(record.get("task") or name).strip().splitlines()[0][:70]
+                _git(
+                    str(worktree), "-c", "user.name=pi-lane", "-c", "user.email=pi-lane@local",
+                    "commit", "-m", f"Lane {name}: {summary}",
+                )
+                print(f"{name}: committed its work on {branch}")
 
         default = _default_branch(repo) if repo and Path(repo).is_dir() else ""
         merged_sha = ""
@@ -253,8 +268,49 @@ def close_lanes(argv: list) -> int:
             })
         lane_dir.mkdir(parents=True, exist_ok=True)
         (lane_dir / "lane.json").write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        # One line for the journal, so closed lanes stay visible after their folder is gone.
+        receipt = {
+            "lane": name,
+            "project": record.get("project"),
+            "group": record.get("group"),
+            "branch": branch,
+            "state": state or "done",
+            "closed_at": record["closed_at"],
+            "closed_reason": reason,
+            "merge_sha": merged_sha,
+            "merge_subject": merged_subject,
+            "closed_date": merged_date,
+            "merge_files": record.get("merge_files", 0),
+            "merge_insertions": record.get("merge_insertions", 0),
+            "merge_deletions": record.get("merge_deletions", 0),
+            "base": default,
+        }
+        (root / "closed.jsonl").open("a", encoding="utf-8").write(
+            json.dumps(receipt, ensure_ascii=False) + "\n"
+        )
+
+        cleaned = []
+        if not args.keep:
+            if worktree.is_dir():
+                rc_w, _, err_w = _git(repo, "worktree", "remove", "--force", str(worktree))
+                cleaned.append("worktree" if rc_w == 0 else f"worktree kept ({err_w})")
+            if branch and repo:
+                rc_b, _, _ = _git(repo, "branch", "-d", branch)
+                if rc_b != 0:
+                    _git(repo, "branch", "-D", branch)
+                cleaned.append("branch")
+            for leftover in (lane_dir / "events.jsonl", lane_dir / "stderr.txt", lane_dir / "thread.jsonl",
+                             lane_dir / "lane.json", lane_dir / "question.json", lane_dir / "answer.json"):
+                leftover.unlink(missing_ok=True)
+            try:
+                lane_dir.rmdir()
+                cleaned.append("lane folder")
+            except OSError:
+                pass
+
         extra = f" · merged {merged_sha[:7]} into {default}" if merged_sha else ""
-        print(f"{name}: closed{extra}")
+        tail = f" · removed {', '.join(cleaned)}" if cleaned else ""
+        print(f"{name}: closed{extra}{tail}")
 
     return 1 if failed else 0
 

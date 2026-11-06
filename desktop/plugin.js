@@ -1422,8 +1422,12 @@ function LaneStatus({ ctx }) {
             children: lane.task || '—'
           }),
 
-      jsx(Section, { title: 'thread', band: true }),
-      jsx(ThreadView, { ctx, lane, draft, setDraft, onSent: () => query.refetch() }),
+      lane.archived
+        ? jsx(Row, { label: 'record', value: 'closed · folder removed, receipt kept' })
+        : jsx(Section, { title: 'thread', band: true }),
+      lane.archived
+        ? null
+        : jsx(ThreadView, { ctx, lane, draft, setDraft, onSent: () => query.refetch() }),
 
       // The receipt: what this run changed, file by file, biggest first.
       !lane.shelved && (lane.diff_files || []).length

@@ -637,10 +637,63 @@ def _registry() -> List[Dict[str, Any]]:
 # routes
 # --------------------------------------------------------------------------- #
 
+def _closed_entries() -> List[Dict[str, Any]]:
+    """Closed lanes live only as one line each: their folder is gone after the close."""
+    path = _lanes_root() / "closed.jsonl"
+    entries: List[Dict[str, Any]] = []
+    for line in _tail_lines(path):
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(row, dict) or not row.get("lane"):
+            continue
+        sha = str(row.get("merge_sha") or "")
+        entries.append({
+            "lane": str(row.get("lane")),
+            "project": row.get("project"),
+            "group": row.get("group"),
+            "state": str(row.get("state") or "done"),
+            "branch": row.get("branch"),
+            "files": 0,
+            "insertions": 0,
+            "deletions": 0,
+            "diff_files": [],
+            "usage": {},
+            "turns": 0,
+            "status": [],
+            "plan": None,
+            "spec_tree": [],
+            "feature_sessions": [],
+            "thread": [],
+            "task": "",
+            "last_text": "",
+            "handed": False,
+            "handed_at": None,
+            "shelved": True,
+            "shelved_reason": str(row.get("closed_reason") or "closed"),
+            "git_hint": "",
+            "archived": True,
+            "closed_at": row.get("closed_at"),
+            "merge": {
+                "sha": sha,
+                "short": sha[:7],
+                "date": str(row.get("closed_date") or ""),
+                "subject": str(row.get("merge_subject") or ""),
+                "files": int(row.get("merge_files") or 0),
+                "insertions": int(row.get("merge_insertions") or 0),
+                "deletions": int(row.get("merge_deletions") or 0),
+            } if sha else None,
+        })
+    return entries
+
+
 @router.get("/lanes")
 def list_lanes() -> Dict[str, Any]:
     """Every lane: state, task, last assistant text, changes and plan progress."""
     lanes = _all_lanes()
+    known = {lane["lane"] for lane in lanes}
+    lanes += [entry for entry in _closed_entries() if entry["lane"] not in known]
     return {
         "lanes": [
             {k: v for k, v in lane.items() if k not in ("status", "plan", "spec_tree")}
@@ -930,7 +983,12 @@ def lane_detail(lane: str) -> Dict[str, Any]:
     """One lane with per-file status, the full plan and the last text."""
     match = next((item for item in _all_lanes() if item["lane"] == lane), None)
     if match is None:
+        # A closed lane keeps only its journal line; that is the whole record.
+        match = next((row for row in _closed_entries() if row["lane"] == lane), None)
+    if match is None:
         raise HTTPException(status_code=404, detail="lane not found")
+    if match.get("archived"):
+        return match
     match["feature_sessions"] = []
     for project in _registry():
         if project["name"] != match.get("project"):
