@@ -529,14 +529,26 @@ function visibleFrame(rawTop, rawBottom, limit) {
 /** The figure's path from a box: the band's frame open on the right, joined to the pane. */
 function framePath(box) {
   const radius = 4
-  const left = box.left
-  const top = box.top
-  const bottom = box.top + box.rowHeight
-  const seam = box.seam
   // Half a pixel in from the panel's edges: a 1px stroke centred on 0 or width would be cut by the clip.
   const edgeT = 0.5
   const edgeR = box.width - 0.5
   const edgeB = box.height - 0.5
+  const seam = box.seam
+  const paneOnly = box.top === null
+
+  if (paneOnly) {
+    // The row is out of sight: the pane keeps its frame and the seam becomes its left side.
+    return (
+      `M ${seam} ${edgeT + radius} Q ${seam} ${edgeT} ${seam + radius} ${edgeT} ` +
+      `L ${edgeR - radius} ${edgeT} Q ${edgeR} ${edgeT} ${edgeR} ${edgeT + radius} ` +
+      `L ${edgeR} ${edgeB - radius} Q ${edgeR} ${edgeB} ${edgeR - radius} ${edgeB} ` +
+      `L ${seam + radius} ${edgeB} Q ${seam} ${edgeB} ${seam} ${edgeB - radius} Z`
+    )
+  }
+
+  const left = box.left
+  const top = box.top
+  const bottom = box.top + box.rowHeight
   return (
     `M ${left + radius} ${top} L ${seam - radius} ${top} ` +
     `Q ${seam} ${top} ${seam} ${top - radius} ` +
@@ -563,13 +575,14 @@ function paintFrame(box) {
   if (!path || !up || !down) return false
   const seam = box.seam + 0.5
   const radius = 4
-  const top = box.top - radius
-  const bottom = box.top + box.rowHeight + radius
+  const notch = box.top !== null
+  const top = notch ? box.top - radius : 0
+  const bottom = notch ? box.top + box.rowHeight + radius : 0
   path.setAttribute('d', framePath(box))
   up.setAttribute('x1', seam); up.setAttribute('x2', seam)
   up.setAttribute('y1', 0.5); up.setAttribute('y2', top)
   down.setAttribute('x1', seam); down.setAttribute('x2', seam)
-  down.setAttribute('y1', bottom); down.setAttribute('y2', box.height - 0.5)
+  down.setAttribute('y1', bottom); down.setAttribute('y2', notch ? box.height - 0.5 : 0)
   return true
 }
 
@@ -597,20 +610,15 @@ function measureSelection() {
     Math.round(box.bottom - outer.top) - borderY,
     root.clientHeight
   )
-  if (!frame) {
-    if (selectedBox.get()) selectedBox.set(null)
-    return
-  }
-  const top = frame.top
-  const bottom = frame.top + frame.height
   const next = {
     width: root.clientWidth,
     height: root.clientHeight,
     seam: Math.round(root.clientWidth / 2),
     left: Math.round(box.left - outer.left) - borderX,
     right: Math.round(box.right - outer.left) - borderX,
-    top,
-    rowHeight: bottom - top,
+    // No notch when the row is out of sight: the pane stays framed in the row's colour, seam closed.
+    top: frame ? frame.top : null,
+    rowHeight: frame ? frame.height : 0,
     color: row.getAttribute('data-pi-colour') || 'var(--ui-text-tertiary)'
   }
   const current = selectedBox.get()
@@ -671,8 +679,11 @@ function SelectionOutline() {
             viewBox: `0 0 ${box.width} ${box.height}`,
             style: { position: 'absolute', inset: 0, pointerEvents: 'none' },
             children: [
-              // The seam above the row, and below it: the selected row is the only gap.
-              jsx('line', {
+              // The seam above the row, and below it: the selected row is the only gap. With the row out
+              // of sight the figure closes over the seam and these two have nothing to draw.
+              box.top === null
+                ? null
+                : jsx('line', {
                 'data-pi-seam-top': '',
                 x1: seam + 0.5,
                 y1: 0,
@@ -682,7 +693,9 @@ function SelectionOutline() {
                 stroke: 'var(--ui-stroke-secondary)',
                 strokeWidth: 1
               }),
-              jsx('line', {
+              box.top === null
+                ? null
+                : jsx('line', {
                 'data-pi-seam-bottom': '',
                 x1: seam + 0.5,
                 y1: bottom + 4,
