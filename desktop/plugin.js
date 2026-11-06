@@ -474,11 +474,11 @@ function Scroller({ side, grow, className, style, children }) {
       ...(grow ? { flex: '1 1 auto' } : { height: '100%' })
     },
     children: jsx('div', {
-      className: `h-full ${className || ''}`,
+      className: `pi-team-scroll h-full ${className || ''}`,
       'data-pi-scroll': side,
-      // Wider than the column by the bar's own width: the bar lands outside the clipped edge,
-      // and the content keeps the full width, so a row reaches the divider.
-      style: { ...(style || {}), width: 'calc(100% + 14px)', overflowY: 'auto' },
+      // Full width: the content must equal the column, or right-aligned values get cut.
+      // The bar is hidden by the rule below, which beats the app's own ::-webkit-scrollbar.
+      style: { ...(style || {}), width: '100%', overflowY: 'auto' },
       onScroll: event => reportScroll(side, event.currentTarget),
       children
     })
@@ -2131,6 +2131,11 @@ function TeamPane({ ctx }) {
   return jsxs('div', {
     className: 'relative flex h-full min-h-0 overflow-hidden',
     children: [
+      jsx('style', {
+        children:
+          '.pi-team-scroll::-webkit-scrollbar{width:0;height:0;display:none}' +
+          '.pi-team-scroll{scrollbar-width:none}'
+      }),
       jsx('div', {
         // 50 / 50, and inline: an arbitrary width class is not in the app's stylesheet.
         className: 'flex shrink-0 flex-col border-r border-(--ui-stroke-secondary)',
