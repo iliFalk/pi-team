@@ -465,7 +465,13 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim }) {
                 ? { ...bandStyle, background: 'var(--chrome-action-hover)' }
                 : bandStyle,
             children: [
-              jsx('span', { className: 'truncate', style: TEXT_NUDGE, children: label }),
+              jsx('span', {
+                className: 'truncate',
+                // Shrinks when the name is long, so the counters keep their place on the right
+                // edge instead of being pushed inwards by the overflow.
+                style: { ...TEXT_NUDGE, flex: '0 1 auto', minWidth: 0 },
+                children: label
+              }),
               action
                 ? asking
                   ? jsxs('span', {
