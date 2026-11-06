@@ -514,6 +514,18 @@ function showComposeProject() {
 }
 
 
+/** The frame exists only for a row wholly inside the strip under the header.
+
+    Pure on purpose: the rule is then checkable with four numbers instead of a browser.
+ */
+const HEADER_STEP = 28
+
+function visibleFrame(rawTop, rawBottom, limit) {
+  if (rawTop < HEADER_STEP || rawBottom > limit) return null
+  return { top: rawTop, height: rawBottom - rawTop }
+}
+
+
 function measureSelection() {
   const root = document.querySelector('[data-pi-root]')
   const row = root && root.querySelector('[data-pi-selected]')
@@ -526,14 +538,19 @@ function measureSelection() {
   const band = row.querySelector('[data-pi-band]') || row
   const outer = root.getBoundingClientRect()
   const box = band.getBoundingClientRect()
-  // A scrolled-away row would put the notch outside the panel: keep it inside the visible strip.
-  const header = 28
-  const top = Math.max(Math.round(box.top - outer.top), header)
-  const bottom = Math.min(Math.round(box.bottom - outer.top), Math.round(outer.height))
-  if (bottom - top < 10) {
+  // The frame is drawn only while the row is wholly inside the visible strip under the header. A cut
+  // notch reads as a broken figure, and a row scrolled away must not leave a frame behind.
+  const frame = visibleFrame(
+    Math.round(box.top - outer.top),
+    Math.round(box.bottom - outer.top),
+    Math.round(outer.height)
+  )
+  if (!frame) {
     if (selectedBox.get()) selectedBox.set(null)
     return
   }
+  const top = frame.top
+  const bottom = frame.top + frame.height
   const next = {
     width: Math.round(outer.width),
     height: Math.round(outer.height),

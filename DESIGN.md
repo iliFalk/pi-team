@@ -168,9 +168,10 @@ Rules:
   again at its bottom, so the row opens into the pane; the outline runs around the union, not around two
   boxes. Colour it with the row's own state colour — the same value the row already shows — so selection
   and condition cannot disagree.
-- **Measure the row, not the data.** The notch comes from the row's real box in the DOM, clamped to the
-  visible strip between the header and the panel's bottom edge; a scrolled-away row draws no notch rather
-  than a figure outside the panel.
+- **Measure the row, not the data.** The frame comes from the row's real box in the DOM and exists only
+  while the row sits wholly inside the strip under the header (`visibleFrame`): a row scrolled away, or
+  half under the header, draws nothing instead of a cut figure. The rule is a pure function so it is
+  checked with four numbers, not a browser.
 - **One shadow shape for the whole panel.** A gradient band, not a `box-shadow`, because a shadow
   belongs to a box and would cut off at the seam.
 - **An inset ring does not work for the frame**: it paints under the children. A real border on the
