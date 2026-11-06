@@ -1096,6 +1096,84 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
   })
 }
 
+/** One message in a lane's thread: the lane's own words, mine, or Ilja's. */
+function Bubble({ who, text }) {
+  const label = who === 'jarvis' ? 'me' : who === 'lane' ? 'lane' : 'you'
+  const style =
+    who === 'jarvis'
+      ? { borderLeft: `2px solid ${RUN_COLOR}`, paddingLeft: '4px', color: 'var(--ui-text-secondary)' }
+      : who === 'user'
+        ? { background: 'var(--chrome-action-hover)', color: 'var(--ui-text-primary)' }
+        : { color: 'var(--ui-text-quaternary)', fontFamily: 'ui-monospace, monospace' }
+  return jsxs('div', {
+    className: 'mb-1 whitespace-pre-wrap break-words rounded px-1 py-0.5 text-[0.625rem] leading-snug',
+    style,
+    children: [
+      jsx('span', {
+        className: 'mr-1 text-[0.5625rem] uppercase',
+        style: { opacity: 0.65 },
+        children: label
+      }),
+      text
+    ]
+  })
+}
+
+/** The conversation about one lane, with a box that sends into the chat, not into pi. */
+function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
+  const messages = lane.thread || []
+  const send = () => {
+    const text = draft.trim()
+    if (!text) return
+    ctx
+      .rest(`/lanes/${encodeURIComponent(lane.lane)}/say`, {
+        method: 'POST',
+        body: { text },
+        timeoutMs: 15000
+      })
+      .then(() => {
+        setDraft('')
+        onSent()
+      })
+  }
+  return jsxs('div', {
+    children: [
+      jsxs('div', {
+        className: 'overflow-y-auto px-2.5 py-1',
+        style: { maxHeight: '38vh' },
+        children: [
+          lane.last_text ? jsx(Bubble, { who: 'lane', text: lane.last_text }, 'now') : null,
+          messages.map((message, index) =>
+            jsx(Bubble, { who: message.who, text: message.text }, `${index}-${message.at}`)
+          )
+        ]
+      }),
+      jsxs('div', {
+        className: 'flex shrink-0 items-center gap-1 px-2.5 py-1',
+        children: [
+          jsx(Input, {
+            value: draft,
+            placeholder: 'say something about this lane',
+            onChange: event => setDraft(event.target.value),
+            onKeyDown: event => {
+              if (event.key === 'Enter') send()
+            },
+            className: 'h-6 flex-1 text-[0.625rem]'
+          }),
+          jsx('span', {
+            role: 'button',
+            tabIndex: 0,
+            onClick: send,
+            className:
+              'shrink-0 rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.625rem] hover:bg-(--ui-fill-tertiary)',
+            children: 'send'
+          })
+        ]
+      })
+    ]
+  })
+}
+
 /** The merge commit that closed a lane, shown under its card. */
 function Receipt({ merge }) {
   return jsxs('div', {
@@ -1153,6 +1231,7 @@ function GroupList({ title, rows, onPick }) {
 
 function LaneStatus({ ctx }) {
   const laneName = useValue(selectedLane)
+  const [draft, setDraft] = useState('')
   // A group row of the tree picks a whole list, not one lane.
   const groupMatch = /^(closed|handed):(.+)$/.exec(laneName)
   const groupKind = groupMatch ? groupMatch[1] : null
@@ -1228,25 +1307,29 @@ function LaneStatus({ ctx }) {
           })
         : null,
       jsx(Row, { label: 'state', value: lane.state, color: stateColour(lane) }),
-      !lane.shelved && !lane.handed && ['done', 'stopped', 'failed', 'error'].includes(lane.state)
-        ? jsx('button', {
-            type: 'button',
-            onClick: () =>
-              ctx
-                .rest(`/lanes/${encodeURIComponent(lane.lane)}/hand`, {
-                  method: 'POST',
-                  body: { session_key: sessionId },
-                  timeoutMs: 8000
-                })
-                .then(() => query.refetch()),
-            title: 'send this lane to the orchestrator: check it, merge it, close it',
-            className:
-              'mx-2.5 my-1 shrink-0 rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.625rem] hover:bg-(--ui-fill-tertiary)',
-            children: 'to review'
-          })
-        : null,
-      lane.handed
-        ? jsx(Row, { label: 'review', value: 'waiting for a check and a merge', color: ASK_COLOR })
+      !lane.shelved && ['done', 'stopped', 'failed', 'error'].includes(lane.state)
+        ? lane.handed
+          ? jsx('span', {
+              className: 'mx-2.5 my-1 shrink-0 rounded border px-1.5 py-0.5 text-[0.625rem]',
+              style: { color: ASK_COLOR, borderColor: ASK_COLOR },
+              children: 'in review'
+            })
+          : jsx('span', {
+              role: 'button',
+              tabIndex: 0,
+              onClick: () =>
+                ctx
+                  .rest(`/lanes/${encodeURIComponent(lane.lane)}/hand`, {
+                    method: 'POST',
+                    body: { session_key: sessionId },
+                    timeoutMs: 8000
+                  })
+                  .then(() => query.refetch()),
+              title: 'queue this lane for review; send on the review row asks the orchestrator',
+              className:
+                'mx-2.5 my-1 shrink-0 rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.625rem] hover:bg-(--ui-fill-tertiary)',
+              children: 'to review'
+            })
         : null,
       lane.shelved ? jsx(Row, { label: 'closed', value: lane.shelved_reason }) : null,
       lane.merge ? jsx(Receipt, { merge: lane.merge }) : null,
@@ -1339,15 +1422,8 @@ function LaneStatus({ ctx }) {
             children: lane.task || '—'
           }),
 
-      lane.shelved ? null : jsx(Section, { title: 'last message', band: true }),
-      lane.shelved
-        ? null
-        : jsx('div', {
-            className:
-              'shrink-0 overflow-y-auto whitespace-pre-wrap break-words px-2.5 py-0.5 font-mono text-[0.625rem] leading-snug text-(--ui-text-secondary)',
-            style: { height: TEXT_H },
-            children: lane.last_text || 'nothing written yet'
-          }),
+      jsx(Section, { title: 'thread', band: true }),
+      jsx(ThreadView, { ctx, lane, draft, setDraft, onSent: () => query.refetch() }),
 
       // The receipt: what this run changed, file by file, biggest first.
       !lane.shelved && (lane.diff_files || []).length

@@ -449,6 +449,31 @@ def _merge_receipt(repo: str, branch: str, default: str) -> Optional[Dict[str, A
     return None
 
 
+def _thread(lane_dir: Path) -> List[Dict[str, Any]]:
+    """The conversation kept next to a lane: what was said, by whom, when."""
+    rows: List[Dict[str, Any]] = []
+    for line in _tail_lines(lane_dir / "thread.jsonl"):
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(entry, dict) and entry.get("text"):
+            rows.append({
+                "who": str(entry.get("who") or "user"),
+                "at": entry.get("at"),
+                "text": str(entry.get("text") or ""),
+            })
+    return rows[-100:]
+
+
+def _append_thread(lane_dir: Path, who: str, text: str) -> Dict[str, Any]:
+    entry = {"who": who, "at": int(time.time()), "text": text}
+    lane_dir.mkdir(parents=True, exist_ok=True)
+    with (lane_dir / "thread.jsonl").open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    return entry
+
+
 def _lane_entry(lane_dir: Path) -> Optional[Dict[str, Any]]:
     record = _read_json(lane_dir / "lane.json")
     if record is None:
@@ -533,6 +558,7 @@ def _lane_entry(lane_dir: Path) -> Optional[Dict[str, Any]]:
     entry["shelved_reason"] = str(record.get("closed_reason") or "") or (guess if closed_at else "")
     entry["handed_at"] = record.get("handed_at")
     entry["handed"] = bool(record.get("handed_at")) and not closed_at
+    entry["thread"] = _thread(lane_dir)
     # What git says about the lane right now: a hint for the card, never a decision.
     entry["git_hint"] = guess
     entry["merge"] = None
@@ -714,6 +740,34 @@ def _plugin_ctx() -> Any:
     """The PluginContext kept by this plugin's entry point, when it is loaded."""
     module = sys.modules.get("pi_team_runtime")
     return getattr(module, "ctx", None) if module else None
+
+
+@router.post("/lanes/{lane}/say")
+def say_to_lane(lane: str, payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Put a message about this lane into the chat; the orchestrator decides what reaches pi."""
+    text = str(payload.get("text") or "").strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="empty message")
+    lane_dir = _lanes_root() / lane
+    record = _read_json(lane_dir / "lane.json")
+    if record is None:
+        raise HTTPException(status_code=404, detail="unknown lane")
+
+    _append_thread(lane_dir, "user", text)
+    where = f'{record.get("project") or "?"}/{record.get("group") or "?"}'
+    state = str(record.get("state") or "")
+    message = (
+        f'[lane {lane} · {where} · {state}]\n{text}\n\n'
+        f'Put your answer back into the lane thread with: pi-lane say {lane} "…"'
+    )
+    sent = False
+    ctx = _plugin_ctx()
+    if ctx is not None:
+        try:
+            sent = bool(ctx.inject_message(message, session_key=payload.get("session_key") or None))
+        except Exception:
+            sent = False
+    return {"ok": True, "message_sent": sent}
 
 
 @router.post("/review/send")
