@@ -1242,7 +1242,7 @@ function LaneStatus({ ctx }) {
             title: 'send this lane to the orchestrator: check it, merge it, close it',
             className:
               'mx-2.5 my-1 shrink-0 rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.625rem] hover:bg-(--ui-fill-tertiary)',
-            children: 'send for review'
+            children: 'to review'
           })
         : null,
       lane.handed
