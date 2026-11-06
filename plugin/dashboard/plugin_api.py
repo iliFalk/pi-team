@@ -19,16 +19,11 @@ import re
 import shlex
 import subprocess
 import sys
-import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import logging
-
 from fastapi import APIRouter, Body, HTTPException
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -478,10 +473,8 @@ def _thread(lane_dir: Path) -> List[Dict[str, Any]]:
     return rows[-100:]
 
 
-def _append_thread(lane_dir: Path, who: str, text: str, delivered: Optional[bool] = None) -> Dict[str, Any]:
+def _append_thread(lane_dir: Path, who: str, text: str) -> Dict[str, Any]:
     entry = {"who": who, "at": int(time.time()), "text": text}
-    if delivered is not None:
-        entry["delivered"] = bool(delivered)
     lane_dir.mkdir(parents=True, exist_ok=True)
     with (lane_dir / "thread.jsonl").open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -574,7 +567,6 @@ def _lane_entry(lane_dir: Path) -> Optional[Dict[str, Any]]:
     entry["handed_at"] = record.get("handed_at")
     entry["handed"] = bool(record.get("handed_at")) and not closed_at
     entry["thread"] = _thread(lane_dir)
-    entry["undelivered"] = _undelivered(str(entry.get("lane") or ""))
     # What git says about the lane right now: a hint for the card, never a decision.
     entry["git_hint"] = guess
     entry["merge"] = None
@@ -665,143 +657,6 @@ def _registry() -> List[Dict[str, Any]]:
             }
         )
     return out
-
-
-# --------------------------------------------------------------------------- #
-# failures: one message, once, into the chat that belongs to the feature
-# --------------------------------------------------------------------------- #
-
-NOTIFIED_FILE = "notified.json"
-WATCH_SECONDS = 10.0
-
-
-def _notified_path() -> Path:
-    return _hermes_home() / "plugin-data" / "pi-team" / NOTIFIED_FILE
-
-
-def _failure_text(entry: Dict[str, Any]) -> str:
-    where = f"{entry.get('project') or '—'}/{entry.get('group') or '—'}"
-    reason = str(entry.get("last_error") or "").strip().splitlines()[:1]
-    if not reason:
-        # stderr is the last place a failure says why; the events stream may be silent.
-        reason = str(entry.get("stderr") or "").strip().splitlines()[-1:]
-    lines = [
-        f"[lane {entry.get('lane')} · {where} · failed]",
-        reason[0][:300] if reason else "the run ended with a non-zero code",
-    ]
-    numbers = []
-    if entry.get("exit") is not None:
-        numbers.append(f"exit {entry.get('exit')}")
-    started, finished = entry.get("started"), entry.get("finished")
-    if isinstance(started, (int, float)) and isinstance(finished, (int, float)) and finished > started:
-        numbers.append(f"{int(finished - started)}s")
-    if entry.get("files"):
-        numbers.append(
-            f"{entry.get('files')} files +{entry.get('insertions') or 0} −{entry.get('deletions') or 0}"
-        )
-    if numbers:
-        lines.append(" · ".join(numbers))
-    lines.append("")
-    lines.append(
-        f"Say `pi-lane continue {entry.get('lane')} \"…\"` to send it back with a hint."
-    )
-    return "\n".join(lines)
-
-
-def _feature_chat(project: str, group: str) -> str:
-    """The chat that belongs to the lane's feature, if it has one."""
-    data = _read_json(_hermes_home() / "plugin-data" / "pi-team" / "projects.json") or {}
-    entry = ((data.get("projects") or {}).get(project) or {})
-    feature = ((entry.get("features") or {}).get(group) or {})
-    sessions = [s for s in (feature.get("sessions") or []) if isinstance(s, dict) and s.get("id")]
-    return str(sessions[0]["id"]) if len(sessions) == 1 else ""
-
-
-def _deliver_failure(entry: Dict[str, Any]) -> bool:
-    """Put the failure in the lane's thread and try to reach a chat with it.
-
-    The thread copy is the record: a closed chat must not lose the message.
-    """
-    lane_dir = _hermes_home() / "lanes" / str(entry.get("lane") or "")
-    text = _failure_text(entry)
-    _append_thread(lane_dir, "panel", text, delivered=False)
-    sent = False
-    ctx = _plugin_ctx()
-    if ctx is not None:
-        key = _feature_chat(str(entry.get("project") or ""), str(entry.get("group") or "")) or None
-        try:
-            sent = bool(ctx.inject_message(text, session_key=key))
-            if not sent and key:
-                sent = bool(ctx.inject_message(text, session_key=None))
-        except Exception:
-            sent = False
-    return sent
-
-
-def _scan_failures() -> None:
-    """Look at every lane once and report a run that has just failed.
-
-    A lane already failed when the backend starts is recorded without a message: that is
-    history, not news.
-    """
-    path = _notified_path()
-    notified = _read_json(path) or {}
-    changed = False
-    lanes_root = _hermes_home() / "lanes"
-    if not lanes_root.is_dir():
-        return
-    for lane_file in sorted(lanes_root.glob("*/lane.json")):
-        entry = _lane_entry(lane_file.parent)
-        if entry is None:
-            continue
-        lane = str(entry.get("lane") or lane_file.parent.name)
-        state = str(entry.get("state") or "")
-        previous = notified.get(lane) if isinstance(notified.get(lane), dict) else {}
-        if state == "failed" and previous.get("state") != "failed":
-            if previous:
-                notified[lane] = {"state": "failed", "at": int(time.time()), "delivered": _deliver_failure(entry)}
-            else:
-                notified[lane] = {"state": "failed", "at": int(time.time()), "delivered": True}
-            changed = True
-        elif state != "failed" and previous.get("state") == "failed":
-            notified[lane] = {"state": state, "at": int(time.time()), "delivered": True}
-            changed = True
-        elif not previous and state:
-            notified[lane] = {"state": state, "at": int(time.time()), "delivered": True}
-            changed = True
-    if changed:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(notified, indent=2) + "\n", encoding="utf-8")
-
-
-def _watch_loop() -> None:
-    while True:
-        try:
-            _scan_failures()
-        except Exception:
-            logger.warning("pi-team watcher: scan failed", exc_info=True)
-        time.sleep(WATCH_SECONDS)
-
-
-def _start_watcher() -> None:
-    """One watcher per machine, not one per process that happens to import this module."""
-    if os.environ.get("PI_TEAM_NO_WATCH"):
-        return
-    lock = _hermes_home() / "plugin-data" / "pi-team" / "watcher.pid"
-    lock.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        previous = int(lock.read_text().strip() or 0)
-    except (OSError, ValueError):
-        previous = 0
-    if previous and previous != os.getpid() and _pid_alive(previous):
-        return
-    lock.write_text(str(os.getpid()), encoding="utf-8")
-    threading.Thread(target=_watch_loop, daemon=True, name="pi-team-watch").start()
-
-
-def _undelivered(lane: str) -> bool:
-    record = ((_read_json(_notified_path()) or {}).get(lane))
-    return bool(isinstance(record, dict) and record.get("state") == "failed" and not record.get("delivered"))
 
 
 # --------------------------------------------------------------------------- #
@@ -1178,47 +1033,6 @@ def cancel_feature(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]
     return {"ok": True}
 
 
-@router.post("/deliver")
-def deliver(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
-    """Hand the chat what it missed: failures reported while it was closed.
-
-    The panel knows which chat is open, so it asks on behalf of that chat.
-    """
-    session_key = payload.get("session_key") or None
-    project_name = str(payload.get("project") or "")
-    only = str(payload.get("lane") or "")
-    delivered = []
-    ctx = _plugin_ctx()
-    notified = _read_json(_notified_path()) or {}
-    for lane, record in list(notified.items()):
-        if not isinstance(record, dict) or record.get("state") != "failed" or record.get("delivered"):
-            continue
-        entry = _lane_entry(_hermes_home() / "lanes" / str(lane))
-        if entry is None:
-            continue
-        if project_name and str(entry.get("project") or "") != project_name:
-            continue
-        if only and lane != only:
-            continue
-        # A feature with its own chat gets its news there and nowhere else: a message about
-        # one feature must not land in another feature's conversation.
-        own = _feature_chat(str(entry.get("project") or ""), str(entry.get("group") or ""))
-        if own and own != (session_key or ""):
-            continue
-        sent = False
-        if ctx is not None:
-            try:
-                sent = bool(ctx.inject_message(_failure_text(entry), session_key=session_key))
-            except Exception:
-                sent = False
-        if sent:
-            notified[lane] = {**record, "delivered": True}
-            delivered.append(lane)
-    if delivered:
-        _notified_path().write_text(json.dumps(notified, indent=2) + "\n", encoding="utf-8")
-    return {"ok": True, "delivered": delivered}
-
-
 @router.post("/update/request")
 def request_update(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
     """Ask the agent to update the plugin, instead of doing it from here.
@@ -1410,7 +1224,3 @@ def lane_detail(lane: str) -> Dict[str, Any]:
             if feature["name"] == (match.get("group") or ""):
                 match["feature_sessions"] = feature.get("sessions") or []
     return match
-
-
-# Last line of the module: the watcher uses everything defined above.
-_start_watcher()

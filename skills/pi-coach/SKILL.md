@@ -99,8 +99,11 @@ block is refused as `no markers` — merge that file by hand. Run `--check` afte
 **Feature ↔ session link.** The left list is a pure tree — project, feature, lane, and no icons on any of
 its rows; the panel asks the detail side for every state it draws. Linking lives only in the right pane's
 sessions block, which is always drawn: one row per linked session, then `add this session +`, which links
-the open chat to the lane's feature. With no sessions the add row stands alone under the label, and it
-never hides — a second click on an already-linked chat changes nothing, because `/link` is idempotent.
+the open chat to the feature. **One chat belongs to one feature, and one feature holds one chat** — the
+chat is an address, not a bookmark: it is where that feature's lanes speak, and it cannot answer for two
+features. `/link` refuses with `409 this chat already belongs to <project>/<feature>` or `409 this feature
+already has a chat`; re-attaching means `×` (unlink) first. The add row never hides, and a refused click
+names the current owner, so the click answers a question instead of doing nothing.
 Each row carries three controls: the pencil names it inline, `↗` opens it with `host.openSession`, and `×`
 drops it from the feature (`POST /unlink` with project, feature and session id). The name is the plugin's
 own label (`POST /label`, stored on the session entry in `projects.json`) and must never touch the real
@@ -148,28 +151,14 @@ The person does not create structure by hand: the panel does, and the agent fini
 
 Rules:
 
+- **The registry has one writer: `pireg.py`.** The panel's routes and this skill both call it; no route,
+  script or agent edits `projects.json` directly. Its rules — one chat per feature, a rename that moves
+  lanes, a placeholder that must be empty before it is dropped — exist only there, and a second copy in
+  `plugin_api.py` drifts the first time one of them changes.
 - A placeholder never has lanes. Dropping it is safe while it has none; both `cancel` endpoints refuse after that.
 - The request arrives in the chat as `[feature … · preparation]` or `[project … · preparation]`. Answer by finishing the structure, not by describing it.
 - `pi-feature rename` moves lanes already filed under the old key, so nothing is orphaned.
 - The row shows how long it has waited, so a forgotten placeholder is visible.
-
-## Failures reach the chat
-
-A lane that fails is reported once: the backend watches `lane.json` every 10 s and on the
-`running` → `failed` edge it writes the failure into the lane's thread and tries to deliver it.
-
-Delivery is manual: the backend process may inject only into the chat it owns, and it owns no
-chat. So the watcher records, and the person presses `✉ deliver` in the lane card, which sends the
-text with the key of the open chat.
-
-| Where it goes | When |
-|---|---|
-| the thread, with `✉` on the row | immediately, always |
-| the chat | after `✉ deliver`; the panel supplies the key |
-
-- A lane already failed when the backend starts is recorded without a message: history, not news.
-- `✉ deliver` in the lane card hands the missed failure to the chat that is open.
-- `stopped` is never reported: the person stopped it.
 
 ## Lane: open
 
