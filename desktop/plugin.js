@@ -532,12 +532,17 @@ function framePath(box) {
   const top = box.top
   const bottom = box.top + box.rowHeight
   const seam = box.seam
+  // Every turn carries the same 4 px radius, the two at the seam included: a square corner there reads
+  // as the row being cut off by the pane instead of opening into it.
   return (
-    `M ${box.left + radius} ${top} L ${seam} ${top} L ${seam} ${radius} Q ${seam} 0 ${seam + radius} 0 ` +
+    `M ${box.left + radius} ${top} L ${seam - radius} ${top} ` +
+    `Q ${seam} ${top} ${seam} ${top - radius} ` +
+    `L ${seam} ${radius} Q ${seam} 0 ${seam + radius} 0 ` +
     `L ${box.width - radius} 0 Q ${box.width} 0 ${box.width} ${radius} ` +
     `L ${box.width} ${box.height - radius} Q ${box.width} ${box.height} ${box.width - radius} ${box.height} ` +
     `L ${seam + radius} ${box.height} Q ${seam} ${box.height} ${seam} ${box.height - radius} ` +
-    `L ${seam} ${bottom} L ${box.left + radius} ${bottom} ` +
+    `L ${seam} ${bottom + radius} Q ${seam} ${bottom} ${seam - radius} ${bottom} ` +
+    `L ${box.left + radius} ${bottom} ` +
     `Q ${box.left} ${bottom} ${box.left} ${bottom - radius} ` +
     `L ${box.left} ${top + radius} Q ${box.left} ${top} ${box.left + radius} ${top} Z`
   )
