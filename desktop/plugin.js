@@ -2130,6 +2130,9 @@ function TeamPane({ ctx }) {
   const sessionId = storedSessionId || runtimeSessionId
   return jsxs('div', {
     className: 'relative flex h-full min-h-0 overflow-hidden',
+    // One frame for the whole panel. A single border on the root, not four on the pieces:
+    // an inset ring would be painted under the columns and never show.
+    style: { border: '1px solid var(--ui-stroke-secondary)', boxSizing: 'border-box' },
     children: [
       jsx('style', {
         children:
