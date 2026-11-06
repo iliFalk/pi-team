@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 2.6.0
+version: 2.7.0
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -240,14 +240,23 @@ The `pi-team` right panel shows the same fields: last text, last tool call, turn
 deleted (worktree, branch, lane folder) and does nothing else; only `--yes` carries it out. Run the bare
 form, paste the plan into the chat, wait for his go, then run it with `--yes`. A close commits the lane's
 uncommitted work on its branch first, merges, writes one receipt line into `lanes/closed.jsonl`, and
-deletes the worktree, the branch and the folder.
+deletes the worktree, the branch, the folder and the lane's own `pi` session under
+`~/.pi/agent/sessions/--<worktree path, slashes as dashes>--`.
 
 **The card is a thread per lane.** `to review` on the card queues the lane (it stays visible as
 `in review`, never disappears — a control that vanishes once it worked reads as a missing feature); the
-`send` on the review row, after its tick, puts the whole queue into the chat. A message Ilja writes in a
+`send` on the review row, after its tick, puts the whole queue into the chat. `close` appears on the card
+ONLY while the lane sits in `review`: closing is the step after the check, and offering it on a freshly
+finished lane invites a merge nobody read. A condition on the state alone (`done`, `stopped`, `failed`)
+put it on every finished lane — the field that decides is `handed_at`, not the state. A message Ilja writes in a
 lane's thread reaches the orchestrator, never pi: the route appends it to
 `$HERMES_HOME/lanes/<lane>/thread.jsonl` (`{who: lane|jarvis|user, at, text}`, one object per line) and
-calls `ctx.inject_message` with a `[lane <name> · project/group · state]` prefix. Answer in the same
+calls `ctx.inject_message` with a `[lane <name> · project/group · state]` prefix. That call reaches nothing
+until the plugin is allowed to speak: `hermes config set plugins.entries.pi-team.allow_gateway_injection true`
+(back up `config.yaml` first). Without it the log reads
+`inject_message: gateway injection denied for plugin pi-team` and the route still answers
+`message_sent: false`, so every button in the panel goes quiet at once — check this setting before the
+session key or the render code. Answer in the same
 thread with `pi-lane say <lane> "…"` — it appends `who: jarvis` and touches nothing else, so pi never
 hears it until a continuation is started. The card draws the lane's own last text as the newest bubble
 and the stored rows under it, so the same words never appear twice.
@@ -389,11 +398,15 @@ an inline value always applies. Keep every one of these numbers in the constant 
 `plugin.js`, so "half that big" or "64 → 100" is one edit in one place. Recipes and the pixel check:
 `hermes-desktop-plugins` § `references/panel-visuals.md`.
 
-**Updating a client.** The `update` word at the right end of the `projects` header calls `POST /update` after a `ConfirmDialog` (it replaces files, so it always asks): the backend pulls the
-repo here (`~/work/pi-team`, override with `PI_TEAM_REPO`), writes `desktop/plugin.js` to this machine's
-`desktop-plugins/`, then hands the same bytes to every host in
-`~/.hermes/plugin-data/pi-team/clients.json` (`{"host": "ili@casamac", "path": "/home/ili/…/plugin.js"}`)
-over `ssh` with the file on stdin. The app watches that folder, so a copied file reloads by itself.
+**Updating a client.** The control at the right end of the `projects` header says `update plugin`; a click
+replaces the word with `✕` and `✓` on the same spot (a centred dialog for a two-word decision costs a
+round trip and breaks the row). `✓` posts `/update/request`, whose only job is `ctx.inject_message` with
+the request in plain words: pull the repo, put each file where it belongs, restart the backend, ship the
+panel to every client. The orchestrator then does it. That indirection is the point — the backend knows
+this one host's repo path, install paths and service name, while the agent can look at the machine it is
+on, so the button works for anyone who installs the plugin. Do not move the work back into the route;
+`POST /update` survives as a manual path (`TestClient`, one `steps` row per stage) and the button no
+longer calls it.
 
 - **A machine joins the list only after its SSH answers.** Add the entry, then prove it: `ssh <host>
   'sha256sum <path>'` must print the hash the route will write. Until that works the button reports the
