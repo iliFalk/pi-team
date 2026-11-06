@@ -182,6 +182,19 @@ def _shortstat(repo: str, sha: str) -> tuple:
     )
 
 
+def pi_session_dir(worktree: Path) -> Path:
+    """Where pi keeps the session of a lane: one folder per worktree path, encoded."""
+    key = str(worktree.resolve()).lstrip("/").replace("/", "-")
+    return Path.home() / ".pi" / "agent" / "sessions" / f"--{key}--"
+
+
+def pi_session_files(worktree: Path, session_id: str) -> list:
+    folder = pi_session_dir(worktree)
+    if not folder.is_dir():
+        return []
+    return sorted(folder.glob(f"*_{session_id}.jsonl"))
+
+
 def close_lanes(argv: list) -> int:
     """Close lanes for good: merge their branch, then write the closed marker.
 
@@ -232,6 +245,10 @@ def close_lanes(argv: list) -> int:
             print(f"  delete  worktree {worktree}" if worktree.is_dir() else "  delete  no worktree")
             print(f"  delete  branch {branch}")
             print(f"  delete  folder {lane_dir} ({size // 1024}K)")
+            sessions = pi_session_files(worktree, str(record.get("session_id") or "")) if worktree.is_dir() else []
+            session_kb = sum(f.stat().st_size for f in sessions) // 1024
+            print(f"  delete  pi session {pi_session_dir(worktree)} ({session_kb}K)" if sessions or worktree.is_dir()
+                  else "  delete  no pi session")
             print(f"  keep    one receipt line in {(root / 'closed.jsonl')}")
             print("")
             print("  Nothing is lost. The work lands in the main branch as commits, and every one of")
@@ -334,6 +351,19 @@ def close_lanes(argv: list) -> int:
                 cleaned.append("lane folder")
             except OSError:
                 pass
+            # pi keeps its own history beside the worktree: without this the folder outlives
+            # the lane and turns into a 90K orphan per lane.
+            session_files = pi_session_files(worktree, str(record.get("session_id") or ""))
+            for item in session_files:
+                item.unlink(missing_ok=True)
+            folder = pi_session_dir(worktree)
+            if session_files and folder.is_dir():
+                try:
+                    folder.rmdir()
+                except OSError:
+                    pass
+            if session_files:
+                cleaned.append("pi session")
 
         extra = f" · merged {merged_sha[:7]} into {default}" if merged_sha else ""
         tail = f" · removed {', '.join(cleaned)}" if cleaned else ""
