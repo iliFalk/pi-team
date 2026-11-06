@@ -158,11 +158,14 @@ Rules:
 A lane that fails is reported once: the backend watches `lane.json` every 10 s and on the
 `running` → `failed` edge it writes the failure into the lane's thread and tries to deliver it.
 
+Delivery is manual: the backend process may inject only into the chat it owns, and it owns no
+chat. So the watcher records, and the person presses `✉ deliver` in the lane card, which sends the
+text with the key of the open chat.
+
 | Where it goes | When |
 |---|---|
-| the feature's chat | the feature has exactly one chat |
-| any open chat | the feature has no chat yet |
-| the thread only, with `✉` on the row | no chat accepted it |
+| the thread, with `✉` on the row | immediately, always |
+| the chat | after `✉ deliver`; the panel supplies the key |
 
 - A lane already failed when the backend starts is recorded without a message: history, not news.
 - `✉ deliver` in the lane card hands the missed failure to the chat that is open.
