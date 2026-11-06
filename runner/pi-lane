@@ -1,0 +1,568 @@
+#!/usr/bin/env python3
+"""pi-lane — run one headless pi lane, answer its questions, record what it says.
+
+    pi-lane <lane> <repo> "<task>" [--provider P] [--model M] [--thinking L]
+            [--question-timeout SECONDS]
+
+A lane is a worktree plus one `pi --mode rpc` run:
+
+    <repo>/.worktrees/<lane>                  branch lane/<lane>
+    $HERMES_HOME/lanes/<lane>/lane.json       record: task, state, pid, session
+    $HERMES_HOME/lanes/<lane>/events.jsonl    raw pi event stream
+    $HERMES_HOME/lanes/<lane>/question.json   the question pi waits on
+    $HERMES_HOME/lanes/<lane>/answer.json     the answer, written by the panel
+    $HERMES_HOME/lanes/<lane>/stderr.txt      stderr
+
+RPC mode is what makes questions work: an extension dialog arrives as an
+`extension_ui_request`, the runner parks it in question.json, and the panel
+writes answer.json. No tmux, no pty.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import select
+import subprocess
+import sys
+import time
+from pathlib import Path
+from typing import NoReturn
+
+DIALOG_METHODS = {"select", "confirm", "input", "editor"}
+POLL_SECONDS = 0.3
+ENV_KEYS = (
+    "NVIDIA_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "OPENROUTER_API_KEY",
+    "OPENCODE_GO_API_KEY",
+    "ANTHROPIC_API_KEY",
+)
+DEFAULT_PROVIDER = "nvidia"
+DEFAULT_MODEL = "nvidia/nemotron-3.5-super-vl-120b-a12b"
+DEFAULT_THINKING = "medium"
+LANE_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def hermes_home() -> Path:
+    return Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes")
+
+
+def fail(message: str) -> NoReturn:
+    print(f"pi-lane: {message}", file=sys.stderr)
+    raise SystemExit(2)
+
+
+def load_env_keys() -> None:
+    """Hermes keeps provider keys in ~/.hermes/.env and never exports them."""
+    env_file = hermes_home() / ".env"
+    if not env_file.is_file():
+        return
+    try:
+        lines = env_file.read_text(errors="replace").splitlines()
+    except OSError:
+        return
+    for line in lines:
+        name, sep, value = line.partition("=")
+        if sep and name in ENV_KEYS and not os.environ.get(name):
+            os.environ[name] = value.strip()
+
+
+def write_record(lane_dir: Path, record: dict) -> None:
+    tmp = lane_dir / "lane.json.tmp"
+    tmp.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(lane_dir / "lane.json")
+
+
+def ensure_excludes(repo: str) -> None:
+    """Hide lane scratch from the main checkout without touching tracked files."""
+    base = Path(repo) / ".git"
+    try:
+        done = subprocess.run(
+            ["git", "-C", repo, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+        if done.returncode == 0 and done.stdout.strip():
+            base = Path(done.stdout.strip())
+    except (OSError, subprocess.SubprocessError):
+        pass
+    info = base / "info"
+    info.mkdir(parents=True, exist_ok=True)
+    exclude = info / "exclude"
+    existing = exclude.read_text(errors="replace").splitlines() if exclude.is_file() else []
+    for pattern in ("/.worktrees/", ".thinkrail/"):
+        if pattern not in existing:
+            with exclude.open("a", encoding="utf-8") as handle:
+                handle.write(pattern + "\n")
+
+
+def pid_alive(pid) -> bool:
+    try:
+        value = int(pid)
+    except (TypeError, ValueError):
+        return False
+    if value <= 0:
+        return False
+    try:
+        os.kill(value, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists, owned by another user
+    except OSError:
+        return False
+    return True
+
+
+def lane_records() -> list:
+    """Every readable lane record, so guards can see what is already running."""
+    records = []
+    root = hermes_home() / "lanes"
+    if not root.is_dir():
+        return records
+    for path in sorted(root.glob("*/lane.json")):
+        try:
+            record = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(record, dict):
+            records.append(record)
+    return records
+
+
+def assistant_text(event: dict) -> str:
+    message = event.get("message") or {}
+    if message.get("role") != "assistant":
+        return ""
+    content = message.get("content")
+    if isinstance(content, str):
+        return content.strip()
+    if not isinstance(content, list):
+        return ""
+    parts = [p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text"]
+    return "\n".join(p for p in parts if p).strip()
+
+
+def read_json(path: Path):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _git(repo: str, *args: str) -> tuple:
+    done = subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True)
+    return done.returncode, done.stdout.strip(), done.stderr.strip()
+
+
+def _default_branch(repo: str) -> str:
+    rc, out, _ = _git(repo, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+    if rc == 0 and out:
+        return out.split("/", 1)[-1]
+    for candidate in ("main", "master"):
+        rc, _, _ = _git(repo, "rev-parse", "--verify", "--quiet", candidate)
+        if rc == 0:
+            return candidate
+    return ""
+
+
+def _shortstat(repo: str, sha: str) -> tuple:
+    rc, out, _ = _git(repo, "show", "--shortstat", "--format=", sha)
+    if rc != 0:
+        return 0, 0, 0
+    files = re.search(r"(\d+) files? changed", out)
+    added = re.search(r"(\d+) insertions?\+?\)?", out)
+    removed = re.search(r"(\d+) deletions?", out)
+    return (
+        int(files.group(1)) if files else 0,
+        int(added.group(1)) if added else 0,
+        int(removed.group(1)) if removed else 0,
+    )
+
+
+def close_lanes(argv: list) -> int:
+    """Close lanes for good: merge their branch, then write the closed marker.
+
+    Nothing lands on the shelf by accident — this is the only path into it.
+    """
+    parser = argparse.ArgumentParser(prog="pi-lane close")
+    parser.add_argument("lanes", nargs="+")
+    parser.add_argument("--no-merge", action="store_true", help="record the close without merging")
+    parser.add_argument("--reason", default="", help="why it is closed; defaults to the merge")
+    args = parser.parse_args(argv)
+
+    root = hermes_home() / "lanes"
+    failed = 0
+    for name in args.lanes:
+        lane_dir = root / name
+        record = read_json(lane_dir / "lane.json")
+        if not record:
+            print(f"{name}: no such lane", file=sys.stderr)
+            failed += 1
+            continue
+        if record.get("closed_at"):
+            print(f"{name}: already closed")
+            continue
+        repo = str(record.get("repo") or "")
+        branch = str(record.get("branch") or f"lane/{name}")
+        state = str(record.get("state") or "")
+        if state == "running" and pid_alive(record.get("pid")):
+            print(f"{name}: still running — stop it first", file=sys.stderr)
+            failed += 1
+            continue
+
+        default = _default_branch(repo) if repo and Path(repo).is_dir() else ""
+        merged_sha = ""
+        merged_subject = ""
+        merged_date = ""
+        reason = args.reason
+        if default and not args.no_merge:
+            rc, _, _ = _git(repo, "rev-parse", "--verify", "--quiet", branch)
+            if rc == 0:
+                rc_merged, _, _ = _git(repo, "merge-base", "--is-ancestor", branch, default)
+                if rc_merged != 0:
+                    rc_m, out_m, err_m = _git(repo, "merge", "--no-ff", branch, "-m", f"Merge lane {name}")
+                    if rc_m != 0:
+                        print(f"{name}: merge failed — {err_m or out_m}", file=sys.stderr)
+                        failed += 1
+                        continue
+                rc_s, sha, _ = _git(repo, "rev-parse", default)
+                if rc_s == 0:
+                    merged_sha = sha
+                    _, subject, _ = _git(repo, "log", "-1", "--format=%s", sha)
+                    merged_subject = subject
+                    _, date, _ = _git(repo, "log", "-1", "--format=%ad", "--date=short", sha)
+                    merged_date = date
+                reason = reason or f"closed after merge into {default}"
+        if not reason:
+            reason = "closed by hand"
+
+        record["closed_at"] = int(time.time())
+        record["closed_reason"] = reason
+        if merged_sha:
+            files, added, removed = _shortstat(repo, merged_sha)
+            record.update({
+                "merge_sha": merged_sha,
+                "merge_subject": merged_subject,
+                "closed_date": merged_date,
+                "merge_files": files,
+                "merge_insertions": added,
+                "merge_deletions": removed,
+            })
+        lane_dir.mkdir(parents=True, exist_ok=True)
+        (lane_dir / "lane.json").write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        extra = f" · merged {merged_sha[:7]} into {default}" if merged_sha else ""
+        print(f"{name}: closed{extra}")
+
+    return 1 if failed else 0
+
+
+def say_in_thread(argv: list) -> int:
+    """Append an orchestrator reply into a lane's thread. Nothing is sent to pi."""
+    parser = argparse.ArgumentParser(prog="pi-lane say")
+    parser.add_argument("lane")
+    parser.add_argument("text")
+    args = parser.parse_args(argv)
+    lane_dir = hermes_home() / "lanes" / args.lane
+    if not (lane_dir / "lane.json").exists():
+        print(f"no such lane: {args.lane}", file=sys.stderr)
+        return 1
+    entry = {"who": "jarvis", "at": int(time.time()), "text": args.text}
+    with (lane_dir / "thread.jsonl").open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    print(f"{args.lane}: said")
+    return 0
+
+
+def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: str, question_timeout: int) -> int:
+    """One `pi --mode rpc` turn: the lane's first task or a continuation of its session."""
+    events_path = lane_dir / "events.jsonl"
+    stderr_path = lane_dir / "stderr.txt"
+    question_path = lane_dir / "question.json"
+    answer_path = lane_dir / "answer.json"
+    text = ""
+    cmd = [
+        "pi", "--mode", "rpc", "--session-id", record["session_id"],
+        "--provider", record["provider"], "--model", record["model"], "--thinking", record.get("thinking") or DEFAULT_THINKING,
+    ]
+    text = ""
+    exit_code = 0
+    finished = False
+
+    with stderr_path.open("a", encoding="utf-8") as stderr_handle, events_path.open(
+        "a", encoding="utf-8"
+    ) as events:
+        proc = subprocess.Popen(
+            cmd, cwd=str(worktree), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=stderr_handle, text=True, bufsize=1,
+        )
+        assert proc.stdin is not None and proc.stdout is not None
+        proc.stdin.write(json.dumps({"type": "prompt", "message": task}) + "\n")
+        proc.stdin.flush()
+
+        question: dict | None = None
+        question_since = 0.0
+
+        while True:
+            ready, _, _ = select.select([proc.stdout], [], [], POLL_SECONDS)
+
+            if ready:
+                line = proc.stdout.readline()
+                if not line:
+                    break
+                events.write(line)
+                events.flush()
+                try:
+                    event = json.loads(line)
+                except ValueError:
+                    continue
+
+                kind = event.get("type")
+                if kind == "message_end":
+                    said = assistant_text(event)
+                    if said:
+                        text = said
+                elif kind == "extension_ui_request" and event.get("method") in DIALOG_METHODS:
+                    question = {
+                        "id": event.get("id"),
+                        "method": event.get("method"),
+                        "title": event.get("title") or "",
+                        "message": event.get("message") or "",
+                        "options": event.get("options") or [],
+                        "asked_at": int(time.time()),
+                    }
+                    question_since = time.monotonic()
+                    question_path.write_text(json.dumps(question, indent=2) + "\n", encoding="utf-8")
+                    record["state"] = "waiting"
+                    write_record(lane_dir, record)
+                elif kind == "agent_end":
+                    finished = True
+
+            if question is not None:
+                if answer_path.exists():
+                    try:
+                        answer = json.loads(answer_path.read_text(encoding="utf-8"))
+                    except (OSError, ValueError):
+                        answer = {}
+                    if answer.get("id") in (None, question["id"]):
+                        payload: dict = {"type": "extension_ui_response", "id": question["id"]}
+                        if answer.get("cancelled"):
+                            payload["cancelled"] = True
+                        else:
+                            payload["value"] = str(answer.get("value", ""))
+                        proc.stdin.write(json.dumps(payload) + "\n")
+                        proc.stdin.flush()
+                        question = None
+                        question_path.unlink(missing_ok=True)
+                        answer_path.unlink(missing_ok=True)
+                        record["state"] = "running"
+                        write_record(lane_dir, record)
+                elif question_timeout and (time.monotonic() - question_since) > question_timeout:
+                    proc.stdin.write(json.dumps({
+                        "type": "extension_ui_response", "id": question["id"], "cancelled": True,
+                    }) + "\n")
+                    proc.stdin.flush()
+                    question_path.unlink(missing_ok=True)
+                    question = None
+                    record["state"] = "running"
+                    write_record(lane_dir, record)
+
+            if finished or proc.poll() is not None:
+                break
+
+        # pi in RPC mode is a server: it stays alive after `agent_end`. Drain
+        # whatever is already in the pipe, then stop it ourselves.
+        while True:
+            ready, _, _ = select.select([proc.stdout], [], [], 0.2)
+            if not ready:
+                break
+            line = proc.stdout.readline()
+            if not line:
+                break
+            events.write(line)
+
+        try:
+            proc.stdin.close()
+        except OSError:
+            pass
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=10)
+
+        exit_code = int(proc.returncode or 0)
+
+    record["finished"] = int(time.time())
+    record["exit"] = exit_code
+    record["state"] = "done" if (exit_code == 0 and text) else "failed"
+    write_record(lane_dir, record)
+    question_path.unlink(missing_ok=True)
+    return exit_code
+
+
+def continue_lane(argv: list) -> int:
+    """Add a task to a finished lane by running its own session again."""
+    parser = argparse.ArgumentParser(prog="pi-lane continue")
+    parser.add_argument("lane")
+    parser.add_argument("text")
+    parser.add_argument("--question-timeout", type=int, default=1800)
+    args = parser.parse_args(argv)
+
+    lane_dir = hermes_home() / "lanes" / args.lane
+    record = read_json(lane_dir / "lane.json")
+    if not record:
+        print(f"no such lane: {args.lane}", file=sys.stderr)
+        return 1
+    if record.get("closed_at"):
+        print(f"{args.lane}: closed — open a new lane instead", file=sys.stderr)
+        return 1
+    if str(record.get("state")) == "running" and pid_alive(record.get("pid")):
+        print(f"{args.lane}: still running", file=sys.stderr)
+        return 1
+    worktree = Path(str(record.get("worktree") or ""))
+    if not worktree.is_dir():
+        print(f"{args.lane}: its worktree is gone", file=sys.stderr)
+        return 1
+
+    with (lane_dir / "thread.jsonl").open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps({"who": "user", "at": int(time.time()), "text": args.text}, ensure_ascii=False) + "\n")
+
+    record.pop("closed_at", None)
+    record.pop("closed_reason", None)
+    record["handed_at"] = None
+    record["state"] = "running"
+    record["pid"] = os.getpid()
+    record["started"] = int(time.time())
+    record["exit"] = None
+    record["finished"] = None
+    write_record(lane_dir, record)
+    load_env_keys()
+    print(f"{args.lane}: continuing")
+    return run_session(lane_dir, record, args.lane, worktree, args.text, args.question_timeout)
+
+
+def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] == "close":
+        return close_lanes(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "say":
+        return say_in_thread(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "continue":
+        return continue_lane(sys.argv[2:])
+
+    parser = argparse.ArgumentParser(prog="pi-lane")
+    parser.add_argument("lane")
+    parser.add_argument("task")
+    parser.add_argument("--repo", default="", help="repository path; resolved from the registry when omitted")
+    parser.add_argument("--project", default="", help="registered project name")
+    parser.add_argument("--feature", "--group", dest="feature", default="", help="feature name inside the project")
+    parser.add_argument("--provider", default=DEFAULT_PROVIDER)
+    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--thinking", default=DEFAULT_THINKING)
+    parser.add_argument("--question-timeout", type=int, default=1800)
+    args = parser.parse_args()
+
+    if not LANE_RE.match(args.lane):
+        fail(f"bad lane name: {args.lane}")
+
+    project = args.project
+    repo_path = args.repo
+    if project:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import pireg  # noqa: E402
+
+        entry = pireg.project(pireg.load(), project)
+        if entry is None:
+            fail(f"unknown project: {project} — register it with pi-project add")
+        repo_path = str(entry.get("repo") or "")
+        if not repo_path:
+            fail(f"project {project} has no repo path")
+    if not repo_path:
+        fail("pass --project or --repo")
+    repo = os.path.realpath(repo_path)
+    if not Path(repo, ".git").exists():
+        fail(f"not a git repo: {repo}")
+    project = project or Path(repo).name
+    if not any(
+        os.access(os.path.join(folder, "pi"), os.X_OK)
+        for folder in os.environ.get("PATH", "").split(os.pathsep)
+        if folder
+    ):
+        fail("pi not found")
+
+    load_env_keys()
+
+    lane = args.lane
+    worktree = Path(repo) / ".worktrees" / lane
+    branch = f"lane/{lane}"
+
+    # Guards: one running lane per name in a repository, and a warning when the
+    # same feature already has a lane in flight. No lock files: the record and
+    # its pid are the truth.
+    in_flight: list = []
+    for record in lane_records():
+        running = str(record.get("state")) == "running" and pid_alive(record.get("pid"))
+        if not running:
+            continue
+        if record.get("lane") == lane and record.get("repo") == repo:
+            fail(f"lane {lane} is already running in {repo}")
+        if record.get("repo") == repo and args.feature and record.get("group") == args.feature.strip():
+            in_flight.append(str(record.get("lane")))
+    if in_flight:
+        print(
+            f"pi-lane: note — feature {args.feature} already has a lane in flight: {', '.join(in_flight)}",
+            file=sys.stderr,
+        )
+    lane_dir = hermes_home() / "lanes" / lane
+    lane_dir.mkdir(parents=True, exist_ok=True)
+    events_path = lane_dir / "events.jsonl"
+    stderr_path = lane_dir / "stderr.txt"
+    question_path = lane_dir / "question.json"
+    answer_path = lane_dir / "answer.json"
+    for stale in (question_path, answer_path):
+        if stale.exists():
+            stale.unlink()
+    events_path.write_text("", encoding="utf-8")
+
+    if not worktree.is_dir():
+        created = False
+        for extra in (["-b", branch], []):
+            done = subprocess.run(
+                ["git", "-C", repo, "worktree", "add", "-q", str(worktree), *extra],
+                capture_output=True, text=True, check=False,
+            )
+            if done.returncode == 0:
+                created = True
+                break
+        if not created:
+            fail(f"git worktree add failed for {worktree}")
+    ensure_excludes(repo)
+
+    record = {
+        "lane": lane,
+        "task": args.task,
+        "project": project,
+        "group": args.feature.strip(),
+        "repo": repo,
+        "worktree": str(worktree),
+        "branch": branch,
+        "session_id": f"{Path(repo).name}-{lane}",
+        "provider": args.provider,
+        "model": args.model,
+        "thinking": args.thinking,
+        "state": "running",
+        "pid": os.getpid(),
+        "started": int(time.time()),
+        "exit": None,
+    }
+    write_record(lane_dir, record)
+    return run_session(lane_dir, record, lane, worktree, args.task, args.question_timeout)
+
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

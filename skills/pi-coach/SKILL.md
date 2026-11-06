@@ -222,11 +222,39 @@ PY
 
 The `pi-team` right panel shows the same fields: last text, last tool call, turns, tokens and cost.
 
+**The card is a thread per lane.** `to review` on the card queues the lane (it stays visible as
+`in review`); the `send` on the review row, after its tick, puts the whole queue into the chat. A
+message Ilja writes in a lane's thread reaches the orchestrator, never pi. Answer in the thread with
+`pi-lane say <lane> "…"`, and never start a continuation without asking first: put the exact prompt in
+the question ("продолжить с текстом «…»? да / нет") and run `pi-lane continue <lane> "…"` only after his
+да. A continuation reuses the lane's `pi` session, clears the review marker, and writes the text into the
+thread.
+
 **Closing is a decision, never a side effect.** A lane that finishes, or whose worktree disappears, stays in
-the list. Ilja hands it over from the lane's card (`hand over`): that moves it into the tree's `handed` group
-and asks the chat to look. Only after that does the orchestrator verify, merge, and run
-`pi-lane close <lane>`, which merges the branch, records the merge receipt, and puts the lane in `closed`.
-`pi-lane close --no-merge` records a close without merging; `--reason "…"` sets the wording.
+the active list with its own state. Nothing in the repository moves it: not `done`, not `stopped`, not a
+merged branch, not a missing worktree. Two fields alone decide a group, and only the orchestrator writes
+them:
+
+| Group | Field in `lane.json` | Written by |
+|---|---|---|
+| `review` | `handed_at` | the card's `send for review`, on Ilja's click |
+| `closed` | `closed_at` | `pi-lane close`, after Ilja says close |
+
+A group with no entry does not render. Never seed either field to show how the tree looks: Ilja reads an
+unapproved row as the orchestrator moving his work and answers "no one must be in closed and handed".
+Name a group after what the lane WAITS for (`review`), not after the gesture that put it there
+(`handed`): the old label said nothing about what happens next, and he asked for a rename within a minute.
+
+Verify, merge and close in that order: read the diff, run the project gates, then `pi-lane close <lane>`,
+which merges the branch, records the merge receipt and stamps `closed_at`. `pi-lane close --no-merge`
+closes without merging; `--reason "…"` sets the wording.
+
+**The review queue reaches the chat in one message.** The `send` word on the `review` header row posts
+`/review/send` with the panel's `session_key`; the backend lists every handed lane (name, state, diff size,
+failure) and calls `ctx.inject_message` so the orchestrator gets the whole queue in one turn. The answer is
+a report, never a merge: check each lane, show what you found, and wait for his go before closing.
+`409` means the queue is empty. A one-word control on a header that also toggles needs the click stopped
+(`stopPropagation`), or it collapses the group it just sent.
 
 **The counts belong to the deepest visible level, and a project always sums its own.** A feature prints
 them while it is closed and hands over to its lane rows once it opens; a project prints them open or
@@ -356,7 +384,7 @@ over `ssh` with the file on stdin. The app watches that folder, so a copied file
 | changes | `git status --porcelain`, `git diff HEAD --stat` |
 | plan | `.thinkrail/context/todos/<session-id>.json` |
 | specs | every `SPEC.md` of the worktree with `id` and `type`, ordered by the `parent` chain; a dot marks a spec the lane touched |
-| shelf | why the lane left the active list: merged, quiet, or worktree gone |
+| shelf | `handed_at` / `closed_at`: which group the lane sits in; the git hint (`merged into <branch>`, `worktree gone`) is display-only |
 
 The backend reads the last 1 MB of `events.jsonl`. Older events do not reach the panel.
 
@@ -395,31 +423,25 @@ To show the animation without spending a lane, write a simulated record and keep
   and he reports a fault that is only the fixture.
 - Tear the demo down (`state: done`, or `rm -rf ~/.hermes/lanes/<lane>`) so it never reads as real work.
 
-## Shelf
+## Review and closed
 
-A finished lane leaves the active list and sits on the shelf when one of these is true:
+Two groups sit above the active list, and both stay empty until the orchestrator writes the field that
+fills them. There is no git-derived shelf: a merged branch, a missing worktree or a quiet week changes
+nothing on a row.
 
-- its worktree no longer exists;
-- its commits are already in the default branch (a lane without commits on the default tip does not
-  count — nothing was merged);
-- it stayed quiet for 7 days.
+| Group | Field | Meaning |
+|---|---|---|
+| `review` | `handed_at` | finished and waiting for a check |
+| `closed` | `closed_at` | checked, merged, worktree gone |
 
-The left panel shows the shelf as a separate group. The record stays until the lane is closed, so the
-task and the last text survive. Close a shelved lane with the merge, worktree removal and record
-deletion from the section above.
+The git hints (`merged into <branch>`, `worktree gone`) are display-only text on the card and feed no
+group. `shelved: true` in `lane.json` is not a flag the backend honours; only `closed_at` is. Fill a field
+by hand only for a demonstration Ilja asked for, and clear it afterwards — `/review/send` collects `handed_at`
+rows, so a leftover entry ends up in the next queue the button posts.
 
-**A shelf row cannot be forced with a flag.** `shelved: true` in `lane.json` is ignored — the backend
-DERIVES the shelf from the repository every time it serves the list. To make a real shelf row, do the
-real thing in the demo project: `git worktree add .worktrees/<lane> -b lane/<lane>`, commit there, merge
-that branch into the default branch with `--no-ff`, and keep the worktree. The reason then reads
-`merged into <branch>`, and the branch name in that string is how you learn whether the default is `main`
-or `master`. The other two reasons need no work: a worktree path that does not exist gives `worktree
-gone`, and a `running` lane whose pid died is served as `stopped`.
-
-**Counts and the shelf answer different questions.** A shelved lane is not counted in any of the four
-header groups, so a project whose only finished lane was merged shows `✓` only if another active lane is
-`done` — verify the arithmetic from `/lanes` before reporting the numbers to Ilja, and name the shelved
-lanes that were excluded.
+**Counts exclude both groups.** A lane in `review` or `closed` is counted in none of the four header groups,
+so a project whose only finished lane sits in `review` shows no `✓`. Verify the arithmetic from `/lanes`
+before reporting numbers to Ilja, and name the rows that were excluded.
 
 ## Specs: pi-spec-graph
 
