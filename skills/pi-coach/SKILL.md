@@ -328,6 +328,20 @@ same hue as an 18% wash on the deepest visible level only. Failure is `#8A1C0E` 
 `stopped` and any `last_error`, and it does not escalate to a parent unless he asks. Values, contrast maths
 and the constant block: `hermes-desktop-plugins` § `references/panel-visuals.md` § State colours.
 
+**A bad lane has no messenger.** A failed lane speaks through its colour and one line: the bare `failed:`
+plus `last_error` in the card, the red `!` count on its feature and project, and nothing else. There is no
+watcher, no unread mark, no delivery button — a backend cannot open a conversation on its own (a keyless
+`inject_message` is refused), so an unprompted notice has nowhere to land and adds only a mark nobody reads.
+Ilja's rule: "if it doesn't work with delivery in chat, we leave it as we have — I will see if something is
+wrong on the lane itself through colour". Do not rebuild the notification channel without a delivery path
+the backend owns; the panel's job is that the colour and the reason are RIGHT.
+
+**The right side is one column of cards, and every card is the same shell.** A card is a header strip of
+`HEADER_H` with its title in the tree's mono style, then a scrolling body at the tree's own 10-px left edge
+(`px-2.5`) — compose cards and placeholder cards alike. A card that brings its own `p-3` on top of a
+section's 10 px sits 22 px from the divider while every list row sits at 10, and the user reads that as a
+broken layout before he can name it. One `CardShell({ title, children })` keeps all four in line.
+
 **Where the panel lives.** It sits on the right edge with `enforce: true`; the constraint behind that
 choice is in § Where the panel lives. Moving it means editing the dock hints in `plugin.js`.
 
@@ -639,6 +653,16 @@ mv ~/src/thinkrail/packages/spec-graph/node_modules/package \
   `node --check` passes because the syntax is valid. Run `node desktop/render-check.mjs` in
   `~/work/pi-team` (it stubs the SDK and calls every component) and fix the name before copying the file
   anywhere. Keep its fixtures rich enough to clear early returns, or the body never runs.
+- **A two-column pane needs BOTH columns inline.** The list gets `style: { width: '50%', minWidth: 0 }` and
+  the detail side gets `style: { width: '50%', minWidth: 0 }`, with `overflow: 'hidden'` on each column and
+  on the pane root; a `min-w-0` class on the flexible side is not enough. A textarea or a long mono name
+  sets a min-content width the detail side will not give back, so it takes width from the list — measured
+  122 / 283 instead of 202 / 202 in a 405-px pane — and the whole pane then scrolls sideways: the list's
+  text starts at x=0 with words cut at the left edge, which reads as a geometry bug and is a flex one.
+- **A feature taken back leaves three traces.** Code, the fields it added to a payload, and the data files
+  it wrote (`notified.json`, a pid file, a thread flag). Delete all three, restart the backend, then prove
+  the removal with `TestClient`: `404` for its route and zero occurrences of its field in `/lanes`. A `curl`
+  status proves nothing — auth answers before routing, so 401 comes back for a path that never existed.
 
 ## Verification
 
