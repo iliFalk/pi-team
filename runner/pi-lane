@@ -192,6 +192,7 @@ def close_lanes(argv: list) -> int:
     parser.add_argument("--no-merge", action="store_true", help="record the close without merging")
     parser.add_argument("--reason", default="", help="why it is closed; defaults to the merge")
     parser.add_argument("--keep", action="store_true", help="keep the worktree, branch and lane folder")
+    parser.add_argument("--yes", action="store_true", help="confirm the deletion; without it only the plan prints")
     args = parser.parse_args(argv)
 
     root = hermes_home() / "lanes"
@@ -213,6 +214,26 @@ def close_lanes(argv: list) -> int:
         if state == "running" and pid_alive(record.get("pid")):
             print(f"{name}: still running — stop it first", file=sys.stderr)
             failed += 1
+            continue
+
+        if not args.yes and not args.no_merge:
+            # Say exactly what disappears before anything does.
+            default_name = _default_branch(repo) if repo and Path(repo).is_dir() else "?"
+            rc_c, commits, _ = _git(worktree, "rev-list", "--count", f"{default_name}..HEAD") if worktree.is_dir() else (1, "0", "")
+            rc_d, dirty, _ = _git(str(worktree), "status", "--porcelain") if worktree.is_dir() else (1, "", "")
+            changed = len([l for l in dirty.splitlines() if l.strip()])
+            size = 0
+            if lane_dir.is_dir():
+                size = sum(f.stat().st_size for f in lane_dir.rglob("*") if f.is_file())
+            print(f"{name}: nothing done yet — this is the plan")
+            print(f"  merge   {branch} → {default_name}"
+                  + (f" ({commits.strip()} commits)" if worktree.is_dir() else " (no worktree)"))
+            print(f"  commit  {changed} uncommitted file(s) from the lane" if changed else "  commit  nothing uncommitted")
+            print(f"  delete  worktree {worktree}" if worktree.is_dir() else "  delete  no worktree")
+            print(f"  delete  branch {branch}")
+            print(f"  delete  folder {lane_dir} ({size // 1024}K)")
+            print(f"  keep    one receipt line in {(root / 'closed.jsonl')}")
+            print(f"  rerun with --yes to carry it out")
             continue
 
         # A lane does not commit, so its work is still uncommitted here: commit it on the lane

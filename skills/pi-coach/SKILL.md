@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 2.5.1
+version: 2.6.0
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -156,7 +156,13 @@ The runner does five things:
 The runner is `~/.hermes/scripts/pi-lane`, Python, one process per lane. `--question-timeout SECONDS`
 (default 1800) cancels an unanswered question.
 
-The raw event stream goes to `$HERMES_HOME/lanes/<lane>/events.jsonl`, stderr to `stderr.txt`.
+The raw event stream goes to `$HERMES_HOME/lanes/<lane>/events.jsonl`, stderr to `stderr.txt`. The stream
+is unfiltered stdout, so most of its bytes are noise: `message_update` (the answer streamed token by token)
+is about 58% of a file, and `agent_end` repeats the whole transcript while `message_start`/`message_end`
+repeat each message twice — 72–74% of a 400 KB stream is duplication or streaming. Only `message_end`,
+`turn_end`, `tool_execution_*`, `extension_ui_request` and `agent_settled` are worth keeping; a session's
+short run already writes ~80 KB, so a lane folder grows fast and the drawer of `events.jsonl` is a
+measurement question, not a guess.
 
 Run several lanes in separate calls; each is its own process and its own worktree.
 
@@ -168,14 +174,22 @@ truth, and a dead pid means free.
 
 ## Lane: follow up
 
-The lane owns a `pi` session, not a conversation. A follow-up is another run with the same session id,
-so the context continues:
+A lane owns a `pi` session, not a conversation: the runner starts it with `--session-id <repo>-<lane>`, so
+a continuation is the same conversation with its whole context. Use the runner, never a fresh open —
+`pi-lane <lane> "…"` cuts a SECOND worktree and looks like a new lane:
 
 ```sh
-pi-lane <lane> "<next task>" --project <project> --feature <feature>
+pi-lane continue <lane> "<next task>"
 ```
 
-The runner reuses the existing worktree and branch. It does not reset the session.
+It refuses a closed lane, a lane whose worktree is gone and a lane still running; it clears `handed_at`,
+appends the text to the lane's thread, sets `running` and runs that session in that worktree. The record
+keeps `provider`, `model` and `thinking`, so the continuation runs exactly like the first run.
+
+**Ask before continuing.** His note in a thread is a thought, not an order. Put the exact prompt in the
+question in that thread ("продолжить с текстом «…»? да / нет") and run `pi-lane continue` only after his
+да. A silent continuation moves a `done` lane to `running` and burns tokens on his behalf, which reads as
+the panel starting work by itself.
 
 ## Questions from a lane
 
@@ -222,13 +236,21 @@ PY
 
 The `pi-team` right panel shows the same fields: last text, last tool call, turns, tokens and cost.
 
+**Show the plan before closing.** `pi-lane close <lane>` prints what will be merged and what will be
+deleted (worktree, branch, lane folder) and does nothing else; only `--yes` carries it out. Run the bare
+form, paste the plan into the chat, wait for his go, then run it with `--yes`. A close commits the lane's
+uncommitted work on its branch first, merges, writes one receipt line into `lanes/closed.jsonl`, and
+deletes the worktree, the branch and the folder.
+
 **The card is a thread per lane.** `to review` on the card queues the lane (it stays visible as
-`in review`); the `send` on the review row, after its tick, puts the whole queue into the chat. A
-message Ilja writes in a lane's thread reaches the orchestrator, never pi. Answer in the thread with
-`pi-lane say <lane> "…"`, and never start a continuation without asking first: put the exact prompt in
-the question ("продолжить с текстом «…»? да / нет") and run `pi-lane continue <lane> "…"` only after his
-да. A continuation reuses the lane's `pi` session, clears the review marker, and writes the text into the
-thread.
+`in review`, never disappears — a control that vanishes once it worked reads as a missing feature); the
+`send` on the review row, after its tick, puts the whole queue into the chat. A message Ilja writes in a
+lane's thread reaches the orchestrator, never pi: the route appends it to
+`$HERMES_HOME/lanes/<lane>/thread.jsonl` (`{who: lane|jarvis|user, at, text}`, one object per line) and
+calls `ctx.inject_message` with a `[lane <name> · project/group · state]` prefix. Answer in the same
+thread with `pi-lane say <lane> "…"` — it appends `who: jarvis` and touches nothing else, so pi never
+hears it until a continuation is started. The card draws the lane's own last text as the newest bubble
+and the stored rows under it, so the same words never appear twice.
 
 **Closing is a decision, never a side effect.** A lane that finishes, or whose worktree disappears, stays in
 the active list with its own state. Nothing in the repository moves it: not `done`, not `stopped`, not a
@@ -237,7 +259,7 @@ them:
 
 | Group | Field in `lane.json` | Written by |
 |---|---|---|
-| `review` | `handed_at` | the card's `send for review`, on Ilja's click |
+| `review` | `handed_at` | the card's `to review`, on Ilja's click |
 | `closed` | `closed_at` | `pi-lane close`, after Ilja says close |
 
 A group with no entry does not render. Never seed either field to show how the tree looks: Ilja reads an
@@ -246,8 +268,9 @@ Name a group after what the lane WAITS for (`review`), not after the gesture tha
 (`handed`): the old label said nothing about what happens next, and he asked for a rename within a minute.
 
 Verify, merge and close in that order: read the diff, run the project gates, then `pi-lane close <lane>`,
-which merges the branch, records the merge receipt and stamps `closed_at`. `pi-lane close --no-merge`
-closes without merging; `--reason "…"` sets the wording.
+which commits the lane's work on its branch, merges it, writes the receipt line and removes the worktree,
+the branch and the record. `pi-lane close --no-merge` closes without merging; `--keep` keeps the worktree,
+branch and folder; `--reason "…"` sets the wording.
 
 **The review queue reaches the chat in one message.** The `send` word on the `review` header row posts
 `/review/send` with the panel's `session_key`; the backend lists every handed lane (name, state, diff size,
@@ -292,14 +315,32 @@ A lane whose gates were not run does not close.
 ## Lane: close
 
 ```sh
-# a good branch: merge into the main line, then drop the worktree and the record
-git -C <repo> merge --no-ff lane/<lane>
-git -C <repo> worktree remove .worktrees/<lane>
-rm -rf ~/.hermes/lanes/<lane>
+pi-lane close <lane>              # commit, merge, receipt, then remove worktree, branch and folder
+pi-lane close <lane> --no-merge   # close without touching the branch
+pi-lane close <lane> --keep       # keep worktree, branch and record
 ```
 
-A dirty worktree: `git worktree remove --force`, then `git worktree prune`. Keep the lane record while the
-branch is alive: it holds the task and the last text.
+One command, six steps in this order:
+
+1. Commits the lane's uncommitted work on `lane/<lane>` as `Lane <name>: <first line of the task>`.
+2. Merges that branch into the default branch with `--no-ff`.
+3. Appends one receipt line to `$HERMES_HOME/lanes/closed.jsonl`: lane, project, group, branch, state,
+   `closed_at`, reason, merge sha and subject, date, files, insertions, deletions.
+4. Removes the worktree, the branch and `$HERMES_HOME/lanes/<lane>` itself.
+5. Stamps nothing further — read `closed.jsonl` back to confirm the receipt.
+6. Leaves the repository's other branches alone.
+
+**The order is the point.** Committing after the merge turns the merge into `Already up to date` on an
+empty branch, and the `branch -d` plus `worktree remove --force` that follow then delete the only copy of
+the work; the close still prints success. Prove the routine on a disposable repository, not on a lane
+holding real work: a repo, a worktree on `lane/probe`, one uncommitted line, a hand-written `lane.json`,
+then close it — `git log` must show the lane commit AND the merge commit, and the default branch must
+contain the line.
+
+**A closed lane has no folder.** Its journal line is the whole record: `/lanes` and `/lanes/<lane>` serve
+it as `archived: true` with the merge receipt, so the `closed` group still lists what was merged as what.
+Everything that must survive the close — task, last text, decision — has to be in that line or in git
+before `pi-lane close` runs; afterwards there is nothing left to read it from.
 
 ## Where the panel lives
 
@@ -385,6 +426,8 @@ over `ssh` with the file on stdin. The app watches that folder, so a copied file
 | plan | `.thinkrail/context/todos/<session-id>.json` |
 | specs | every `SPEC.md` of the worktree with `id` and `type`, ordered by the `parent` chain; a dot marks a spec the lane touched |
 | shelf | `handed_at` / `closed_at`: which group the lane sits in; the git hint (`merged into <branch>`, `worktree gone`) is display-only |
+| thread | `thread.jsonl`: `{who, at, text}` rows, the lane's own last text drawn as the newest bubble |
+| archived | no folder left: the row comes from `closed.jsonl`, the card draws the receipt only |
 
 The backend reads the last 1 MB of `events.jsonl`. Older events do not reach the panel.
 
@@ -438,6 +481,12 @@ The git hints (`merged into <branch>`, `worktree gone`) are display-only text on
 group. `shelved: true` in `lane.json` is not a flag the backend honours; only `closed_at` is. Fill a field
 by hand only for a demonstration Ilja asked for, and clear it afterwards — `/review/send` collects `handed_at`
 rows, so a leftover entry ends up in the next queue the button posts.
+
+**A closed lane is one line, not a folder.** `pi-lane close` deletes the record with the worktree, so the
+`closed` group is drawn from `$HERMES_HOME/lanes/closed.jsonl` — one JSON object per lane, read into the
+list as `archived: true`. An archived row carries the receipt only: no thread, no `to review`, no diff
+block, and the card says `record · closed · folder removed, receipt kept`. Never write a route or a card
+that expects a closed lane's files to exist.
 
 **Counts exclude both groups.** A lane in `review` or `closed` is counted in none of the four header groups,
 so a project whose only finished lane sits in `review` shows no `✓`. Verify the arithmetic from `/lanes`
@@ -494,6 +543,13 @@ mv ~/src/thinkrail/packages/spec-graph/node_modules/package \
 
 ## Pitfalls
 
+- **The runner's run loop is shared by the first run and a continuation.** It lives in `run_session(lane_dir, record, lane, worktree, task, question_timeout)`, which reads `provider`, `model` and `thinking` from the record, so `main()` and `pi-lane continue` behave identically. When you move that block by script, parse before spending a lane: `python3 -c "import ast,pathlib; ast.parse(open(path).read())"`. The block sat inside a `with` in `main()`, so a function needs it DEDENTED by the depth it left; a duplicated assignment at the seam (`text = ""` twice) means the anchor matched the wrong end of the move, not that the code is fine.
+- **Prove a runner change with a throwaway lane, not with the panel.** `pi-lane smoke --project <p> --feature <f> "Answer one word: ok. Change nothing." --question-timeout 60` must end `state: done`, `exit: 0`; then `pi-lane continue smoke "one more word"` must print `continuing`, end `done` again and leave MORE lines in `events.jsonl` than the first run. Two states and one line count settle the refactor in a minute; a green syntax check proves nothing about the run loop. Remove the probe lane afterwards (§ probe lane pitfall).
+- **Commit before you merge, or the cleanup eats the work.** A lane never commits, so its changes sit
+  uncommitted in the worktree; `git merge --no-ff lane/<lane>` answers `Already up to date`, and the
+  `git branch -d` and `worktree remove --force` that follow delete the only copy. Every automated close is
+  commit → merge → receipt → remove, and it is proven on a throwaway repository with one uncommitted line
+  before it points at a real lane.
 - **The plugin backend is imported once, at `hermes-serve` start.** An edited
   `~/.hermes/plugins/pi-team/dashboard/plugin_api.py` does not reach the live route. Restart the
   service; the agent session runs inside it, so schedule the restart
