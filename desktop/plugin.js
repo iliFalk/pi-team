@@ -717,6 +717,10 @@ let pendingScroll = null
 
 function reportScroll(side, element) {
   if (!element) return
+  // The frame is written here, synchronously: a scroll event arrives before the frame is painted, so a
+  // rect read and three attribute writes still land in the same picture. The pill below keeps its frame
+  // budget — it is decoration and may lag by one.
+  measureSelection()
   const span = element.scrollHeight - element.clientHeight
   // Keep only the newest position, and write it at most once per frame: a wheel fires dozens
   // of events and every atom write re-renders the whole panel.
@@ -730,8 +734,6 @@ function reportScroll(side, element) {
       const { side: which, progress, span: room } = pendingScroll
       pendingScroll = null
       scrollPill.set({ ...scrollPill.get(), [which]: progress, visible: room > 0 })
-      // The tree moved: put the frame back on its row now, not on the next render.
-      measureSelection()
     })
   }
   if (pillTimer) clearTimeout(pillTimer)
