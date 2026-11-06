@@ -448,6 +448,54 @@ const collapsedAtom = atom({})
 const selectedBox = atom(null)
 
 
+// The right pane shows exactly one thing. Every pick clears the other four states first: a lane picked
+// while a feature card or a compose field was open used to leave that card on screen, which reads as
+// "I selected another element and the pane is still old".
+function showLane(name) {
+  composeAtom.set(null)
+  composeProject.set(false)
+  selectedProject.set(null)
+  selectedFeature.set(null)
+  selectedLane.set(name)
+}
+
+
+function showFeature(project, feature) {
+  composeAtom.set(null)
+  composeProject.set(false)
+  selectedProject.set(null)
+  selectedLane.set('')
+  selectedFeature.set({ project, feature })
+}
+
+
+function showProject(name) {
+  composeAtom.set(null)
+  composeProject.set(false)
+  selectedLane.set('')
+  selectedFeature.set(null)
+  selectedProject.set(name)
+}
+
+
+function showComposeFeature(project) {
+  composeProject.set(false)
+  selectedLane.set('')
+  selectedFeature.set(null)
+  selectedProject.set(null)
+  composeAtom.set({ project })
+}
+
+
+function showComposeProject() {
+  composeAtom.set(null)
+  selectedLane.set('')
+  selectedFeature.set(null)
+  selectedProject.set(null)
+  composeProject.set(true)
+}
+
+
 function measureSelection() {
   const root = document.querySelector('[data-pi-root]')
   const row = root && root.querySelector('[data-pi-selected]')
@@ -944,8 +992,7 @@ function LaneList({ ctx }) {
           lane,
           active: lane.lane === current,
           onPick: () => {
-            selectedFeature.set(null)
-            selectedLane.set(lane.lane)
+            showLane(lane.lane)
           }
         })
       },
@@ -1018,8 +1065,7 @@ function LaneList({ ctx }) {
             counts: preparing || gopen ? null : countStates(items),
             open: gopen,
             onToggle: () => {
-              selectedLane.set('')
-              selectedFeature.set({ project, feature: groupKey })
+              showFeature(project, groupKey)
               if (!preparing) toggle(gkey)
             }
           }),
@@ -1059,7 +1105,7 @@ function LaneList({ ctx }) {
               open: handedOpen,
               onToggle: () => {
                 toggle(`h:${project}`)
-                selectedLane.set(`handed:${project}`)
+                showLane(`handed:${project}`)
               }
             }),
             children: [
@@ -1092,7 +1138,7 @@ function LaneList({ ctx }) {
               open: shelfOpen,
               onToggle: () => {
                 toggle(`s:${project}`)
-                selectedLane.set(`closed:${project}`)
+                showLane(`closed:${project}`)
               }
             }),
             children: [
@@ -1130,10 +1176,7 @@ function LaneList({ ctx }) {
           open,
           onToggle: () => {
             if (placing) {
-              selectedLane.set('')
-              selectedFeature.set(null)
-              composeAtom.set(null)
-              selectedProject.set(project)
+              showProject(project)
               return
             }
             toggle(`p:${project}`)
@@ -1162,10 +1205,7 @@ function LaneList({ ctx }) {
                         title: 'ask for a feature in one line',
                         onClick: () => {
                           setAskUpdate(false)
-                          selectedLane.set('')
-                          selectedFeature.set(null)
-                          selectedProject.set(null)
-                          composeAtom.set({ project })
+                          showComposeFeature(project)
                         },
                         className:
                           'flex w-full items-center gap-1 text-left text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary) hover:text-(--ui-accent)',
@@ -1238,10 +1278,7 @@ function LaneList({ ctx }) {
             tabIndex: 0,
             title: 'add a project by its repository',
             onClick: () => {
-              selectedLane.set('')
-              selectedFeature.set(null)
-              selectedProject.set(null)
-              composeProject.set(true)
+              showComposeProject()
             },
             className:
               'flex shrink-0 items-center justify-center rounded border border-(--ui-stroke-secondary) hover:bg-(--ui-fill-tertiary)',
@@ -1747,7 +1784,7 @@ function LaneStatus({ ctx }) {
     return jsx(GroupList, {
       title: `${groupKind === 'handed' ? 'review' : groupKind} · ${groupProject}`,
       rows,
-      onPick: name => selectedLane.set(name)
+      onPick: name => showLane(name)
     })
   }
 
@@ -2318,8 +2355,7 @@ function FeatureView({ ctx, project, feature, onDone }) {
                 {
                   type: 'button',
                   onClick: () => {
-                    selectedFeature.set(null)
-                    selectedLane.set(lane.lane)
+                    showLane(lane.lane)
                   },
                   className: 'flex items-center gap-2 py-[3px] text-left text-[0.6875rem]',
                   children: [
