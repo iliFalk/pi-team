@@ -527,28 +527,6 @@ function visibleFrame(rawTop, rawBottom, limit) {
 
 
 /** The figure's path from a box: the band's frame open on the right, joined to the pane. */
-/** The seam fades into the row over this length: a hard stop at the corner reads as a cut. */
-const SEAM_FADE = 8
-
-
-/** Where a seam segment's gradient runs: colour at the far end, transparent at the row. */
-function seamFade(box, end) {
-  const radius = 4
-  const rowTop = box.top - radius
-  const rowBottom = box.top + box.rowHeight + radius
-  if (end === 'top') {
-    const stop = Math.max(0.5, rowTop)
-    return { from: Math.max(0.5, stop - SEAM_FADE), to: stop, reverse: false }
-  }
-  const start = rowBottom
-  return {
-    from: start,
-    to: Math.min(box.height - 0.5, start + SEAM_FADE),
-    reverse: true
-  }
-}
-
-
 function framePath(box) {
   const radius = 4
   // Half a pixel in from the panel's edges: a 1px stroke centred on 0 or width would be cut by the clip.
@@ -605,19 +583,6 @@ function paintFrame(box) {
   up.setAttribute('y1', 0.5); up.setAttribute('y2', top)
   down.setAttribute('x1', seam); down.setAttribute('x2', seam)
   down.setAttribute('y1', bottom); down.setAttribute('y2', notch ? box.height - 0.5 : 0)
-  if (notch) {
-    for (const [end, gradient] of [
-      ['top', svg.querySelector('#pi-seam-top')],
-      ['bottom', svg.querySelector('#pi-seam-bottom')]
-    ]) {
-      if (!gradient) continue
-      const { from, to } = seamFade(box, end)
-      gradient.setAttribute('x1', seam)
-      gradient.setAttribute('x2', seam)
-      gradient.setAttribute('y1', from)
-      gradient.setAttribute('y2', to)
-    }
-  }
   return true
 }
 
@@ -715,74 +680,30 @@ function SelectionOutline() {
             style: { position: 'absolute', inset: 0, pointerEvents: 'none' },
             children: [
               // The seam above the row, and below it: the selected row is the only gap. With the row out
-              // of sight the figure closes over the seam and these two have nothing to draw. Each fades
-              // into the row over the last pixels, so the line dissolves instead of stopping.
+              // of sight the figure closes over the seam and these two have nothing to draw.
               box.top === null
                 ? null
-                : jsxs('g', {
-                    children: [
-                      jsxs('defs', {
-                        children: [
-                          jsxs('linearGradient', {
-                            id: 'pi-seam-top',
-                            gradientUnits: 'userSpaceOnUse',
-                            x1: seam + 0.5,
-                            y1: seamFade(box, 'top').from,
-                            x2: seam + 0.5,
-                            y2: seamFade(box, 'top').to,
-                            children: [
-                              jsx('stop', {
-                                offset: '0',
-                                style: { stopColor: 'var(--ui-stroke-secondary)', stopOpacity: 1 }
-                              }),
-                              jsx('stop', {
-                                offset: '1',
-                                style: { stopColor: 'var(--ui-stroke-secondary)', stopOpacity: 0 }
-                              })
-                            ]
-                          }),
-                          jsxs('linearGradient', {
-                            id: 'pi-seam-bottom',
-                            gradientUnits: 'userSpaceOnUse',
-                            x1: seam + 0.5,
-                            y1: seamFade(box, 'bottom').from,
-                            x2: seam + 0.5,
-                            y2: seamFade(box, 'bottom').to,
-                            children: [
-                              jsx('stop', {
-                                offset: '0',
-                                style: { stopColor: 'var(--ui-stroke-secondary)', stopOpacity: 0 }
-                              }),
-                              jsx('stop', {
-                                offset: '1',
-                                style: { stopColor: 'var(--ui-stroke-secondary)', stopOpacity: 1 }
-                              })
-                            ]
-                          })
-                        ]
-                      }),
-                      jsx('line', {
-                        'data-pi-seam-top': '',
-                        x1: seam + 0.5,
-                        y1: 0,
-                        x2: seam + 0.5,
-                        // Stops where the fillet starts, or its end pokes into the rounded corner.
-                        y2: top - 4,
-                        stroke: 'url(#pi-seam-top)',
-                        strokeWidth: 1
-                      }),
-                      jsx('line', {
-                        'data-pi-seam-bottom': '',
-                        x1: seam + 0.5,
-                        y1: bottom + 4,
-                        x2: seam + 0.5,
-                        y2: box.height,
-                        stroke: 'url(#pi-seam-bottom)',
-                        strokeWidth: 1
-                      })
-                    ]
-                  }),
-
+                : jsx('line', {
+                'data-pi-seam-top': '',
+                x1: seam + 0.5,
+                y1: 0,
+                x2: seam + 0.5,
+                // Stops where the fillet starts, or its end pokes into the rounded corner.
+                y2: top - 4,
+                stroke: 'var(--ui-stroke-secondary)',
+                strokeWidth: 1
+              }),
+              box.top === null
+                ? null
+                : jsx('line', {
+                'data-pi-seam-bottom': '',
+                x1: seam + 0.5,
+                y1: bottom + 4,
+                x2: seam + 0.5,
+                y2: box.height,
+                stroke: 'var(--ui-stroke-secondary)',
+                strokeWidth: 1
+              }),
               jsx('path', {
                 'data-pi-path': '',
                 d: figure,
