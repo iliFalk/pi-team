@@ -22,6 +22,8 @@ demo/settings-menu   theme-item    done    +2 files   plan 1/3
 For a machine that holds a Hermes checkout, copy the file by hand:
 
 ```sh
+# the panel's buttons put messages into the chat; without this they stay silent
+hermes config set plugins.entries.pi-team.allow_gateway_injection true
 mkdir -p ~/.hermes/desktop-plugins/pi-team
 cp desktop/plugin.js ~/.hermes/desktop-plugins/pi-team/
 ```

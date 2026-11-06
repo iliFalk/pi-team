@@ -823,6 +823,32 @@ def say_to_lane(lane: str, payload: Dict[str, Any] = Body(default={})) -> Dict[s
     return {"ok": True, "message_sent": sent}
 
 
+UPDATE_PROMPT = (
+    "Обнови плагин pi-team: подтяни репозиторий и разложи файлы по местам — "
+    "desktop/plugin.js в ~/.hermes/desktop-plugins/pi-team/, "
+    "plugin/dashboard/plugin_api.py в ~/.hermes/plugins/pi-team/, "
+    "runner/pi-lane в ~/.hermes/scripts/. Перезапусти бэкенд, раздай панель клиентам "
+    "и покажи, что изменилось."
+)
+
+
+@router.post("/update/request")
+def request_update(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Ask the agent to update the plugin, instead of doing it from here.
+
+    The backend cannot know where a person keeps the repository or how their host is wired;
+    the agent can look. So the button only puts the request into the chat.
+    """
+    sent = False
+    ctx = _plugin_ctx()
+    if ctx is not None:
+        try:
+            sent = bool(ctx.inject_message(UPDATE_PROMPT, session_key=payload.get("session_key") or None))
+        except Exception:
+            sent = False
+    return {"ok": True, "message_sent": sent}
+
+
 @router.post("/review/send")
 def send_review(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
     """Put the whole review queue into the chat as one list, for the orchestrator to check."""

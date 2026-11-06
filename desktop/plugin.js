@@ -834,14 +834,48 @@ function LaneList({ ctx }) {
         style: { height: HEADER_H },
         children: [
           jsx('span', { children: `projects · ${projects.length}` }),
-          jsx('button', {
-            type: 'button',
-            onClick: () => setAskUpdate(true),
-            title: 'pull the panel from git and refresh every client',
-            className:
-              'ml-auto shrink-0 px-1 text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary) hover:text-(--ui-accent)',
-            children: 'update'
-          }),
+          askUpdate
+            ? jsxs('span', {
+                className: 'ml-auto flex shrink-0 items-center gap-1',
+                children: [
+                  jsx('span', {
+                    role: 'button',
+                    tabIndex: 0,
+                    title: 'cancel',
+                    onClick: () => setAskUpdate(false),
+                    className: 'flex items-center justify-center rounded border text-[0.625rem]',
+                    style: { color: BAD_COLOR, borderColor: BAD_COLOR, width: '16px', height: '16px', lineHeight: 1 },
+                    children: '✕'
+                  }),
+                  jsx('span', {
+                    role: 'button',
+                    tabIndex: 0,
+                    title: 'ask the agent to update the plugin',
+                    onClick: () => {
+                      setAskUpdate(false)
+                      ctx
+                        .rest('/update/request', {
+                          method: 'POST',
+                          body: { session_key: sessionId },
+                          timeoutMs: 15000
+                        })
+                        .then(() => host.notify({ kind: 'info', message: 'update: просьба ушла в чат' }))
+                    },
+                    className: 'flex items-center justify-center rounded border text-[0.625rem]',
+                    style: { color: RUN_COLOR, borderColor: RUN_COLOR, width: '16px', height: '16px', lineHeight: 1 },
+                    children: '✓'
+                  })
+                ]
+              })
+            : jsx('span', {
+                role: 'button',
+                tabIndex: 0,
+                onClick: () => setAskUpdate(true),
+                title: 'ask the agent to pull the repo, copy the files and restart the backend',
+                className:
+                  'ml-auto shrink-0 px-1 text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary) hover:text-(--ui-accent)',
+                children: 'update plugin'
+              }),
 
         ]
       }),
@@ -850,17 +884,6 @@ function LaneList({ ctx }) {
         style: { display: 'flex', flexDirection: 'column', gap: PROJECT_GAP, paddingTop: PROJECT_GAP },
         children: lanes.length === 0 ? emptyHint : projectTree
       }),
-      askUpdate
-        ? jsx(ConfirmDialog, {
-            open: true,
-            onClose: () => setAskUpdate(false),
-            onConfirm: doUpdate,
-            title: 'Update pi-team',
-            description:
-              'Pull iliFalk/pi-team and copy plugin.js to every client in clients.json. The version in git replaces the local file, so uncommitted edits are lost.',
-            confirmLabel: 'Update'
-          })
-        : null,
       query.error
         ? jsx('div', {
             className:
