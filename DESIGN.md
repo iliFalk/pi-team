@@ -167,10 +167,6 @@ Rules:
 - **The selection outlives its row.** When the selected lane scrolls out of sight, the frame does not vanish:
   the pane keeps its outline in that lane's colour and the seam closes over it, so the pane still says what
   is selected. Only an absent row — a collapsed feature — leaves nothing to frame.
-- **The seam belongs to the panel, not to the selection.** The coloured figure is two strokes — the right
-  part, open on its left, and the row, open on its right — so no coloured line runs along the seam. The
-  panel's own grey seam is interrupted only over the selected row, which is what makes the row open into
-  the pane.
 - **The selected row and the right pane are one figure.** The seam stops at the row's top and starts
   again at its bottom, so the row opens into the pane; the outline runs around the union, not around two
   boxes. Colour it with the row's own state colour — the same value the row already shows — so selection

@@ -527,38 +527,40 @@ function visibleFrame(rawTop, rawBottom, limit) {
 
 
 /** The figure's path from a box: the band's frame open on the right, joined to the pane. */
-/** The figure in two strokes: the right part and the row.
-
-    Neither runs along the seam — that line belongs to the panel, not to the selection. The right part is
-    open on its left, the row is open on its right, and the panel's grey seam fills what is left.
- */
-function frameParts(box) {
+function framePath(box) {
   const radius = 4
-  const seam = box.seam
+  // Half a pixel in from the panel's edges: a 1px stroke centred on 0 or width would be cut by the clip.
   const edgeT = 0.5
   const edgeR = box.width - 0.5
   const edgeB = box.height - 0.5
+  const seam = box.seam
+  const paneOnly = box.top === null
 
-  const pane =
-    `M ${seam} ${edgeT + radius} Q ${seam} ${edgeT} ${seam + radius} ${edgeT} ` +
-    `L ${edgeR - radius} ${edgeT} Q ${edgeR} ${edgeT} ${edgeR} ${edgeT + radius} ` +
-    `L ${edgeR} ${edgeB - radius} Q ${edgeR} ${edgeB} ${edgeR - radius} ${edgeB} ` +
-    `L ${seam + radius} ${edgeB} Q ${seam} ${edgeB} ${seam} ${edgeB - radius}`
-
-  if (box.top === null) {
-    // No row in sight: the frame closes over the seam, so the pane still reads as selected.
-    return { pane: `${pane} Z`, row: '' }
+  if (paneOnly) {
+    // The row is out of sight: the pane keeps its frame and the seam becomes its left side.
+    return (
+      `M ${seam} ${edgeT + radius} Q ${seam} ${edgeT} ${seam + radius} ${edgeT} ` +
+      `L ${edgeR - radius} ${edgeT} Q ${edgeR} ${edgeT} ${edgeR} ${edgeT + radius} ` +
+      `L ${edgeR} ${edgeB - radius} Q ${edgeR} ${edgeB} ${edgeR - radius} ${edgeB} ` +
+      `L ${seam + radius} ${edgeB} Q ${seam} ${edgeB} ${seam} ${edgeB - radius} Z`
+    )
   }
 
   const left = box.left
   const top = box.top
   const bottom = box.top + box.rowHeight
-  const row =
-    `M ${seam} ${top - radius} Q ${seam} ${top} ${seam - radius} ${top} ` +
-    `L ${left + radius} ${top} Q ${left} ${top} ${left} ${top + radius} ` +
-    `L ${left} ${bottom - radius} Q ${left} ${bottom} ${left + radius} ${bottom} ` +
-    `L ${seam - radius} ${bottom} Q ${seam} ${bottom} ${seam} ${bottom + radius}`
-  return { pane, row }
+  return (
+    `M ${left + radius} ${top} L ${seam - radius} ${top} ` +
+    `Q ${seam} ${top} ${seam} ${top - radius} ` +
+    `L ${seam} ${edgeT + radius} Q ${seam} ${edgeT} ${seam + radius} ${edgeT} ` +
+    `L ${edgeR - radius} ${edgeT} Q ${edgeR} ${edgeT} ${edgeR} ${edgeT + radius} ` +
+    `L ${edgeR} ${edgeB - radius} Q ${edgeR} ${edgeB} ${edgeR - radius} ${edgeB} ` +
+    `L ${seam + radius} ${edgeB} Q ${seam} ${edgeB} ${seam} ${edgeB - radius} ` +
+    `L ${seam} ${bottom + radius} Q ${seam} ${bottom} ${seam - radius} ${bottom} ` +
+    `L ${left + radius} ${bottom} ` +
+    `Q ${left} ${bottom} ${left} ${bottom - radius} ` +
+    `L ${left} ${top + radius} Q ${left} ${top} ${left + radius} ${top} Z`
+  )
 }
 
 
@@ -567,19 +569,16 @@ function paintFrame(box) {
   const root = document.querySelector('[data-pi-root]')
   const svg = root && root.querySelector('[data-pi-frame]')
   if (!svg) return false
-  const pane = svg.querySelector('[data-pi-part="pane"]')
-  const row = svg.querySelector('[data-pi-part="row"]')
+  const path = svg.querySelector('[data-pi-path]')
   const up = svg.querySelector('[data-pi-seam-top]')
   const down = svg.querySelector('[data-pi-seam-bottom]')
-  if (!pane || !up || !down) return false
+  if (!path || !up || !down) return false
   const seam = box.seam + 0.5
   const radius = 4
   const notch = box.top !== null
   const top = notch ? box.top - radius : 0
   const bottom = notch ? box.top + box.rowHeight + radius : 0
-  const parts = frameParts(box)
-  pane.setAttribute('d', parts.pane)
-  if (row) row.setAttribute('d', parts.row)
+  path.setAttribute('d', framePath(box))
   up.setAttribute('x1', seam); up.setAttribute('x2', seam)
   up.setAttribute('y1', 0.5); up.setAttribute('y2', top)
   down.setAttribute('x1', seam); down.setAttribute('x2', seam)
@@ -665,7 +664,7 @@ function SelectionOutline() {
   const seam = box ? box.seam : 0
   const top = box ? box.top : 0
   const bottom = box ? box.top + box.rowHeight : 0
-  const parts = box ? frameParts(box) : { pane: '', row: '' }
+  const figure = box ? framePath(box) : ''
 
   return jsxs('div', {
     'aria-hidden': true,
@@ -706,23 +705,13 @@ function SelectionOutline() {
                 strokeWidth: 1
               }),
               jsx('path', {
-                'data-pi-part': 'pane',
-                d: parts.pane,
+                'data-pi-path': '',
+                d: figure,
                 fill: 'none',
                 stroke: box.color,
                 strokeWidth: 1,
                 strokeLinejoin: 'round'
-              }),
-              box.top === null
-                ? null
-                : jsx('path', {
-                    'data-pi-part': 'row',
-                    d: parts.row,
-                    fill: 'none',
-                    stroke: box.color,
-                    strokeWidth: 1,
-                    strokeLinejoin: 'round'
-                  })
+              })
             ]
           })
         : jsx('div', {
