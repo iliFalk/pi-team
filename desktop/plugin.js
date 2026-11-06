@@ -428,11 +428,26 @@ function noteHover(side) {
 }
 
 
+let pendingScroll = null
+
+
 function reportScroll(side, element) {
   if (!element) return
   const span = element.scrollHeight - element.clientHeight
-  const progress = span > 0 ? element.scrollTop / span : 0
-  scrollPill.set({ ...scrollPill.get(), [side]: progress, visible: span > 0 })
+  // Keep only the newest position, and write it at most once per frame: a wheel fires dozens
+  // of events and every atom write re-renders the whole panel.
+  pendingScroll = { side, progress: span > 0 ? element.scrollTop / span : 0, span }
+  if (!reportScroll.frame) {
+    const raf =
+      typeof requestAnimationFrame === 'function' ? requestAnimationFrame : fn => setTimeout(fn, 16)
+    reportScroll.frame = raf(() => {
+      reportScroll.frame = null
+      if (!pendingScroll) return
+      const { side: which, progress, span: room } = pendingScroll
+      pendingScroll = null
+      scrollPill.set({ ...scrollPill.get(), [which]: progress, visible: room > 0 })
+    })
+  }
   if (pillTimer) clearTimeout(pillTimer)
   pillTimer = setTimeout(() => {
     scrollPill.set({ ...scrollPill.get(), visible: false })
@@ -2118,14 +2133,16 @@ function TeamPane({ ctx }) {
         // 50 / 50, and inline: an arbitrary width class is not in the app's stylesheet.
         className: 'flex shrink-0 flex-col border-r border-(--ui-stroke-secondary)',
         'data-pi-side': 'tree',
-        style: { width: '50%', minWidth: 0 },
+        // Clip at the seam: the scroll area runs fourteen pixels wide to lose its native bar,
+        // and without this a row's highlight paints over the divider.
+        style: { flex: '0 0 50%', width: '50%', minWidth: 0, overflow: 'hidden' },
         onMouseEnter: () => noteHover('tree'),
         children: jsx(LaneList, { ctx })
       }),
       jsx('div', {
         className: 'flex min-w-0 flex-1 flex-col overflow-hidden',
         'data-pi-side': 'pane',
-        style: { width: '50%', minWidth: 0 },
+        style: { flex: '1 1 50%', width: '50%', minWidth: 0 },
         onMouseEnter: () => noteHover('pane'),
         children: newProject
           ? jsx(ProjectCompose, {
