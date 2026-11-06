@@ -175,7 +175,8 @@ Rules:
 | Component | Rule |
 |---|---|
 | Lane row | icon, name, state word, snippet; band behind the text only, never behind the icon |
-| Project or feature row | folder icon, label, counters; a create button appears on hover |
+| Project or feature row | folder icon, label, counters |
+| Add-feature row | the last line inside an open project: a dashed folder with a plus inside, label `new feature` in quaternary; the only way to create a feature |
 | Counter | `?` `!` gear `✓` with a number, one colour each, no separator between them |
 | Question block | inside the lane card, three controls at most, answer goes to the lane |
 | Thread | a bubble per message, `panel` messages dimmed |

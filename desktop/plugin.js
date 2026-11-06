@@ -227,6 +227,26 @@ function FolderIcon({ open }) {
   })
 }
 
+/** The folder a feature will be: a dashed outline with a plus inside it. */
+function FolderPlus() {
+  return jsxs('svg', {
+    viewBox: '0 0 24 24',
+    width: ICON_SIZE,
+    height: ICON_SIZE,
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.75,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': true,
+    style: { display: 'block', transform: 'translateY(-0.5px)' },
+    children: [
+      jsx('path', { d: FOLDER_CLOSED, strokeDasharray: '2.5 2.5', key: 'folder' }),
+      jsx('path', { d: 'M12 10.5v3.6M10.2 12.3h3.6', key: 'plus' })
+    ]
+  })
+}
+
 /** A row, the segment of its level's line that belongs to it, and its children.
  *  Every measurement here is row-relative: a percentage of the node would put the
  *  stub and the end of the line in the middle of the children instead of the row. */
@@ -825,7 +845,8 @@ function LaneList({ ctx }) {
       const items = groups.get(groupKey)
       const gkey = `g:${project}/${groupKey}`
       const gopen = isOpen(gkey)
-      const last = index === groupKeys.length - 1 && shelved.length === 0 && handed.length === 0
+      // The add-feature row closes the block, so no feature above it ends the level.
+      const last = false
 
       const meta = featureByName.get(groupKey)
       // A placeholder has no name and no lanes yet: it opens its own card, not a list.
@@ -877,7 +898,7 @@ function LaneList({ ctx }) {
       ? jsx(
           TreeRow,
           {
-            last: shelved.length === 0,
+            last: false,
             row: jsx(ListHeader, {
               label: 'review',
               plain: handed.length,
@@ -915,7 +936,7 @@ function LaneList({ ctx }) {
       ? jsx(
           TreeRow,
           {
-            last: true,
+            last: false,
             trunk: shelfOpen,
             row: jsx(ListHeader, {
               label: 'closed',
@@ -963,17 +984,6 @@ function LaneList({ ctx }) {
           // A project always sums its own lanes, open or closed.
           counts: placing ? null : countStates(all),
           open,
-          action: {
-            label: '+',
-            instant: true,
-            title: 'ask for a feature in one line',
-            onClick: () => {
-              setAskUpdate(false)
-              selectedLane.set('')
-              selectedFeature.set(null)
-              composeAtom.set({ project })
-            }
-          },
           onToggle: () => {
             if (placing) {
               selectedLane.set('')
@@ -995,7 +1005,50 @@ function LaneList({ ctx }) {
                   flexDirection: 'column',
                   gap: FEATURE_GAP
                 },
-                children: [...featureNodes, handedNode, shelfNode]
+                children: [
+                  ...featureNodes,
+                  handedNode,
+                  shelfNode,
+                  jsx(
+                    TreeRow,
+                    {
+                      last: true,
+                      row: jsx('button', {
+                        type: 'button',
+                        title: 'ask for a feature in one line',
+                        onClick: () => {
+                          setAskUpdate(false)
+                          selectedLane.set('')
+                          selectedFeature.set(null)
+                          selectedProject.set(null)
+                          composeAtom.set({ project })
+                        },
+                        className:
+                          'flex w-full items-center gap-1 text-left text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary) hover:text-(--ui-accent)',
+                        style: {
+                          marginLeft: ROW_PAD,
+                          width: `calc(100% - ${ROW_PAD})`,
+                          paddingTop: HEADER_PY,
+                          paddingBottom: HEADER_PY,
+                          paddingRight: ROW_PAD
+                        },
+                        children: [
+                          jsx('span', {
+                            className: 'flex shrink-0 items-center justify-center',
+                            style: { width: `${ICON_SIZE}px` },
+                            children: jsx(FolderPlus, {})
+                          }),
+                          jsx('span', {
+                            className: 'truncate',
+                            style: TEXT_NUDGE,
+                            children: 'new feature'
+                          })
+                        ]
+                      })
+                    },
+                    `add:${project}`
+                  )
+                ]
               })
             : null
         ]
