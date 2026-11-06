@@ -365,7 +365,10 @@ function LaneRow({ lane, active, onPick }) {
       width: `calc(100% - ${ROW_PAD})`,
       paddingTop: ROW_PY,
       paddingBottom: ROW_PY,
-      paddingLeft: 0
+      paddingLeft: 0,
+      // The header rows keep 8px on the right; a lane's class would leave 10 and its box
+      // would end two pixels short of theirs.
+      paddingRight: '8px'
     },
     children: [
       // Centre of the row, which is where the stub arrives: a two-line row put the
