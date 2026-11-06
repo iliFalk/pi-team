@@ -465,7 +465,13 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim }) {
                 ? { ...bandStyle, background: 'var(--chrome-action-hover)' }
                 : bandStyle,
             children: [
-              jsx('span', { className: 'truncate', style: TEXT_NUDGE, children: label }),
+              jsx('span', {
+                className: 'truncate',
+                // Without a share of the row the long labels push the counters off the right edge,
+                // and rows stop lining up with each other.
+                style: { ...TEXT_NUDGE, flex: '1 1 auto', minWidth: 0 },
+                children: label
+              }),
               action
                 ? asking
                   ? jsxs('span', {
