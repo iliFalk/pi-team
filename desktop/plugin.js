@@ -28,7 +28,9 @@ const TEXT_H = '100px'
 // Tree geometry: a node owns its line, so a level cannot break into loose segments.
 // The line hangs under the icon, so the icon column and the line are one axis.
 const GUIDE_STEP = '18px'
-const ROW_PAD = '6px'
+// One value for the row's two sides: a row and a header keep the same air left and right,
+// so a highlight sits in the middle of its row instead of hugging one edge.
+const ROW_PAD = '10px'
 const ICON_SIZE = 12
 const ICON_CENTER = '12px'
 const LINE_X = '-6px'
