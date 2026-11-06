@@ -590,6 +590,9 @@ function SelectionOutline() {
   useValue(collapsedAtom)
   // And the panel's own size: a resized pane moves both the seam and the row.
   useValue(host.state.viewport)
+  // And every scroll: the tree moves under a fixed frame, and nothing else here re-renders when it does.
+  // This atom already updates once per frame, so it doubles as the scroll signal.
+  useValue(scrollPill)
   // Measure after the frame, not during the commit: the row's final box is only settled once the
   // whole panel has painted.
   const probe = jsx('span', {
