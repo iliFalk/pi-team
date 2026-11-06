@@ -1031,8 +1031,10 @@ function LaneList({ ctx }) {
         row: jsx(LaneRow, {
           lane,
           active: lane.lane === current,
+          // A second click on the selected lane releases it; the pane says where to pick next.
           onPick: () => {
-            showLane(lane.lane)
+            if (lane.lane === current) clearPane()
+            else showLane(lane.lane)
           }
         })
       },
@@ -1109,14 +1111,10 @@ function LaneList({ ctx }) {
                 showFeature(project, groupKey)
                 return
               }
-              // A feature has no card of its own. The click opens or closes it and keeps the lane you
-              // were reading — unless that lane lives in THIS feature: then the pick is done and the
-              // pane empties, which is how the selection is released.
+              // A feature has no card of its own. The click only opens or closes it, in both
+              // directions: the lane you were reading stays selected, and its frame comes back when the
+              // rows return to the tree.
               toggle(gkey)
-              const chosen = (lanes || []).find(lane => lane.lane === current)
-              if (chosen && chosen.project === project && (chosen.group || '') === groupKey) {
-                clearPane()
-              }
             }
           }),
           children: [

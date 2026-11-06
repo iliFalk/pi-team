@@ -192,7 +192,7 @@ Rules:
 | Scroll pill | `44px` long, `3px` wide, radius `999px`, `var(--ui-text-quaternary)` at 0.55 |
 | Panel frame | one border, no corner radius: the app's pane is square |
 | Selection figure | one `1px` line with a `4px` radius around the selected row and the right pane, in the row's state colour; the row's own ring is suppressed while it is selected, and the seam opens over the band's height |
-| What can be selected | a lane, or a feature still in preparation. A finished feature has no card: its click opens or closes it and keeps the lane you read — clicking the feature that OWNS the selected lane releases the selection |
+| What can be selected | a lane, or a feature still in preparation. A finished feature has no card: its click opens or closes it and never touches the selection. A second click on the selected lane releases it |
 
 ## Motion
 
