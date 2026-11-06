@@ -529,22 +529,25 @@ function visibleFrame(rawTop, rawBottom, limit) {
 /** The figure's path from a box: the band's frame open on the right, joined to the pane. */
 function framePath(box) {
   const radius = 4
+  const left = box.left
   const top = box.top
   const bottom = box.top + box.rowHeight
   const seam = box.seam
-  // Every turn carries the same 4 px radius, the two at the seam included: a square corner there reads
-  // as the row being cut off by the pane instead of opening into it.
+  // Half a pixel in from the panel's edges: a 1px stroke centred on 0 or width would be cut by the clip.
+  const edgeT = 0.5
+  const edgeR = box.width - 0.5
+  const edgeB = box.height - 0.5
   return (
-    `M ${box.left + radius} ${top} L ${seam - radius} ${top} ` +
+    `M ${left + radius} ${top} L ${seam - radius} ${top} ` +
     `Q ${seam} ${top} ${seam} ${top - radius} ` +
-    `L ${seam} ${radius} Q ${seam} 0 ${seam + radius} 0 ` +
-    `L ${box.width - radius} 0 Q ${box.width} 0 ${box.width} ${radius} ` +
-    `L ${box.width} ${box.height - radius} Q ${box.width} ${box.height} ${box.width - radius} ${box.height} ` +
-    `L ${seam + radius} ${box.height} Q ${seam} ${box.height} ${seam} ${box.height - radius} ` +
+    `L ${seam} ${edgeT + radius} Q ${seam} ${edgeT} ${seam + radius} ${edgeT} ` +
+    `L ${edgeR - radius} ${edgeT} Q ${edgeR} ${edgeT} ${edgeR} ${edgeT + radius} ` +
+    `L ${edgeR} ${edgeB - radius} Q ${edgeR} ${edgeB} ${edgeR - radius} ${edgeB} ` +
+    `L ${seam + radius} ${edgeB} Q ${seam} ${edgeB} ${seam} ${edgeB - radius} ` +
     `L ${seam} ${bottom + radius} Q ${seam} ${bottom} ${seam - radius} ${bottom} ` +
-    `L ${box.left + radius} ${bottom} ` +
-    `Q ${box.left} ${bottom} ${box.left} ${bottom - radius} ` +
-    `L ${box.left} ${top + radius} Q ${box.left} ${top} ${box.left + radius} ${top} Z`
+    `L ${left + radius} ${bottom} ` +
+    `Q ${left} ${bottom} ${left} ${bottom - radius} ` +
+    `L ${left} ${top + radius} Q ${left} ${top} ${left + radius} ${top} Z`
   )
 }
 
@@ -564,9 +567,9 @@ function paintFrame(box) {
   const bottom = box.top + box.rowHeight + radius
   path.setAttribute('d', framePath(box))
   up.setAttribute('x1', seam); up.setAttribute('x2', seam)
-  up.setAttribute('y1', 0); up.setAttribute('y2', top)
+  up.setAttribute('y1', 0.5); up.setAttribute('y2', top)
   down.setAttribute('x1', seam); down.setAttribute('x2', seam)
-  down.setAttribute('y1', bottom); down.setAttribute('y2', box.height)
+  down.setAttribute('y1', bottom); down.setAttribute('y2', box.height - 0.5)
   return true
 }
 
@@ -582,13 +585,17 @@ function measureSelection() {
   // right edge into the pane.
   const band = row.querySelector('[data-pi-band]') || row
   const outer = root.getBoundingClientRect()
+  // The panel carries a 1px border; the overlay sits inside it. Without this the figure is drawn a pixel
+  // up and left, and its right and bottom edges fall under the border.
+  const borderX = Math.round((outer.width - root.clientWidth) / 2)
+  const borderY = Math.round((outer.height - root.clientHeight) / 2)
   const box = band.getBoundingClientRect()
   // The frame is drawn only while the row is wholly inside the visible strip under the header. A cut
   // notch reads as a broken figure, and a row scrolled away must not leave a frame behind.
   const frame = visibleFrame(
-    Math.round(box.top - outer.top),
-    Math.round(box.bottom - outer.top),
-    Math.round(outer.height)
+    Math.round(box.top - outer.top) - borderY,
+    Math.round(box.bottom - outer.top) - borderY,
+    root.clientHeight
   )
   if (!frame) {
     if (selectedBox.get()) selectedBox.set(null)
@@ -597,11 +604,11 @@ function measureSelection() {
   const top = frame.top
   const bottom = frame.top + frame.height
   const next = {
-    width: Math.round(outer.width),
-    height: Math.round(outer.height),
-    seam: Math.round(outer.width / 2),
-    left: Math.round(box.left - outer.left),
-    right: Math.round(box.right - outer.left),
+    width: root.clientWidth,
+    height: root.clientHeight,
+    seam: Math.round(root.clientWidth / 2),
+    left: Math.round(box.left - outer.left) - borderX,
+    right: Math.round(box.right - outer.left) - borderX,
     top,
     rowHeight: bottom - top,
     color: row.getAttribute('data-pi-colour') || 'var(--ui-text-tertiary)'

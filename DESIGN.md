@@ -168,6 +168,11 @@ Rules:
   again at its bottom, so the row opens into the pane; the outline runs around the union, not around two
   boxes. Colour it with the row's own state colour — the same value the row already shows — so selection
   and condition cannot disagree.
+- **Measure against the content box, and inset half a pixel.** The panel carries a `1px` border and the
+  overlay sits inside it: measuring against the border box shifts the whole figure up and left, and a stroke
+  centred on `0` or `width` is half clipped by the panel's own edge — the user sees a frame that is missing
+  its top and right sides. Read `clientWidth/clientHeight`, subtract the border, and draw the outer edges at
+  `0.5` and `size - 0.5`.
 - **Measure the row, not the data.** The frame comes from the row's real box in the DOM and exists only
   while the row sits wholly inside the strip under the header (`visibleFrame`): a row scrolled away, or
   half under the header, draws nothing instead of a cut figure. The rule is a pure function so it is
