@@ -214,8 +214,9 @@ animation does not.
 
 - Change a value in `desktop/plugin.js`, then update the table here in the same commit.
 - Keep one number for two sides of the same thing: a row's left and right padding are one token.
-- Measure before believing. Two checks, both cheap:
-  - `node desktop/render-check.mjs` — every component renders; 16 of 16 must say `ok`.
+- Measure before believing. Three checks, all cheap:
+  - `node desktop/render-check.mjs` — every component renders; every name must say `ok`.
+  - `node desktop/props-check.mjs` — no props object carries two `style` keys; it names the lines.
   - a static mock of the geometry, rendered by headless Chromium, measured with `PIL`: the seam, the
     end of a band, the frame on all four edges.
 - Write the reason next to the constant in code when it is not obvious: `85%: white on this fill

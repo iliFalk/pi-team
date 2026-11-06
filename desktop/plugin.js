@@ -394,7 +394,11 @@ function LaneRow({ lane, active, onPick }) {
     'data-pi-colour': active ? frameColor : undefined,
     className,
     // The highlight starts at the icon, so the stub and the line stay outside it.
+    // One style object only — a second key here is silently dropped by JavaScript.
     style: {
+      // A clicked button takes focus and the app paints a ring round the label band; the panel
+      // draws its own selection frame, so the ring reads as a second, leftover outline.
+      outline: 'none',
       position: 'relative',
       marginLeft: ROW_PAD,
       width: `calc(100% - ${ROW_PAD})`,
@@ -805,7 +809,14 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim, tag, se
         'data-pi-colour': selected ? colour : undefined,
         className:
           'flex min-w-0 flex-1 items-center gap-1 pr-2.5 text-left text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary)',
-        style: { marginLeft: ROW_PAD, width: `calc(100% - ${ROW_PAD})`, paddingTop: HEADER_PY, paddingBottom: HEADER_PY },
+        // One style object, and no focus ring: the panel draws its own selection frame.
+        style: {
+          marginLeft: ROW_PAD,
+          width: `calc(100% - ${ROW_PAD})`,
+          paddingTop: HEADER_PY,
+          paddingBottom: HEADER_PY,
+          outline: 'none'
+        },
         children: [
           jsx('span', {
             className: 'flex shrink-0 items-center justify-center',
@@ -1098,11 +1109,6 @@ function LaneList({ ctx }) {
               // pane empties, which is how the selection is released.
               toggle(gkey)
               const chosen = (lanes || []).find(lane => lane.lane === current)
-              // TEMP diagnostic: says what the click saw, so a mismatch is visible without a debugger.
-              host.notify({
-                kind: 'info',
-                message: `feature ${project}/${groupKey} · lane ${current || '—'} · group ${chosen ? (chosen.group || '—') : 'no lane'}`
-              })
               if (chosen && chosen.project === project && (chosen.group || '') === groupKey) {
                 clearPane()
               }
@@ -1253,7 +1259,8 @@ function LaneList({ ctx }) {
                           width: `calc(100% - ${ROW_PAD})`,
                           paddingTop: HEADER_PY,
                           paddingBottom: HEADER_PY,
-                          paddingRight: ROW_PAD
+                          paddingRight: ROW_PAD,
+                          outline: 'none'
                         },
                         children: [
                           jsx('span', {
