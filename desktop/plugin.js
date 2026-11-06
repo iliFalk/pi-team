@@ -369,6 +369,9 @@ function LaneRow({ lane, active, onPick }) {
       : bad
         ? BAD_COLOR
         : null
+  // The selected row has no ring: the selection figure draws its frame, and a second line would sit
+  // ten pixels inside it.
+  const ring = active ? null : outline
   const bandFill = asked
     ? { ...bandStyle, background: ASK_BG }
     : active || hover
@@ -413,7 +416,7 @@ function LaneRow({ lane, active, onPick }) {
       jsxs('span', {
         className: `min-w-0 flex-1 ${labelBand}`,
         'data-pi-band': '',
-        style: outline ? { ...bandFill, boxShadow: `inset 0 0 0 0.5px ${outline}` } : bandFill,
+        style: ring ? { ...bandFill, boxShadow: `inset 0 0 0 0.5px ${ring}` } : bandFill,
         children: [
           jsxs('span', {
             className: 'flex items-baseline gap-2',
@@ -566,15 +569,15 @@ function SelectionOutline() {
   const bottom = box ? box.top + box.rowHeight : 0
   // Open path: it starts at the band's top-right corner, runs round the pane and returns to the
   // band's bottom-right corner. The row's own ring closes the figure on its left side.
-  // A pixel of overlap: the band's ring is rounded, so a stub that starts exactly at its edge leaves a
-  // hairline gap at the corner.
-  const join = box ? box.right - 1 : 0
+  // Closed figure: the band's frame (open on the right) plus the pane, one line around both.
   const figure = box
-    ? `M ${join} ${top} L ${seam} ${top} L ${seam} ${radius} Q ${seam} 0 ${seam + radius} 0 ` +
+    ? `M ${box.left + radius} ${top} L ${seam} ${top} L ${seam} ${radius} Q ${seam} 0 ${seam + radius} 0 ` +
       `L ${box.width - radius} 0 Q ${box.width} 0 ${box.width} ${radius} ` +
       `L ${box.width} ${box.height - radius} Q ${box.width} ${box.height} ${box.width - radius} ${box.height} ` +
       `L ${seam + radius} ${box.height} Q ${seam} ${box.height} ${seam} ${box.height - radius} ` +
-      `L ${seam} ${bottom} L ${join} ${bottom}`
+      `L ${seam} ${bottom} L ${box.left + radius} ${bottom} ` +
+      `Q ${box.left} ${bottom} ${box.left} ${bottom - radius} ` +
+      `L ${box.left} ${top + radius} Q ${box.left} ${top} ${box.left + radius} ${top} Z`
     : ''
 
   return jsxs('div', {
