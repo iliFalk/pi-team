@@ -596,19 +596,6 @@ function LaneList({ ctx }) {
   const isOpen = key => !collapsed[key]
 
   const [askUpdate, setAskUpdate] = useState(false)
-  const doUpdate = async () => {
-    const result = await ctx.rest('/update', { method: 'POST', body: {}, timeoutMs: 90000 })
-    const failed = (result.steps || []).filter(step => !step.ok)
-    if (failed.length) {
-      throw new Error(failed.map(step => `${step.host}: ${step.detail}`).join(' · '))
-    }
-    host.notify({
-      kind: 'info',
-      message: `update: ${result.sha256} · ${(result.steps || []).length} targets`
-    })
-    query.refetch()
-  }
-
   const registry = (query.data && query.data.registry) || []
   const registryByName = new Map(registry.map(entry => [entry.name, entry]))
 
