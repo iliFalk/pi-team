@@ -323,6 +323,8 @@ const BAND_PY = 4
 // One value for both: the air under the panel header and the air around the divider are
 // the same 4px, so the first project and the next one start from the same place.
 const PROJECT_GAP = '4px'
+// How far a selected lane's fill fades out at its right edge.
+const ROW_FADE = 14
 // Air between the rows of one project, so a feature does not sit on the project's edge.
 const FEATURE_GAP = '4px'
 // A line of its own with the shadow outside it: dark beside the line, fading away from it.
@@ -372,11 +374,13 @@ function LaneRow({ lane, active, onPick }) {
   // The selected row has no ring: the selection figure draws its frame, and a second line would sit
   // ten pixels inside it.
   const ring = active ? null : outline
-  const bandFill = asked
-    ? { ...bandStyle, background: ASK_BG }
-    : active || hover
-      ? { ...bandStyle, background: 'var(--chrome-action-hover)' }
-      : bandStyle
+  // A selected lane lets its fill go: solid under the text, then a gradient to nothing at the right edge, so
+  // the row dissolves toward the right part instead of ending on a hard line.
+  const softFill = asked ? ASK_BG : 'var(--chrome-action-hover)'
+  const fill = active
+    ? `linear-gradient(to right, ${softFill} calc(100% - ${ROW_FADE}px), rgba(0,0,0,0))`
+    : softFill
+  const bandFill = asked || active || hover ? { ...bandStyle, background: fill } : bandStyle
   const statusColor = asked ? '#ffffff' : bad ? BAD_COLOR : lane.state === 'running' ? RUN_COLOR : undefined
   // The frame colour, not the text colour: a question row writes white on blue.
   const frameColor = asked ? ASK_COLOR : bad ? BAD_COLOR : lane.state === 'running' ? RUN_COLOR : DONE_COLOR
