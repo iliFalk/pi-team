@@ -526,47 +526,41 @@ function visibleFrame(rawTop, rawBottom, limit) {
 }
 
 
-/** How far a lane's edge fades as it crosses into the right part. */
-const HANDOVER_FADE = 14
-
-
-/** The figure in strokes.
-
-    The right part is a closed frame. The lane's frame is three strokes: its left side is solid, and the two
-    horizontal edges that run into the right part fade out over the last pixels, so the lane dissolves into the
-    pane instead of stopping at a seam.
- */
-function frameParts(box) {
+/** The figure's path from a box: the band's frame open on the right, joined to the pane. */
+function framePath(box) {
   const radius = 4
+  // Half a pixel in from the panel's edges: a 1px stroke centred on 0 or width would be cut by the clip.
   const edgeT = 0.5
   const edgeR = box.width - 0.5
   const edgeB = box.height - 0.5
   const seam = box.seam
+  const paneOnly = box.top === null
 
-  const pane =
-    `M ${seam} ${edgeT + radius} Q ${seam} ${edgeT} ${seam + radius} ${edgeT} ` +
-    `L ${edgeR - radius} ${edgeT} Q ${edgeR} ${edgeT} ${edgeR} ${edgeT + radius} ` +
-    `L ${edgeR} ${edgeB - radius} Q ${edgeR} ${edgeB} ${edgeR - radius} ${edgeB} ` +
-    `L ${seam + radius} ${edgeB} Q ${seam} ${edgeB} ${seam} ${edgeB - radius} Z`
-
-  if (box.top === null) return { pane, rowLeft: '', rowTop: '', rowBottom: '' }
+  if (paneOnly) {
+    // The row is out of sight: the pane keeps its frame and the seam becomes its left side.
+    return (
+      `M ${seam} ${edgeT + radius} Q ${seam} ${edgeT} ${seam + radius} ${edgeT} ` +
+      `L ${edgeR - radius} ${edgeT} Q ${edgeR} ${edgeT} ${edgeR} ${edgeT + radius} ` +
+      `L ${edgeR} ${edgeB - radius} Q ${edgeR} ${edgeB} ${edgeR - radius} ${edgeB} ` +
+      `L ${seam + radius} ${edgeB} Q ${seam} ${edgeB} ${seam} ${edgeB - radius} Z`
+    )
+  }
 
   const left = box.left
   const top = box.top
   const bottom = box.top + box.rowHeight
-  const rowLeft =
-    `M ${left + radius} ${top} Q ${left} ${top} ${left} ${top + radius} ` +
-    `L ${left} ${bottom - radius} Q ${left} ${bottom} ${left + radius} ${bottom}`
-  const rowTop = `M ${left + radius} ${top} L ${seam} ${top}`
-  const rowBottom = `M ${left + radius} ${bottom} L ${seam} ${bottom}`
-  return { pane, rowLeft, rowTop, rowBottom }
-}
-
-
-/** Where a horizontal edge starts to fade: solid up to here, transparent at the seam. */
-function handoverFade(box) {
-  const seam = box.seam
-  return { solid: Math.max(box.left + 4, seam - HANDOVER_FADE), clear: seam }
+  return (
+    `M ${left + radius} ${top} L ${seam - radius} ${top} ` +
+    `Q ${seam} ${top} ${seam} ${top - radius} ` +
+    `L ${seam} ${edgeT + radius} Q ${seam} ${edgeT} ${seam + radius} ${edgeT} ` +
+    `L ${edgeR - radius} ${edgeT} Q ${edgeR} ${edgeT} ${edgeR} ${edgeT + radius} ` +
+    `L ${edgeR} ${edgeB - radius} Q ${edgeR} ${edgeB} ${edgeR - radius} ${edgeB} ` +
+    `L ${seam + radius} ${edgeB} Q ${seam} ${edgeB} ${seam} ${edgeB - radius} ` +
+    `L ${seam} ${bottom + radius} Q ${seam} ${bottom} ${seam - radius} ${bottom} ` +
+    `L ${left + radius} ${bottom} ` +
+    `Q ${left} ${bottom} ${left} ${bottom - radius} ` +
+    `L ${left} ${top + radius} Q ${left} ${top} ${left + radius} ${top} Z`
+  )
 }
 
 
@@ -575,25 +569,20 @@ function paintFrame(box) {
   const root = document.querySelector('[data-pi-root]')
   const svg = root && root.querySelector('[data-pi-frame]')
   if (!svg) return false
-  const parts = frameParts(box)
-  const paint = (key, d) => {
-    const node = svg.querySelector(`[data-pi-part="${key}"]`)
-    if (node && d) node.setAttribute('d', d)
-  }
-  paint('pane', parts.pane)
-  paint('rowLeft', parts.rowLeft)
-  paint('rowTop', parts.rowTop)
-  paint('rowBottom', parts.rowBottom)
-
-  if (box.top !== null) {
-    const fade = handoverFade(box)
-    for (const key of ['top', 'bottom']) {
-      const gradient = svg.querySelector(`#pi-handover-${key}`)
-      if (!gradient) continue
-      gradient.setAttribute('x1', fade.solid)
-      gradient.setAttribute('x2', fade.clear)
-    }
-  }
+  const path = svg.querySelector('[data-pi-path]')
+  const up = svg.querySelector('[data-pi-seam-top]')
+  const down = svg.querySelector('[data-pi-seam-bottom]')
+  if (!path || !up || !down) return false
+  const seam = box.seam + 0.5
+  const radius = 4
+  const notch = box.top !== null
+  const top = notch ? box.top - radius : 0
+  const bottom = notch ? box.top + box.rowHeight + radius : 0
+  path.setAttribute('d', framePath(box))
+  up.setAttribute('x1', seam); up.setAttribute('x2', seam)
+  up.setAttribute('y1', 0.5); up.setAttribute('y2', top)
+  down.setAttribute('x1', seam); down.setAttribute('x2', seam)
+  down.setAttribute('y1', bottom); down.setAttribute('y2', notch ? box.height - 0.5 : 0)
   return true
 }
 
@@ -675,7 +664,7 @@ function SelectionOutline() {
   const seam = box ? box.seam : 0
   const top = box ? box.top : 0
   const bottom = box ? box.top + box.rowHeight : 0
-  const parts = box ? frameParts(box) : { pane: '', rowLeft: '', rowTop: '', rowBottom: '' }
+  const figure = box ? framePath(box) : ''
 
   return jsxs('div', {
     'aria-hidden': true,
@@ -690,86 +679,39 @@ function SelectionOutline() {
             viewBox: `0 0 ${box.width} ${box.height}`,
             style: { position: 'absolute', inset: 0, pointerEvents: 'none' },
             children: [
-              jsxs('defs', {
-                children: [
-                  box.top === null
-                    ? null
-                    : jsxs('linearGradient', {
-                        id: 'pi-handover-top',
-                        gradientUnits: 'userSpaceOnUse',
-                        x1: handoverFade(box).solid,
-                        y1: box.top,
-                        x2: handoverFade(box).clear,
-                        y2: box.top,
-                        children: [
-                          jsx('stop', {
-                            offset: '0',
-                            style: { stopColor: box.color, stopOpacity: 1 }
-                          }),
-                          jsx('stop', {
-                            offset: '1',
-                            style: { stopColor: box.color, stopOpacity: 0 }
-                          })
-                        ]
-                      }),
-                  box.top === null
-                    ? null
-                    : jsxs('linearGradient', {
-                        id: 'pi-handover-bottom',
-                        gradientUnits: 'userSpaceOnUse',
-                        x1: handoverFade(box).solid,
-                        y1: box.top + box.rowHeight,
-                        x2: handoverFade(box).clear,
-                        y2: box.top + box.rowHeight,
-                        children: [
-                          jsx('stop', {
-                            offset: '0',
-                            style: { stopColor: box.color, stopOpacity: 1 }
-                          }),
-                          jsx('stop', {
-                            offset: '1',
-                            style: { stopColor: box.color, stopOpacity: 0 }
-                          })
-                        ]
-                      })
-                ]
+              // The seam above the row, and below it: the selected row is the only gap. With the row out
+              // of sight the figure closes over the seam and these two have nothing to draw.
+              box.top === null
+                ? null
+                : jsx('line', {
+                'data-pi-seam-top': '',
+                x1: seam + 0.5,
+                y1: 0,
+                x2: seam + 0.5,
+                // Stops where the fillet starts, or its end pokes into the rounded corner.
+                y2: top - 4,
+                stroke: 'var(--ui-stroke-secondary)',
+                strokeWidth: 1
+              }),
+              box.top === null
+                ? null
+                : jsx('line', {
+                'data-pi-seam-bottom': '',
+                x1: seam + 0.5,
+                y1: bottom + 4,
+                x2: seam + 0.5,
+                y2: box.height,
+                stroke: 'var(--ui-stroke-secondary)',
+                strokeWidth: 1
               }),
               jsx('path', {
-                'data-pi-part': 'pane',
-                d: parts.pane,
+                'data-pi-path': '',
+                d: figure,
                 fill: 'none',
                 stroke: box.color,
                 strokeWidth: 1,
                 strokeLinejoin: 'round'
-              }),
-              box.top === null
-                ? null
-                : jsx('path', {
-                    'data-pi-part': 'rowLeft',
-                    d: parts.rowLeft,
-                    fill: 'none',
-                    stroke: box.color,
-                    strokeWidth: 1,
-                    strokeLinejoin: 'round'
-                  }),
-              box.top === null
-                ? null
-                : jsx('path', {
-                    'data-pi-part': 'rowTop',
-                    d: parts.rowTop,
-                    fill: 'none',
-                    stroke: 'url(#pi-handover-top)',
-                    strokeWidth: 1
-                  }),
-              box.top === null
-                ? null
-                : jsx('path', {
-                    'data-pi-part': 'rowBottom',
-                    d: parts.rowBottom,
-                    fill: 'none',
-                    stroke: 'url(#pi-handover-bottom)',
-                    strokeWidth: 1
-                  })
+              })
             ]
           })
         : jsx('div', {
