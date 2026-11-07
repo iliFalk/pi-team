@@ -99,7 +99,7 @@ const ctx = { rest: async () => ({}), i18n: { register: () => {} }, register: ()
 const results = {}
 selectedLane.set('theme-picker')
 
-for (const name of ['LaneList', 'LaneRow', 'ListHeader', 'Section', 'Row', 'LaneStatus', 'TeamPane', 'SessionTitle', 'AddSessionRow', 'QuestionBlock', 'FeatureCompose', 'FeatureView', 'ProjectCompose', 'ProjectView', 'ScrollPill', 'Scroller', 'FolderPlus', 'SelectionOutline', 'visibleFrame', 'framePath']) {
+for (const name of ['LaneList', 'LaneRow', 'ListHeader', 'Section', 'Row', 'LaneStatus', 'TeamPane', 'SessionTitle', 'AddSessionRow', 'QuestionBlock', 'FeatureCompose', 'FeatureView', 'ProjectCompose', 'ProjectView', 'ScrollPill', 'Scroller', 'FolderPlus', 'SelectionOutline', 'visibleFrame', 'frameParts']) {
   const fn = eval(name)
   try {
     const out = fn({
