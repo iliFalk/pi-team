@@ -380,7 +380,12 @@ function LaneRow({ lane, active, onPick }) {
   const fill = active
     ? `linear-gradient(to right, ${softFill} calc(100% - ${ROW_FADE}px), rgba(0,0,0,0))`
     : softFill
-  const bandFill = asked || active || hover ? { ...bandStyle, background: fill } : bandStyle
+  // A selected lane's fill also runs the last ten pixels to the divider, so it ends where the right part begins
+  // rather than short of it.
+  const bandFill =
+    asked || active || hover
+      ? { ...bandStyle, background: fill, ...(active ? { marginRight: `-${ROW_PAD}` } : {}) }
+      : bandStyle
   const statusColor = asked ? '#ffffff' : bad ? BAD_COLOR : lane.state === 'running' ? RUN_COLOR : undefined
   // The frame colour, not the text colour: a question row writes white on blue.
   const frameColor = asked ? ASK_COLOR : bad ? BAD_COLOR : lane.state === 'running' ? RUN_COLOR : DONE_COLOR
