@@ -306,6 +306,12 @@ animation does not.
   fills that DO exist are `--ui-bg-tertiary`, `--ui-control-hover-background` (aliased as
   `--chrome-action-hover`) and `--ui-control-active-background`. `--ui-danger` is the same trap: it is
   defined nowhere, so a red that named it stayed grey. The panel's own failure colour is `BAD_COLOR`.
+- **Every clickable element answers the pointer.** Three mechanisms count, and nothing else: `HoverBox`
+  (or `HeaderControl`, which wraps it), the state a row already keeps for its band, or a `hover:` class
+  that the shipped CSS really generated. The audit is mechanical: list every `onClick`, and for each
+  element check for `hoverFill` / `hoverColour` / a `hover:` class; the ones that have none are the
+  buttons of the compose cards, the two placeholders' drop rows and a lane row in the feature card —
+  all were found this way, none by looking.
 - **Every hover is `HoverBox`.** One component owns the state, the `120ms` fade and the two paints:
   a fill (`hoverFill`, `--ui-bg-tertiary`) and/or a word colour (`hoverColour`). A bordered control
   inside a header band goes through `HeaderControl`, which is `HoverBox` plus the band's numbers. No

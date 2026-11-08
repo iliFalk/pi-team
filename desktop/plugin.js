@@ -1653,24 +1653,34 @@ function AddSessionRow({ ctx, project, feature, sessionId, linked, onDone }) {
                   ? `Chat ${sessionId.slice(0, 18)}… will be linked to ${project}/${feature}.`
                   : 'No chat is open: open one and try again.'
               }),
-              jsx('span', {
-                role: 'button',
-                tabIndex: 0,
-                title: 'cancel',
-                onClick: () => setAsking(false),
-                className: 'flex shrink-0 items-center justify-center rounded border',
-                style: { color: BAD_COLOR, borderColor: BAD_COLOR, width: '16px', height: '16px', lineHeight: 1 },
-                children: '✕'
-              }),
-              jsx('span', {
-                role: 'button',
-                tabIndex: 0,
-                title: 'link',
-                onClick: link,
-                className: 'flex shrink-0 items-center justify-center rounded border',
-                style: { color: RUN_COLOR, borderColor: RUN_COLOR, width: '16px', height: '16px', lineHeight: 1 },
-                children: '✓'
-              })
+              jsx(
+                HeaderControl,
+                {
+                  title: 'cancel',
+                  glyph: '✕',
+                  size: BAND_MIN_H,
+                  fontSize: '10px',
+                  colour: BAD_COLOR,
+                  hoverColour: BAD_COLOR,
+                  border: BAD_COLOR,
+                  onClick: () => setAsking(false)
+                },
+                'cancel'
+              ),
+              jsx(
+                HeaderControl,
+                {
+                  title: 'link',
+                  glyph: '✓',
+                  size: BAND_MIN_H,
+                  fontSize: '10px',
+                  colour: RUN_COLOR,
+                  hoverColour: RUN_COLOR,
+                  border: RUN_COLOR,
+                  onClick: link
+                },
+                'link'
+              )
             ]
           })
         : null
@@ -1741,9 +1751,10 @@ function SessionTitle({ ctx, entry, project, feature, onRemove, onChanged }) {
           },
           className: 'h-5 flex-1 text-[0.625rem]'
         }),
-        jsx('button', {
-          type: 'button',
+        jsx(HoverBox, {
+          tag: 'button',
           onClick: save,
+          hoverColour: 'var(--ui-text-primary)',
           className: 'shrink-0 px-1 text-[0.625rem] text-(--ui-accent)',
           children: 'ok'
         })
@@ -2369,18 +2380,16 @@ function ProjectCompose({ ctx, sessionId, onDone }) {
       jsxs('div', {
         className: 'flex shrink-0 items-center gap-2',
         children: [
-          jsx('span', {
-            role: 'button',
-            tabIndex: 0,
+          jsx(HoverBox, {
             onClick: runCheck,
+            hoverFill: 'var(--ui-bg-tertiary)',
             className: 'flex items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
             style: { color: ASK_COLOR, borderColor: ASK_COLOR, opacity: busy || !url.trim() ? 0.5 : 1 },
             children: busy ? 'checking…' : 'check'
           }),
-          jsx('span', {
-            role: 'button',
-            tabIndex: 0,
+          jsx(HoverBox, {
             onClick: send,
+            hoverFill: 'var(--ui-bg-tertiary)',
             className: 'flex items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
             style: {
               color: RUN_COLOR,
@@ -2389,10 +2398,9 @@ function ProjectCompose({ ctx, sessionId, onDone }) {
             },
             children: 'send'
           }),
-          jsx('span', {
-            role: 'button',
-            tabIndex: 0,
+          jsx(HoverBox, {
             onClick: onDone,
+            hoverFill: 'var(--ui-bg-tertiary)',
             className: 'flex items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
             style: { color: BAD_COLOR, borderColor: BAD_COLOR },
             children: 'cancel'
@@ -2435,10 +2443,9 @@ function ProjectView({ ctx, project, onDone }) {
         children:
           'Waiting for the clone. When it lands in ~/work and the project is registered, this placeholder becomes the project itself.'
       }),
-      jsx('span', {
-        role: 'button',
-        tabIndex: 0,
+      jsx(HoverBox, {
         onClick: drop,
+        hoverFill: 'var(--ui-bg-tertiary)',
         className: 'mt-auto flex w-fit items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
         style: { color: BAD_COLOR, borderColor: BAD_COLOR },
         children: 'drop project'
@@ -2497,18 +2504,16 @@ function FeatureCompose({ ctx, project, sessionId, onDone }) {
       jsxs('div', {
         className: 'flex shrink-0 items-center gap-2',
         children: [
-          jsx('span', {
-            role: 'button',
-            tabIndex: 0,
+          jsx(HoverBox, {
             onClick: send,
+            hoverFill: 'var(--ui-bg-tertiary)',
             className: 'flex items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
             style: { color: RUN_COLOR, borderColor: RUN_COLOR, opacity: busy || !text.trim() ? 0.5 : 1 },
             children: busy ? 'sending…' : 'send'
           }),
-          jsx('span', {
-            role: 'button',
-            tabIndex: 0,
+          jsx(HoverBox, {
             onClick: onDone,
+            hoverFill: 'var(--ui-bg-tertiary)',
             className: 'flex items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
             style: { color: BAD_COLOR, borderColor: BAD_COLOR },
             children: 'cancel'
@@ -2569,12 +2574,14 @@ function FeatureView({ ctx, project, feature, onDone }) {
             className: 'flex flex-col',
             children: lanes.map(lane =>
               jsx(
-                'button',
+                HoverBox,
                 {
-                  type: 'button',
+                  tag: 'button',
                   onClick: () => {
                     showLane(lane.lane)
                   },
+                  // A lane row in the feature card picks a lane, like a tree row does: same fill.
+                  hoverFill: 'var(--chrome-action-hover)',
                   className: 'flex items-center gap-2 py-[3px] text-left text-[0.6875rem]',
                   children: [
                     jsx('span', {
@@ -2609,10 +2616,9 @@ function FeatureView({ ctx, project, feature, onDone }) {
           : 'Pick a lane below, or write in the thread of one to send work back.'
       }),
       preparing
-        ? jsx('span', {
-            role: 'button',
-            tabIndex: 0,
+        ? jsx(HoverBox, {
             onClick: drop,
+            hoverFill: 'var(--ui-bg-tertiary)',
             className:
               'mt-auto flex w-fit items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
             style: { color: BAD_COLOR, borderColor: BAD_COLOR },
