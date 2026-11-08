@@ -273,6 +273,7 @@ Rules:
 | Thread | a bubble per message, `panel` messages dimmed |
 | Receipt | `merge` section: commit, date, message, diff, branch, then the file list |
 | Card shell | one header strip of `HEADER_H` and content starting at `ROW_PAD` |
+| Card footer buttons | `24px` tall — `BAND_MIN_H 16` plus `BAND_PY 4` above and below, the hover band's own size — sharing the row equally (`flex: 1 1 0`), the word centred in each |
 | Scroll pill | `44px` long, `3px` wide, radius `999px`, `var(--ui-text-quaternary)` at 0.55 |
 | Panel frame | one border, no corner radius: the app's pane is square |
 | Selection figure | one `1px` line around the selected row and the right pane, in the row's state colour; every turn carries the same `4px` radius, the two turns at the seam included, and each seam segment stops a radius short of the corner so no straight stub sits inside the curve; the row's own ring is suppressed while it is selected, and the seam opens over the band's height |

@@ -2375,7 +2375,7 @@ function ProjectCompose({ ctx, sessionId, onDone }) {
         kind: result.message_sent ? 'info' : 'error',
         message: result.message_sent
           ? `${result.name}: project created, the request went to the chat`
-          : `${result.name}: project created, but the message was not delivered — write to me in the chat`
+          : `${result.name}: project created, but the message was not delivered — write in the chat`
       })
       setUrl('')
       setCheck(null)
@@ -2393,7 +2393,7 @@ function ProjectCompose({ ctx, sessionId, onDone }) {
       jsx('div', {
         className: 'text-[0.6875rem] leading-relaxed text-(--ui-text-tertiary)',
         children:
-          'Paste a GitHub repository. I check that it exists and that this machine can read it, then clone it into ~/work, register it, and the project appears in the tree.'
+          'Paste a GitHub repository. The panel checks that it exists and that this machine can read it, then clones it into ~/work, registers it, and the project appears in the tree.'
       }),
       jsx('input', {
         value: url,
@@ -2425,15 +2425,29 @@ function ProjectCompose({ ctx, sessionId, onDone }) {
           jsx(HoverBox, {
             onClick: runCheck,
             hoverFill: 'var(--ui-bg-tertiary)',
-            className: 'flex items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
-            style: { color: ASK_TEXT, borderColor: ASK_TEXT, opacity: busy || !url.trim() ? 0.5 : 1 },
+            className: 'flex items-center justify-center rounded border px-2 text-[0.6875rem]',
+            style: {
+            // The hover band's own size, split three ways, word centred.
+            flex: '1 1 0',
+            minWidth: 0,
+            height: `${BAND_MIN_H_N + 2 * BAND_PY}px`,
+            boxSizing: 'border-box',
+              color: ASK_TEXT,
+              borderColor: ASK_TEXT,
+              opacity: busy || !url.trim() ? 0.5 : 1
+            },
             children: busy ? 'checking…' : 'check'
           }),
           jsx(HoverBox, {
             onClick: send,
             hoverFill: 'var(--ui-bg-tertiary)',
-            className: 'flex items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
+            className: 'flex items-center justify-center rounded border px-2 text-[0.6875rem]',
             style: {
+            // The hover band's own size, split three ways, word centred.
+            flex: '1 1 0',
+            minWidth: 0,
+            height: `${BAND_MIN_H_N + 2 * BAND_PY}px`,
+            boxSizing: 'border-box',
               color: RUN_TEXT,
               borderColor: RUN_TEXT,
               opacity: busy || !check || !check.ok ? 0.5 : 1
@@ -2443,8 +2457,16 @@ function ProjectCompose({ ctx, sessionId, onDone }) {
           jsx(HoverBox, {
             onClick: onDone,
             hoverFill: 'var(--ui-bg-tertiary)',
-            className: 'flex items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
-            style: { color: BAD_TEXT, borderColor: BAD_TEXT },
+            className: 'flex items-center justify-center rounded border px-2 text-[0.6875rem]',
+            style: {
+            // The hover band's own size, split three ways, word centred.
+            flex: '1 1 0',
+            minWidth: 0,
+            height: `${BAND_MIN_H_N + 2 * BAND_PY}px`,
+            boxSizing: 'border-box',
+              color: BAD_TEXT,
+              borderColor: BAD_TEXT
+            },
             children: 'cancel'
           })
         ]
@@ -2514,7 +2536,7 @@ function FeatureCompose({ ctx, project, sessionId, onDone }) {
         kind: result.message_sent ? 'info' : 'error',
         message: result.message_sent
           ? `${project}: feature created, the request went to the chat`
-          : `${project}: feature created, but the message was not delivered — write to me in the chat`
+          : `${project}: feature created, but the message was not delivered — write in the chat`
       })
       setText('')
       onDone()
@@ -2531,7 +2553,7 @@ function FeatureCompose({ ctx, project, sessionId, onDone }) {
       jsx('div', {
         className: 'text-[0.6875rem] leading-relaxed text-(--ui-text-tertiary)',
         children:
-          'Write what you want. The feature appears at once as preparation; I give it a name and the task for pi.'
+          'Write what you want. The feature appears at once as preparation; the orchestrator gives it a name and the task for pi.'
       }),
       jsx('textarea', {
         value: text,
@@ -2549,15 +2571,34 @@ function FeatureCompose({ ctx, project, sessionId, onDone }) {
           jsx(HoverBox, {
             onClick: send,
             hoverFill: 'var(--ui-bg-tertiary)',
-            className: 'flex items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
-            style: { color: RUN_TEXT, borderColor: RUN_TEXT, opacity: busy || !text.trim() ? 0.5 : 1 },
+            className: 'flex items-center justify-center rounded border px-2 text-[0.6875rem]',
+            style: {
+            // The hover band's own size: 16px of content plus 4px above and below, and the row's full
+            // width split between the buttons, with the word centred in each.
+            flex: '1 1 0',
+            minWidth: 0,
+            height: `${BAND_MIN_H_N + 2 * BAND_PY}px`,
+            boxSizing: 'border-box',
+              color: RUN_TEXT,
+              borderColor: RUN_TEXT,
+              opacity: busy || !text.trim() ? 0.5 : 1
+            },
             children: busy ? 'sending…' : 'send'
           }),
           jsx(HoverBox, {
             onClick: onDone,
             hoverFill: 'var(--ui-bg-tertiary)',
-            className: 'flex items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
-            style: { color: BAD_TEXT, borderColor: BAD_TEXT },
+            className: 'flex items-center justify-center rounded border px-2 text-[0.6875rem]',
+            style: {
+            // The hover band's own size: 16px of content plus 4px above and below, and the row's full
+            // width split between the buttons, with the word centred in each.
+            flex: '1 1 0',
+            minWidth: 0,
+            height: `${BAND_MIN_H_N + 2 * BAND_PY}px`,
+            boxSizing: 'border-box',
+              color: BAD_TEXT,
+              borderColor: BAD_TEXT
+            },
             children: 'cancel'
           })
         ]
