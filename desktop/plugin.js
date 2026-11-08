@@ -40,13 +40,20 @@ const ICON_SIZE = 12
 // derive from ROW_PAD: when it moved 6 → 10 the two hand-written values stayed behind, which put
 // every spine 4px outside its icons and left a 4px gap at the end of every stub.
 const ICON_CENTER = `${ROW_PAD_N + ICON_SIZE / 2}px`
-const LINE_X = `${ROW_PAD_N + ICON_SIZE / 2 - GUIDE_STEP_N}px`
+const LINE_X_N = ROW_PAD_N + ICON_SIZE / 2 - GUIDE_STEP_N
+const LINE_X = `${LINE_X_N}px`
 // The stub closes on the glyph, not on its box: a 1.75px stroke inside a 12px box leaves one empty
 // pixel column at the box edge, and a line that stops there reads as "does not reach the icon".
 // One extra pixel lands on that column — measured at 2×, it merges with the stroke instead of
 // cutting into it.
 const STUB_OVERLAP = 1
-const STUB_W = `${GUIDE_STEP_N - ICON_SIZE / 2 + STUB_OVERLAP}px`
+const STUB_W_N = GUIDE_STEP_N - ICON_SIZE / 2 + STUB_OVERLAP
+const STUB_W = `${STUB_W_N}px`
+// The spine's own 1px stroke already covers the column the tick would start on, and two 45% paints
+// on one pixel darken it: every junction showed a dot. The tick starts one pixel right of the spine
+// and is one pixel shorter, so its far end still lands on the icon.
+const STUB_X = `${LINE_X_N + 1}px`
+const STUB_W_DRAW = `${STUB_W_N - 1}px`
 // The trunk leaves the ICON, not the icon's box: a glyph's ink stops about 1.5px above the box
 // bottom (the folder path ends at 20 of 24), so a segment that starts on the box hangs in the air
 // under the folder. Two pixels put it inside the bottom stroke, where the stroke is full opacity
@@ -267,7 +274,7 @@ function FolderPlus() {
 /** A row, the segment of its level's line that belongs to it, and its children.
  *  Every measurement here is row-relative: a percentage of the node would put the
  *  stub and the end of the line in the middle of the children instead of the row. */
-function TreeRow({ last, orphan, trunk, runner, row, children, tail }) {
+function TreeRow({ last, orphan, trunk, runner, row, children, tail, trunkTail }) {
   const blocks = (Array.isArray(children) ? children : [children]).filter(Boolean)
   // How far this row's segment runs past its own box: exactly the air to the row below.
   // Features stand a gap apart, so the extension fills that gap; lanes stand shoulder to
@@ -275,6 +282,11 @@ function TreeRow({ last, orphan, trunk, runner, row, children, tail }) {
   // pixel twice and shows as a brighter 4px piece on the line.
   const tailPx = tail === undefined ? parseInt(FEATURE_GAP, 10) : Number(tail)
   const tailBottom = tailPx ? `-${tailPx}px` : '0px'
+  // The trunk reaches its first child, and that air is the CHILD container's top padding, which is
+  // not the same number as the gap between siblings: a feature indents its lanes by FEATURE_GAP, a
+  // group row does not indent anything. One value for both painted 4px over the first lane.
+  const trunkTailPx = trunkTail === undefined ? tailPx : Number(trunkTail)
+  const trunkBottom = trunkTailPx ? `-${trunkTailPx}px` : '0px'
 
   // The last row stops at its own middle, so its half is measured inside the row.
   // Every other row runs on beside its children, so its line spans the whole node.
@@ -298,9 +310,9 @@ function TreeRow({ last, orphan, trunk, runner, row, children, tail }) {
                 'aria-hidden': true,
                 style: {
                   position: 'absolute',
-                  left: LINE_X,
+                  left: STUB_X,
                   top: '50%',
-                  width: STUB_W,
+                  width: STUB_W_DRAW,
                   height: '1px',
                   background: STROKE,
                   opacity: 0.45,
@@ -314,7 +326,7 @@ function TreeRow({ last, orphan, trunk, runner, row, children, tail }) {
                   ...LINE,
                   left: ICON_CENTER,
                   top: `calc(50% + ${ICON_SIZE / 2 - TRUNK_OVERLAP}px)`,
-                  bottom: tailBottom
+                  bottom: trunkBottom
                 }
               })
             : null,
@@ -1270,6 +1282,8 @@ function LaneList({ ctx }) {
             // the segment starts a whole row late and leaves a hole between the folder and the
             // first lane's own segment — the only row in the tree that had no trunk.
             trunk: handedOpen,
+            // Its lanes begin at the container's top edge: no padding to fill.
+            trunkTail: 0,
             row: jsx(ListHeader, {
               label: 'review',
               plain: handed.length,
@@ -1309,6 +1323,7 @@ function LaneList({ ctx }) {
           {
             last: true,
             trunk: shelfOpen,
+            trunkTail: 0,
             row: jsx(ListHeader, {
               label: 'closed',
               counts: (() => {
