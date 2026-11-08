@@ -347,6 +347,13 @@ const bandStyle = {
   margin: `-${BAND_PY}px 0`,
   borderRadius: '4px'
 }
+// One height for every HEADER band, so a project, a feature and the review row measure alike.
+// 16px of content plus 2·BAND_PY paints a 24px band. The control inside a header band uses the
+// same number as its height, and the label's line box (~13px for 10px text) stays under the
+// floor, so nothing but the floor can set the height. Content-box is explicit: the app may set
+// border-box globally, which would charge the padding against this number instead of adding it.
+const BAND_MIN_H = '16px'
+const headerBandStyle = { ...bandStyle, minHeight: BAND_MIN_H, boxSizing: 'content-box' }
 const labelBand = ''
 const labelBandOn = 'bg-(--chrome-action-hover)'
 
@@ -922,10 +929,10 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim, tag, se
             className: `flex min-w-0 flex-1 items-center gap-1 ${labelBand}`,
             'data-pi-band': '',
             style: counts && counts.ask
-              ? { ...bandStyle, background: ASK_BG_SOFT }
+              ? { ...headerBandStyle, background: ASK_BG_SOFT }
               : hover
-                ? { ...bandStyle, background: 'var(--chrome-action-hover)' }
-                : bandStyle,
+                ? { ...headerBandStyle, background: 'var(--chrome-action-hover)' }
+                : headerBandStyle,
             children: [
               jsx('span', {
                 className: 'truncate',
@@ -957,11 +964,11 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim, tag, se
                       transform: 'translateY(-0.5px)',
                       display: 'flex',
                       alignItems: 'center',
-                      height: '18px',
+                      height: BAND_MIN_H,
                       padding: '0 5px',
-                      fontSize: '11.5px',
+                      fontSize: '10.5px',
                       lineHeight: 1
-                    },
+                      },
                     children: jsx('span', {
                       style: { display: 'block', transform: 'translate(0.5px, 0.5px)' },
                       children: action.label
@@ -986,9 +993,9 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim, tag, se
                           style: {
                             color: BAD_COLOR,
                             borderColor: BAD_COLOR,
-                            width: '18px',
-                            height: '18px',
-                            fontSize: '13px',
+                            width: BAND_MIN_H,
+                            height: BAND_MIN_H,
+                            fontSize: '12px',
                             lineHeight: 1
                           },
                           children: '✕'
@@ -1006,9 +1013,9 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim, tag, se
                           style: {
                             color: RUN_COLOR,
                             borderColor: RUN_COLOR,
-                            width: '18px',
-                            height: '18px',
-                            fontSize: '13px',
+                            width: BAND_MIN_H,
+                            height: BAND_MIN_H,
+                            fontSize: '12px',
                             lineHeight: 1
                           },
                           children: '✓'
@@ -1032,9 +1039,9 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim, tag, se
                         transform: 'translateY(-0.5px)',
                         display: 'flex',
                         alignItems: 'center',
-                        height: '18px',
+                        height: BAND_MIN_H,
                         padding: '0 5px',
-                        fontSize: '11.5px',
+                        fontSize: '10.5px',
                         lineHeight: 1
                       },
                       children: jsx('span', {

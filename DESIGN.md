@@ -28,6 +28,7 @@ spacing:
   gap-feature: 4px
   tree-step: 18px
   band-pad: 4px
+  header-band: 16px
   tree-end-pad: 10px
 typography:
   micro: 0.5625rem
@@ -111,6 +112,7 @@ Rules:
 | State word | `0.625rem` | coloured by state, never bold except a question |
 | Counters | `0.625rem` | one sign per state |
 | Receipt numbers | `0.6875rem` | monospace, right aligned |
+| Header control label | `10.5px` | `SEND` in a project, feature or review band; the `✕` and `✓` that replace it are `12px` |
 | Badge | `0.5625rem` | the only place this size is allowed |
 
 No weights beyond regular and medium. A question row uses `font-medium` on the name only.
@@ -129,6 +131,7 @@ One rhythm, ten pixels, on both sides of a row and at the ends of the tree.
 | tree end padding | `10px` | above the first project and below the last lane |
 | `GUIDE_STEP` | `18px` | one level of the tree |
 | band padding | `4px` | inside a highlight band, so its paint clears the text |
+| `BAND_MIN_H` | `16px` | content height every HEADER band is floored to, so a project, a feature and the review row paint the same `24px` (`16 + 2 × 4`) |
 
 Vertical rhythm of a lane row: 6 px, name line, snippet line, 6 px. Two lane rows therefore stand
 12 px apart, which is the same air the project gap leaves between blocks.
@@ -192,6 +195,7 @@ Rules:
 |---|---|
 | Lane row | icon, name, state word, snippet; band behind the text only, never behind the icon; a selected lane's fill runs the last `10px` to the divider and fades to nothing over the final `14px`, so it dissolves where the right part begins |
 | Project or feature row | folder icon, label, counters |
+| Header control | one word, `10.5px` uppercase, `1px` stroke, radius `4px`, height `BAND_MIN_H` (`16px`); clicking it swaps the word for `✕` and `✓` at `16 × 16`, the same box, so the band never moves |
 | Add-feature row | the FIRST line inside an open project, directly under the project row: a dashed folder with a plus inside, label `new feature` in quaternary; the only way to create a feature. It opens the block so the gesture stays visible however long the list grows; the level's closing `last` mark moves to whichever row ends the block (a feature, `review`, or `closed`) |
 | Counter | `?` `!` gear `✓` with a number, one colour each, no separator between them |
 | Question block | inside the lane card, three controls at most, answer goes to the lane |
@@ -250,7 +254,7 @@ animation does not.
 |---|---|---|
 | Colour | `desktop/plugin.js` | `RUN_COLOR`, `ASK_COLOR`, `ASK_OUTLINE`, `ASK_BG`, `ASK_BG_SOFT`, `BAD_COLOR`, `DONE_COLOR`, `STROKE` |
 | Tree | `desktop/plugin.js` | `GUIDE_STEP`, `ICON_SIZE`, `ICON_CENTER`, `STUB_W`, `LINE_X`, `LINE` |
-| Spacing | `desktop/plugin.js` | `ROW_PAD`, `ROW_PY`, `HEADER_PY`, `HEADER_H`, `PROJECT_GAP`, `FEATURE_GAP`, `BAND_PY` |
+| Spacing | `desktop/plugin.js` | `ROW_PAD`, `ROW_PY`, `HEADER_PY`, `HEADER_H`, `PROJECT_GAP`, `FEATURE_GAP`, `BAND_PY`, `BAND_MIN_H` |
 | Surfaces | `desktop/plugin.js` | `SOFT_SHADOW`, `BAND_H`, `BAND_BG`, `PROJECT_SEP_*` |
 | Pill | `desktop/plugin.js` | `PILL_H`, `ScrollPill`, `Scroller` |
 | State machine | `plugin/dashboard/plugin_api.py` | which lane is in which state, what a receipt holds |
