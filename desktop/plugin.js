@@ -420,6 +420,15 @@ const bandStyle = {
 const BAND_MIN_H_N = 16
 const BAND_MIN_H = `${BAND_MIN_H_N}px`
 const headerBandStyle = { ...bandStyle, minHeight: BAND_MIN_H, boxSizing: 'content-box' }
+// A control in the STATE area: the hover band's height, the card's own width, the word centred — the
+// same size as the buttons at the foot of a compose card. Declared here, after the band numbers it
+// multiplies: a const that reads them earlier dies on the temporal dead zone.
+const STATE_CONTROL_CLASS =
+  'mx-2.5 my-1 flex shrink-0 items-center justify-center rounded border border-(--ui-stroke-secondary) text-[0.6875rem]'
+const STATE_CONTROL_STYLE = {
+  height: `${BAND_MIN_H_N + 2 * BAND_PY}px`,
+  boxSizing: 'border-box'
+}
 const labelBand = ''
 const labelBandOn = 'bg-(--chrome-action-hover)'
 
@@ -2190,8 +2199,8 @@ function LaneStatus({ ctx }) {
       !lane.shelved && ['done', 'stopped', 'failed', 'error'].includes(lane.state)
         ? lane.handed
           ? jsx('span', {
-              className: 'mx-2.5 my-1 shrink-0 rounded border px-1.5 py-0.5 text-[0.625rem]',
-              style: { color: ASK_TEXT, borderColor: ASK_TEXT },
+              className: STATE_CONTROL_CLASS,
+              style: { ...STATE_CONTROL_STYLE, color: ASK_TEXT, borderColor: ASK_TEXT },
               children: 'in review'
             })
           : jsx(HoverBox, {
@@ -2204,8 +2213,8 @@ function LaneStatus({ ctx }) {
                   })
                   .then(() => query.refetch()),
               title: 'queue this lane for review; send on the review row asks the orchestrator',
-              className:
-                'mx-2.5 my-1 shrink-0 rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.625rem]',
+              className: STATE_CONTROL_CLASS,
+              style: STATE_CONTROL_STYLE,
               hoverFill: 'var(--ui-bg-tertiary)',
               children: 'to review'
             })
@@ -2221,8 +2230,8 @@ function LaneStatus({ ctx }) {
                 })
                 .then(() => query.refetch()),
             title: 'ask the orchestrator to close this lane; it shows the plan first',
-            className:
-              'mx-2.5 my-1 shrink-0 self-start rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.625rem]',
+            className: STATE_CONTROL_CLASS,
+            style: STATE_CONTROL_STYLE,
             hoverFill: 'var(--ui-bg-tertiary)',
             children: 'close'
           })
