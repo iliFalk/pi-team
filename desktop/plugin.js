@@ -1253,6 +1253,10 @@ function LaneList({ ctx }) {
           TreeRow,
           {
             last: !shelved.length,
+            // The review row has children too, so its line must reach down to them. Without this
+            // the segment starts a whole row late and leaves a hole between the folder and the
+            // first lane's own segment — the only row in the tree that had no trunk.
+            trunk: handedOpen,
             row: jsx(ListHeader, {
               label: 'review',
               plain: handed.length,

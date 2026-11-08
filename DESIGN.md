@@ -167,6 +167,12 @@ moved right and the lines stayed, so every spine sat 4 px outside its icon's cen
 stopped 4 px short of the icon it was supposed to join. A measured gap at the end of a stub means the
 three numbers came from two different `ROW_PAD` values — check the arithmetic before touching pixels.
 
+**Every row with visible children passes `trunk`.** A tree row draws its own segment under its own
+icon and hands the rest to its children; a row that forgets the flag has no segment, so the line
+starts one whole row late and leaves a hole between the folder and the first child's own segment.
+The `review` group row was the only one in the panel without it — the defect shows as a gap under
+that folder and nowhere else, which is why it looked like a fault of one level rather than of the tree.
+
 The line physically cannot break between levels, because no element draws a line that belongs to
 another element.
 
