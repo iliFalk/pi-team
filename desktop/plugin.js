@@ -1425,8 +1425,11 @@ function LaneList({ ctx }) {
               // same 4px radius and 4px of padding around the words — drawn as a dashed outline
               // instead of a fill. Its content is 14px, not BAND_MIN_H 16, because the two borders add
               // the missing 2 and the row must stay the height of its siblings.
-              className: 'flex min-w-0 flex-1 items-center',
+              className: 'flex min-w-0 items-center',
               style: {
+                // As wide as the words, not as wide as the row: the band hugs its own content and
+                // may still shrink in a narrow panel.
+                flex: '0 1 auto',
                 border: '1px dashed currentColor',
                 borderRadius: `4px`,
                 padding: `${BAND_PY}px 4px`,
