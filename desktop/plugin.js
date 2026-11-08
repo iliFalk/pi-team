@@ -1627,10 +1627,11 @@ function Row({ label, value, color }) {
   })
 }
 
-function Section({ title, band }) {
+function Section({ title, band, first }) {
+  // A section that opens a card carries no rule of its own: the card's header already ends in one,
+  // and two of them land four pixels apart.
   return jsxs('div', {
-    className:
-      'mt-1 border-t border-(--ui-stroke-secondary) px-2.5 pt-1.5 pb-0.5 text-[0.625rem] uppercase tracking-wide text-(--ui-text-tertiary)',
+    className: `${first ? '' : 'mt-1 border-t border-(--ui-stroke-secondary) '}px-2.5 pt-1.5 pb-0.5 text-[0.625rem] uppercase tracking-wide text-(--ui-text-tertiary)`,
     children: [
       title,
       band
@@ -2103,7 +2104,7 @@ function LaneStatus({ ctx }) {
           })
         : null,
       // Three areas, always in this order: STATUS first, then SESSIONS, then STATE.
-      jsx(Section, { title: 'status' }),
+      jsx(Section, { title: 'status', first: !lane.question }),
       lane.shelved ? jsx(Row, { label: 'closed', value: lane.shelved_reason }) : null,
       lane.merge ? jsx(Receipt, { merge: lane.merge }) : null,
       jsx(Row, { label: 'branch', value: lane.branch || '—' }),
