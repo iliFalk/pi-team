@@ -1421,7 +1421,17 @@ function LaneList({ ctx }) {
             }),
             jsx('span', {
               className: 'truncate',
-              style: TEXT_NUDGE,
+              style: {
+                ...TEXT_NUDGE,
+                // The words sit inside a dotted line, the same way the folder beside them is dashed:
+                // currentColor keeps the tone and the hover accent, and the negative margin holds the
+                // row's height so the border cannot make this row taller than its siblings.
+                border: '1px dotted currentColor',
+                borderRadius: '4px',
+                padding: '0 4px',
+                margin: '-1px 0',
+                lineHeight: 1.1
+              },
               children: 'new feature'
             })
           ]
