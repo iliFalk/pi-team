@@ -3,7 +3,7 @@
  *
  * Left pane: one row per lane — name, state, the first line of its last message.
  * Right pane: the selected lane — task, the last text the agent wrote, last tool,
- * changes, plan, touched specs.
+ * changes, touched specs.
  *
  * Lanes are headless `pi -p` runs recorded by ~/.hermes/scripts/pi-lane.
  * Backend: ~/.hermes/plugins/pi-team/dashboard/plugin_api.py (/api/plugins/pi-team).
@@ -1731,12 +1731,6 @@ function AddSessionRow({ ctx, project, feature, sessionId, linked, onDone }) {
   })
 }
 
-function planGlyph(status) {
-  if (status === 'done') return '✓'
-  if (status === 'in_progress') return '▸'
-  return '·'
-}
-
 function SessionTitle({ ctx, entry, project, feature, onRemove, onChanged }) {
   const query = useQuery({
     queryKey: ['pi-team', 'title', entry.id],
@@ -2081,7 +2075,6 @@ function LaneStatus({ ctx }) {
     })
   }
 
-  const plan = lane.plan
   const usage = lane.usage || {}
   const status = lane.status || []
 
@@ -2287,16 +2280,6 @@ function LaneStatus({ ctx }) {
             ]
           })
         : null,
-
-      lane.shelved ? null : jsx(Section, { title: plan ? `plan ${plan.done}/${plan.total}` : 'plan' }),
-      lane.shelved ? null : plan
-        ? (plan.items || []).slice(0, 10).map((item, index) =>
-            jsx(Row, { label: planGlyph(item.status), value: item.title }, `${index}-${item.title}`)
-          )
-        : jsx('div', {
-            className: 'px-2.5 py-0.5 text-[0.625rem] text-(--ui-text-tertiary)',
-            children: 'no plan'
-          }),
 
       (lane.spec_tree || []).length > 0 ? jsx(Section, { title: `specs · ${lane.spec_tree.length}` }) : null,
       (lane.spec_tree || []).slice(0, 40).map(node =>

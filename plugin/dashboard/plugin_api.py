@@ -7,7 +7,7 @@ A lane is a worktree plus one ``pi -p`` run, recorded by ``~/.hermes/scripts/pi-
     $HERMES_HOME/lanes/<lane>/stderr.txt     stderr of the run
 
 Nothing here starts work: the backend only reads. The panes show the lane state,
-the last assistant text, usage, the git changes and the pi-todos plan.
+the last assistant text, usage and the git changes.
 """
 
 from __future__ import annotations
@@ -164,7 +164,7 @@ def _parse_events(lines: List[str]) -> Dict[str, Any]:
 
 
 # --------------------------------------------------------------------------- #
-# git and plan
+# git
 # --------------------------------------------------------------------------- #
 
 def _run_git(worktree: str, *args: str) -> tuple[int, str]:
@@ -194,7 +194,7 @@ def _status_lines(worktree: str) -> List[Dict[str, str]]:
         code = line[:2].strip() or "?"
         path = line[3:].strip()
         if path.startswith(".thinkrail/"):
-            continue  # ephemeral lane scratch: the plan store, not work
+            continue  # ephemeral lane scratch, not work
         rows.append({"code": code, "path": path})
     return rows
 
@@ -253,54 +253,6 @@ def _specs_touched(worktree: str) -> List[str]:
     rc, out = _run_git(worktree, "diff", "HEAD", "--name-only")
     names = [n.strip() for n in out.splitlines() if n.strip()] if rc == 0 else []
     return [n for n in names if n.endswith("SPEC.md")]
-
-
-def _plan(worktree: str) -> Optional[Dict[str, Any]]:
-    """Newest plan of the lane, read from the pi-todos store. None when absent."""
-    root = Path(worktree) / ".thinkrail" / "context" / "todos"
-    if not root.is_dir():
-        return None
-    try:
-        files = sorted(root.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
-    except OSError:
-        return None
-    if not files:
-        return None
-    data = _read_json(files[0])
-    if data is None:
-        return None
-
-    items: List[Dict[str, Any]] = []
-    raw_groups = data.get("groups")
-    groups: List[Any] = raw_groups if isinstance(raw_groups, list) else []
-    for group in groups:
-        if not isinstance(group, dict):
-            continue
-        for item in group.get("todos") or []:
-            if isinstance(item, dict):
-                items.append({
-                    "group": group.get("title", ""),
-                    "title": item.get("title", ""),
-                    "status": item.get("status", "pending"),
-                })
-    raw_loose = data.get("todos")
-    loose: List[Any] = raw_loose if isinstance(raw_loose, list) else []
-    for item in loose:
-        if isinstance(item, dict):
-            items.append({
-                "group": "",
-                "title": item.get("title", ""),
-                "status": item.get("status", "pending"),
-            })
-
-    done = sum(1 for item in items if item["status"] == "done")
-    return {
-        "groups": len(groups),
-        "total": len(items),
-        "done": done,
-        "current": next((i["title"] for i in items if i["status"] == "in_progress"), None),
-        "items": items,
-    }
 
 
 # --------------------------------------------------------------------------- #
@@ -513,7 +465,6 @@ def _lane_entry(lane_dir: Path) -> Optional[Dict[str, Any]]:
         "diff_files": [],
         "specs": [],
         "spec_tree": [],
-        "plan": None,
         "status": [],
         "shelved": False,
         "shelved_reason": "",
@@ -544,7 +495,6 @@ def _lane_entry(lane_dir: Path) -> Optional[Dict[str, Any]]:
         entry["diff_files"] = _diff_files(worktree)
         entry["specs"] = _specs_touched(worktree)
         entry["spec_tree"] = _spec_tree(worktree)
-        entry["plan"] = _plan(worktree)
 
     if state == "waiting":
         question = _read_json(lane_dir / "question.json")
@@ -688,8 +638,7 @@ def _closed_entries() -> List[Dict[str, Any]]:
             "usage": {},
             "turns": 0,
             "status": [],
-            "plan": None,
-            "spec_tree": [],
+                "spec_tree": [],
             "feature_sessions": [],
             "thread": [],
             "task": "",
@@ -716,13 +665,13 @@ def _closed_entries() -> List[Dict[str, Any]]:
 
 @router.get("/lanes")
 def list_lanes() -> Dict[str, Any]:
-    """Every lane: state, task, last assistant text, changes and plan progress."""
+    """Every lane: state, task, last assistant text and changes."""
     lanes = _all_lanes()
     known = {lane["lane"] for lane in lanes}
     lanes += [entry for entry in _closed_entries() if entry["lane"] not in known]
     return {
         "lanes": [
-            {k: v for k, v in lane.items() if k not in ("status", "plan", "spec_tree")}
+            {k: v for k, v in lane.items() if k not in ("status", "spec_tree")}
             for lane in lanes
         ],
         "count": len(lanes),
@@ -1207,7 +1156,7 @@ def update_plugin() -> Dict[str, Any]:
 
 @router.get("/lanes/{lane}")
 def lane_detail(lane: str) -> Dict[str, Any]:
-    """One lane with per-file status, the full plan and the last text."""
+    """One lane with per-file status and the last text."""
     match = next((item for item in _all_lanes() if item["lane"] == lane), None)
     if match is None:
         # A closed lane keeps only its journal line; that is the whole record.
