@@ -171,7 +171,7 @@ otherwise paint over them.
 | `LINE_X` −2 px | where the spine sits relative to the child's own box: `ICON_CENTER − GUIDE_STEP 18` |
 | trunk | from `50% + ICON_SIZE/2 − TRUNK_OVERLAP 2` down to `−FEATURE_GAP`: it starts inside the icon's bottom stroke, not at its box edge, because a folder's ink stops 2 px above the box |
 | guide | 1 px, `var(--ui-text-tertiary)`, opacity 0.7 — 3.5:1 |
-| tick | 1 px, same colour, opacity 0.7 |
+| tick | 1 px as a `border-top`, same colour, opacity 0.7 — a background box would straddle two device rows at a fractional scale and read twice as thick as the spines |
 | last child | its spine stops at 50% of the row instead of running on |
 | `tail` | how far a row's own segment runs past its box to the next sibling: `FEATURE_GAP 4`, `0` for lanes, whose rows touch |
 | `trunkTail` | how far the trunk runs past its box to its first child: the child container's top padding — `4` for a feature, `0` for the review and closed rows, whose lanes start at the container's edge |
@@ -190,6 +190,12 @@ arithmetic. They were once hand-written against `ROW_PAD 6`: when the rhythm mov
 moved right and the lines stayed, so every spine sat 4 px outside its icon's centre and every stub
 stopped 4 px short of the icon it was supposed to join. A measured gap at the end of a stub means the
 three numbers came from two different `ROW_PAD` values — check the arithmetic before touching pixels.
+
+**Every guide is a border, never a background box.** A `height: 1px` box with a background paints one
+device row at a whole scale but straddles two at a fractional one (measured at 1.65: two full rows),
+while a `1px` border snaps to a single row or column. The spines were borders and the ticks were boxes,
+so on his display the ticks looked twice as thick as the lines they hang from — the fault was the
+primitive, not the number. Borders snap; backgrounds antialias.
 
 **A segment runs exactly the air below it, never more — and never over the stroke it leaves.** Two 1-px strokes at 45% opacity painted over
 each other darken the pixel, so an extension that lands on the next row's own segment shows as a

@@ -334,8 +334,10 @@ function TreeRow({ last, orphan, trunk, runner, row, children, tail, trunkTail }
                   left: STUB_X,
                   top: '50%',
                   width: STUB_W_DRAW,
-                  height: '1px',
-                  background: STROKE,
+                  // A top BORDER, not a 1px background box: at a fractional display scale a background
+                  // box straddles two device rows while a border snaps to one, so the ticks read twice
+                  // as thick as the spines beside them (measured at 1.65: two rows against one column).
+                  borderTop: `1px solid ${STROKE}`,
                   opacity: GUIDE_OPACITY,
                   pointerEvents: 'none'
                 }
