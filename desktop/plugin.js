@@ -41,7 +41,12 @@ const ICON_SIZE = 12
 // every spine 4px outside its icons and left a 4px gap at the end of every stub.
 const ICON_CENTER = `${ROW_PAD_N + ICON_SIZE / 2}px`
 const LINE_X = `${ROW_PAD_N + ICON_SIZE / 2 - GUIDE_STEP_N}px`
-const STUB_W = `${GUIDE_STEP_N - ICON_SIZE / 2}px`
+// The stub closes on the glyph, not on its box: a 1.75px stroke inside a 12px box leaves one empty
+// pixel column at the box edge, and a line that stops there reads as "does not reach the icon".
+// One extra pixel lands on that column — measured at 2×, it merges with the stroke instead of
+// cutting into it.
+const STUB_OVERLAP = 1
+const STUB_W = `${GUIDE_STEP_N - ICON_SIZE / 2 + STUB_OVERLAP}px`
 // Quaternary rather than the border tone: the elbow must stay visible on a
 // highlighted row, where a border-coloured line washes out.
 const STROKE = 'var(--ui-text-quaternary)'

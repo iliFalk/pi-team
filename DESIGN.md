@@ -147,11 +147,18 @@ otherwise paint over them.
 |---|---|
 | `ICON_SIZE` 12 px | folder for a project or a feature, terminal for a lane |
 | `ICON_CENTER` 16 px | the line hangs under the centre of the icon: `ROW_PAD 10 + ICON_SIZE/2` |
-| `STUB_W` 12 px | the horizontal tick from the parent's axis to the child icon's LEFT edge: `GUIDE_STEP 18 − ICON_SIZE/2` |
+| `STUB_W` 13 px | the horizontal tick from the parent's axis to the child icon's ink: `GUIDE_STEP 18 − ICON_SIZE/2 + STUB_OVERLAP 1` |
 | `LINE_X` −2 px | where the spine sits relative to the child's own box: `ICON_CENTER − GUIDE_STEP 18` |
 | guide | 1 px, `var(--ui-text-quaternary)`, opacity 0.45 |
 | tick | 1 px, same colour, opacity 0.65 |
 | last child | its spine stops at 50% of the row instead of running on |
+
+**The tick ends on the GLYPH, not on the icon's box.** A `1.75px` stroke inside a 12 px box leaves
+one empty pixel column at the box edge, so a tick that stops on the box reads as "this line does not
+reach the icon" — and only on the rows whose glyph is drawn thinner (the dashed `new feature` folder,
+the terminal of a lane), which is why it looked like *some* lines only. `STUB_OVERLAP` is that one
+column: measured at 2×, the tick then meets the stroke and merely brightens the stroke's antialiased
+edge by ~20%, with no notch cut into the icon.
 
 **Derive these three, never write them twice.** `ICON_CENTER`, `LINE_X` and `STUB_W` all come from
 `ROW_PAD` and `GUIDE_STEP`; the code builds them from the two numbers, and the table above is their
