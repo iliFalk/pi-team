@@ -1421,7 +1421,19 @@ function LaneList({ ctx }) {
             }),
             jsx('span', {
               className: 'truncate',
-              style: TEXT_NUDGE,
+              style: {
+                ...TEXT_NUDGE,
+                // The label is written as a dotted line: the glyphs are painted with a dot grid instead
+                // of a solid tone, so the row reads as a placeholder the way its dashed folder does.
+                // currentColor keeps the row's hover colour and the app's tokens in charge of the tone.
+                // A 2px grid of 0.8px dots: at 3px the stems break into dashes and the words stop
+                // reading as words; at 2px the letters keep their shape and still look dotted.
+                backgroundImage: 'radial-gradient(circle, currentColor 0.8px, transparent 0.9px)',
+                backgroundSize: '2px 2px',
+                WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
+                WebkitTextFillColor: 'transparent'
+              },
               children: 'new feature'
             })
           ]
