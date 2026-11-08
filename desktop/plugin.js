@@ -362,13 +362,15 @@ const PROJECT_GAP = '4px'
 const ROW_FADE = 14
 // Air between the rows of one project, so a feature does not sit on the project's edge.
 const FEATURE_GAP = '4px'
-// A line of its own with the shadow outside it: dark beside the line, fading away from it.
-const PROJECT_SEP_H = '4px'
-const PROJECT_SEP_SHADOW = '4px'
-// No paint of its own: the band shows the panel's own background between the two shadows.
-const PROJECT_SEP_LINE = 'transparent'
-const PROJECT_SEP_UP = 'linear-gradient(to top, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0))'
-const PROJECT_SEP_DOWN = 'linear-gradient(to bottom, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0))'
+// The divider between two projects is a groove of two pixels: a light line, then a dark one.
+// Black alpha alone cannot separate anything on a dark theme — 12% of black over #171715 moves three
+// units out of 255, so the old two-fade band read as a smudge and the line inside it disappeared.
+// The light line is the theme's own quaternary tone, so it inverts with the theme; the dark line stays
+// black because a groove's lower edge is shadow on any surface.
+const PROJECT_SEP_HI = 'color-mix(in srgb, var(--ui-text-quaternary) 35%, transparent)'
+const PROJECT_SEP_LO = 'rgba(0, 0, 0, 0.45)'
+// Air on both sides, on top of the list's own gap between blocks.
+const PROJECT_SEP_AIR = '2px'
 // The label rides a pixel lower inside its line box, which is where the eye wants it.
 const TEXT_NUDGE = { transform: 'translateY(1px)' }
 
@@ -1447,11 +1449,10 @@ function LaneList({ ctx }) {
           block,
           jsxs('div', {
             'aria-hidden': true,
-            style: { pointerEvents: 'none' },
+            style: { pointerEvents: 'none', margin: `${PROJECT_SEP_AIR} 0` },
             children: [
-              jsx('div', { style: { height: PROJECT_SEP_SHADOW, background: PROJECT_SEP_UP } }),
-              jsx('div', { style: { height: PROJECT_SEP_H, background: PROJECT_SEP_LINE } }),
-              jsx('div', { style: { height: PROJECT_SEP_SHADOW, background: PROJECT_SEP_DOWN } })
+              jsx('div', { style: { height: '1px', background: PROJECT_SEP_HI } }),
+              jsx('div', { style: { height: '1px', background: PROJECT_SEP_LO } })
             ]
           }, `sep:${index}`)
         ]

@@ -47,7 +47,7 @@ shadows:
   unused-box-shadow: '0 2px 4px -2px rgba(0, 0, 0, 0.55)'
   band: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0))'
   band-height: 4px
-  project-sep: 'two 4px fades, up and down, 12% black at the line'
+  project-sep: 'two 1px lines: quaternary at 35% above, black at 45% below'
 lines:
   border: 1px
   outline: 0.5px
@@ -199,7 +199,7 @@ another element.
 | Column seam | `1px` right border on the left column |
 | Header shadow | one `4px` gradient band under each header (the band, not a `box-shadow`) |
 | Band under a label | the same gradient, `4px`, 12% black at the edge |
-| Project divider | two `4px` fades, one up and one down, with a transparent line between them |
+| Project divider | two `1px` lines: `var(--ui-text-quaternary)` at 35% above, `rgba(0,0,0,0.45)` below, plus `2px` of air on each side on top of the list's gap — 6 px between the line and a row |
 | Highlight band | radius `4px`, padding `4px`, no shadow |
 
 Rules:
@@ -220,6 +220,11 @@ Rules:
   while the row sits wholly inside the strip under the header (`visibleFrame`): a row scrolled away, or
   half under the header, draws nothing instead of a cut figure. The rule is a pure function so it is
   checked with four numbers, not a browser.
+- **A groove cannot be painted with black alone.** On a dark surface 12% of black moves three units
+  out of 255, so the old two-fade divider read as a smudge and its inner line disappeared. A groove
+  needs two edges: a light one and a dark one. The light edge takes the theme's own quaternary tone
+  (`color-mix(… 35%, transparent)`, 23 → 46 on `#171715`), the dark edge stays black at 45% (23 → 12).
+  Both are drawn as `1px` lines; the shadow fades around them are gone.
 - **One shadow shape for the whole panel.** A gradient band, not a `box-shadow`, because a shadow
   belongs to a box and would cut off at the seam.
 - **An inset ring does not work for the frame**: it paints under the children. A real border on the
