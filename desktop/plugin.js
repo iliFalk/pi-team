@@ -79,6 +79,10 @@ const BAD_COLOR = '#8A1C0E'
 // 85%: white on this fill reaches 4.6:1, the threshold for text this small.
 const ASK_BG = 'rgba(7, 98, 180, 0.85)'
 const ASK_BG_SOFT = 'rgba(7, 98, 180, 0.18)'
+// A question row keeps its blue on hover: the wash deepens and the label brightens to text-secondary,
+// the same two paints the band's control uses. Without this the wash wins the style branch and the
+// row answers nothing while a plain feature's row answers with a fill.
+const ASK_BG_HOVER = 'rgba(7, 98, 180, 0.28)'
 const BAD_STATES = ['failed', 'error', 'stopped']
 const DONE_COLOR = 'var(--ui-text-tertiary)'
 
@@ -1024,7 +1028,7 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim, tag, se
             className: `flex min-w-0 flex-1 items-center gap-1 ${labelBand}`,
             'data-pi-band': '',
             style: counts && counts.ask
-              ? { ...headerBandStyle, background: ASK_BG_SOFT }
+              ? { ...headerBandStyle, background: hover ? ASK_BG_HOVER : ASK_BG_SOFT }
               : hover
                 ? { ...headerBandStyle, background: 'var(--chrome-action-hover)' }
                 : headerBandStyle,
@@ -1033,7 +1037,12 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim, tag, se
                 className: 'truncate',
                 // Shrinks when the name is long, so the counters keep their place on the right
                 // edge instead of being pushed inwards by the overflow.
-                style: { ...TEXT_NUDGE, flex: '0 1 auto', minWidth: 0 },
+                style: {
+                  ...TEXT_NUDGE,
+                  flex: '0 1 auto',
+                  minWidth: 0,
+                  ...(hover ? { color: 'var(--ui-text-secondary)' } : null)
+                },
                 children: label
               }),
               tag

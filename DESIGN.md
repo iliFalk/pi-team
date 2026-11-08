@@ -92,7 +92,7 @@ Three states, each with one meaning. Nothing else in the panel is coloured.
 |---|---|---|
 | `running` | `#1A6543` | the word, the dot, the ball, the row outline, the gear |
 | question (`waiting`) | `#0762B4` at 85% | the whole lane row, white text on it |
-| question, gentle | `#0762B4` at 18% | the label band of the feature and the project above the lane |
+| question, gentle | `#0762B4` at 18%, at 28% while hovered | the label band of the feature and the project above the lane |
 | `failed`, `error`, `stopped` | `#8A1C0E` | the word, the outline, the count, the reason line |
 | `done` | `var(--ui-text-tertiary)` | the tick and its count only |
 
@@ -102,6 +102,11 @@ Rules:
   the threshold for text this small. Do not lower the fill without re-measuring.
 - **Counters climb to the deepest visible level.** A project always sums its lanes; a feature sums
   only while it is closed. `!` beats `?`, so a failed lane is never hidden behind a question.
+- **A painted band still answers the pointer.** A question's wash used to win the style branch, so the
+  one row that carries news was the only row that ignored a hover. Hover deepens the same hue
+  (`18% → 28%`) and lifts the label to `var(--ui-text-secondary)`; the label's contrast against that
+  band goes from 2.2:1 to 5.3:1 rather than falling with the deeper paint. Every header row brightens
+  its label on hover for the same reason the band's control does: one gesture, one meaning.
 - **App tokens, not hex, for text and lines.** `var(--ui-text-quaternary)` for a guide, because a
   border-toned line disappears on a highlighted row; `var(--ui-stroke-secondary)` for real borders.
 
