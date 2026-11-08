@@ -192,7 +192,7 @@ Rules:
 |---|---|
 | Lane row | icon, name, state word, snippet; band behind the text only, never behind the icon; a selected lane's fill runs the last `10px` to the divider and fades to nothing over the final `14px`, so it dissolves where the right part begins |
 | Project or feature row | folder icon, label, counters |
-| Add-feature row | the last line inside an open project: a dashed folder with a plus inside, label `new feature` in quaternary; the only way to create a feature |
+| Add-feature row | the FIRST line inside an open project, directly under the project row: a dashed folder with a plus inside, label `new feature` in quaternary; the only way to create a feature. It opens the block so the gesture stays visible however long the list grows; the level's closing `last` mark moves to whichever row ends the block (a feature, `review`, or `closed`) |
 | Counter | `?` `!` gear `✓` with a number, one colour each, no separator between them |
 | Question block | inside the lane card, three controls at most, answer goes to the lane |
 | Thread | a bubble per message, `panel` messages dimmed |

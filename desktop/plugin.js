@@ -1159,8 +1159,9 @@ function LaneList({ ctx }) {
       const items = groups.get(groupKey)
       const gkey = `g:${project}/${groupKey}`
       const gopen = isOpen(gkey)
-      // The add-feature row closes the block, so no feature above it ends the level.
-      const last = false
+      // The add-feature row opens the block now, so a feature ends the level only when
+      // nothing follows it: no review queue and no closed group below.
+      const last = index === groupKeys.length - 1 && !handed.length && !shelved.length
 
       const meta = featureByName.get(groupKey)
       // A placeholder has no name and no lanes yet: it opens its own card, not a list.
@@ -1226,7 +1227,7 @@ function LaneList({ ctx }) {
       ? jsx(
           TreeRow,
           {
-            last: false,
+            last: !shelved.length,
             row: jsx(ListHeader, {
               label: 'review',
               plain: handed.length,
@@ -1264,7 +1265,7 @@ function LaneList({ ctx }) {
       ? jsx(
           TreeRow,
           {
-            last: false,
+            last: true,
             trunk: shelfOpen,
             row: jsx(ListHeader, {
               label: 'closed',
@@ -1292,6 +1293,47 @@ function LaneList({ ctx }) {
           `shelf:${project}`
         )
       : null
+
+    // The create gesture sits directly under the project: the first row of the block, where the
+    // person looks before reading the list. It is the only row of the level when nothing else
+    // exists, so the level line ends at it in that one case.
+    const addFeatureNode = jsx(
+      TreeRow,
+      {
+        last: featureNodes.length === 0 && !handed.length && !shelved.length,
+        row: jsx('button', {
+          type: 'button',
+          title: 'ask for a feature in one line',
+          onClick: () => {
+            setAskUpdate(false)
+            showComposeFeature(project)
+          },
+          className:
+            'flex w-full items-center gap-1 text-left text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary) hover:text-(--ui-accent)',
+          style: {
+            marginLeft: ROW_PAD,
+            width: `calc(100% - ${ROW_PAD})`,
+            paddingTop: HEADER_PY,
+            paddingBottom: HEADER_PY,
+            paddingRight: ROW_PAD,
+            outline: 'none'
+          },
+          children: [
+            jsx('span', {
+              className: 'flex shrink-0 items-center justify-center',
+              style: { width: `${ICON_SIZE}px` },
+              children: jsx(FolderPlus, {})
+            }),
+            jsx('span', {
+              className: 'truncate',
+              style: TEXT_NUDGE,
+              children: 'new feature'
+            })
+          ]
+        })
+      },
+      `add:${project}`
+    )
 
     return jsx(
       TreeRow,
@@ -1330,48 +1372,7 @@ function LaneList({ ctx }) {
                   flexDirection: 'column',
                   gap: FEATURE_GAP
                 },
-                children: [
-                  ...featureNodes,
-                  handedNode,
-                  shelfNode,
-                  jsx(
-                    TreeRow,
-                    {
-                      last: true,
-                      row: jsx('button', {
-                        type: 'button',
-                        title: 'ask for a feature in one line',
-                        onClick: () => {
-                          setAskUpdate(false)
-                          showComposeFeature(project)
-                        },
-                        className:
-                          'flex w-full items-center gap-1 text-left text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary) hover:text-(--ui-accent)',
-                        style: {
-                          marginLeft: ROW_PAD,
-                          width: `calc(100% - ${ROW_PAD})`,
-                          paddingTop: HEADER_PY,
-                          paddingBottom: HEADER_PY,
-                          paddingRight: ROW_PAD,
-                          outline: 'none'
-                        },
-                        children: [
-                          jsx('span', {
-                            className: 'flex shrink-0 items-center justify-center',
-                            style: { width: `${ICON_SIZE}px` },
-                            children: jsx(FolderPlus, {})
-                          }),
-                          jsx('span', {
-                            className: 'truncate',
-                            style: TEXT_NUDGE,
-                            children: 'new feature'
-                          })
-                        ]
-                      })
-                    },
-                    `add:${project}`
-                  )
-                ]
+                children: [addFeatureNode, ...featureNodes, handedNode, shelfNode]
               })
             : null
         ]
