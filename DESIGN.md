@@ -271,7 +271,8 @@ Rules:
 | Counter | `?` `!` gear `✓` with a number, one colour each, no separator between them |
 | Question block | inside the lane card, three controls at most, answer goes to the lane |
 | Thread | a bubble per message, `panel` messages dimmed |
-| Receipt | `merge` section: commit, date, message, diff, branch, then the file list |
+| Lane card | three areas in fixed order, all of them always: `STATUS` (the receipt rows, branch, changes, turns, tokens, tool, error, and the `why`/`stderr` blocks of a lane that ended badly), then `SESSIONS`, then `STATE` (the state word in its text tone, and the card's controls). The question block, when a lane asks, sits above all three |
+| Receipt | the rows of the `STATUS` area: commit, date, message, diff — they carry no heading of their own, because the area is drawn once even when there is no merge |
 | Card shell | one header strip of `HEADER_H` and content starting at `ROW_PAD` |
 | Card footer buttons | `24px` tall — `BAND_MIN_H 16` plus `BAND_PY 4` above and below, the hover band's own size — sharing the row equally (`flex: 1 1 0`), the word centred in each |
 | Scroll pill | `44px` long, `3px` wide, radius `999px`, `var(--ui-text-quaternary)` at 0.55 |

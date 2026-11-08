@@ -1973,7 +1973,6 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
 function Receipt({ merge }) {
   return jsxs('div', {
     children: [
-      jsx(Section, { title: 'merge' }),
       jsx(Row, { label: 'commit', value: merge.short, color: RUN_TEXT }),
       jsx(Row, { label: 'date', value: merge.date }),
       jsx(Row, { label: 'into', value: merge.subject }),
@@ -2103,72 +2102,10 @@ function LaneStatus({ ctx }) {
             onDone: () => query.refetch()
           })
         : null,
-      jsx(Row, { label: 'state', value: lane.state, color: stateColour(lane) }),
-      !lane.shelved && ['done', 'stopped', 'failed', 'error'].includes(lane.state)
-        ? lane.handed
-          ? jsx('span', {
-              className: 'mx-2.5 my-1 shrink-0 rounded border px-1.5 py-0.5 text-[0.625rem]',
-              style: { color: ASK_TEXT, borderColor: ASK_TEXT },
-              children: 'in review'
-            })
-          : jsx(HoverBox, {
-              onClick: () =>
-                ctx
-                  .rest(`/lanes/${encodeURIComponent(lane.lane)}/hand`, {
-                    method: 'POST',
-                    body: { session_key: sessionId },
-                    timeoutMs: 8000
-                  })
-                  .then(() => query.refetch()),
-              title: 'queue this lane for review; send on the review row asks the orchestrator',
-              className:
-                'mx-2.5 my-1 shrink-0 rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.625rem]',
-              hoverFill: 'var(--ui-bg-tertiary)',
-              children: 'to review'
-            })
-        : null,
+      // Three areas, always in this order: STATUS first, then SESSIONS, then STATE.
+      jsx(Section, { title: 'status' }),
       lane.shelved ? jsx(Row, { label: 'closed', value: lane.shelved_reason }) : null,
       lane.merge ? jsx(Receipt, { merge: lane.merge }) : null,
-      // A closed lane that did not end well still says why, even after its worktree is gone.
-      lane.shelved && isBad(lane)
-        ? jsxs('div', {
-            children: [
-              jsx(Section, { title: 'why', band: true }),
-              jsx('div', {
-                className:
-                  'shrink-0 overflow-y-auto whitespace-pre-wrap break-words px-2.5 py-0.5 font-mono text-[0.625rem] leading-snug text-(--ui-text-secondary)',
-                style: { height: TEXT_H },
-                children: lane.last_text || '—'
-              }),
-              lane.stderr ? jsx(Section, { title: 'stderr' }) : null,
-              lane.stderr
-                ? jsx('div', {
-                    className:
-                      'shrink-0 overflow-y-auto whitespace-pre-wrap break-words px-2.5 py-0.5 font-mono text-[0.625rem] leading-snug',
-                    style: { maxHeight: TEXT_H, color: BAD_TEXT },
-                    children: lane.stderr
-                  })
-                : null
-            ]
-          })
-        : null,
-      lane.handed && !lane.shelved
-        ? jsx(HoverBox, {
-            onClick: () =>
-              ctx
-                .rest(`/lanes/${encodeURIComponent(lane.lane)}/say`, {
-                  method: 'POST',
-                  body: { text: 'Close this lane: show the plan first, and delete nothing without my go.' },
-                  timeoutMs: 15000
-                })
-                .then(() => query.refetch()),
-            title: 'ask the orchestrator to close this lane; it shows the plan first',
-            className:
-              'mx-2.5 my-1 shrink-0 self-start rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.625rem]',
-            hoverFill: 'var(--ui-bg-tertiary)',
-            children: 'close'
-          })
-        : null,
       jsx(Row, { label: 'branch', value: lane.branch || '—' }),
       jsx(Row, {
         label: 'changes',
@@ -2193,6 +2130,29 @@ function LaneStatus({ ctx }) {
         ? jsx(Row, { label: 'error', value: lane.last_error, color: BAD_TEXT })
         : null,
 
+      // A closed lane that did not end well still says why, even after its worktree is gone.
+      lane.shelved && isBad(lane)
+        ? jsxs('div', {
+            children: [
+              jsx(Section, { title: 'why', band: true }),
+              jsx('div', {
+                className:
+                  'shrink-0 overflow-y-auto whitespace-pre-wrap break-words px-2.5 py-0.5 font-mono text-[0.625rem] leading-snug text-(--ui-text-secondary)',
+                style: { height: TEXT_H },
+                children: lane.last_text || '—'
+              }),
+              lane.stderr ? jsx(Section, { title: 'stderr' }) : null,
+              lane.stderr
+                ? jsx('div', {
+                    className:
+                      'shrink-0 overflow-y-auto whitespace-pre-wrap break-words px-2.5 py-0.5 font-mono text-[0.625rem] leading-snug',
+                    style: { maxHeight: TEXT_H, color: BAD_TEXT },
+                    children: lane.stderr
+                  })
+                : null
+            ]
+          })
+        : null,
       lane.shelved ? null : jsx(Section, { title: `sessions · ${(lane.feature_sessions || []).length}` }),
       lane.shelved ? null : (lane.feature_sessions || []).map(entry =>
         jsx(
@@ -2225,6 +2185,54 @@ function LaneStatus({ ctx }) {
         onDone: () => query.refetch()
       }),
 
+      jsx(Section, { title: 'state' }),
+      // The area is already called STATE, so the line carries the word alone — in the state's TEXT
+      // tone, not its frame tone: the frame hex is 1.9–2.9:1 on the surface.
+      jsx('div', {
+        className: 'px-2.5 py-[3px] font-mono text-[0.6875rem]',
+        style: { color: stateText(lane) || 'var(--ui-text-secondary)' },
+        children: lane.state
+      }),
+      !lane.shelved && ['done', 'stopped', 'failed', 'error'].includes(lane.state)
+        ? lane.handed
+          ? jsx('span', {
+              className: 'mx-2.5 my-1 shrink-0 rounded border px-1.5 py-0.5 text-[0.625rem]',
+              style: { color: ASK_TEXT, borderColor: ASK_TEXT },
+              children: 'in review'
+            })
+          : jsx(HoverBox, {
+              onClick: () =>
+                ctx
+                  .rest(`/lanes/${encodeURIComponent(lane.lane)}/hand`, {
+                    method: 'POST',
+                    body: { session_key: sessionId },
+                    timeoutMs: 8000
+                  })
+                  .then(() => query.refetch()),
+              title: 'queue this lane for review; send on the review row asks the orchestrator',
+              className:
+                'mx-2.5 my-1 shrink-0 rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.625rem]',
+              hoverFill: 'var(--ui-bg-tertiary)',
+              children: 'to review'
+            })
+        : null,
+      lane.handed && !lane.shelved
+        ? jsx(HoverBox, {
+            onClick: () =>
+              ctx
+                .rest(`/lanes/${encodeURIComponent(lane.lane)}/say`, {
+                  method: 'POST',
+                  body: { text: 'Close this lane: show the plan first, and delete nothing without my go.' },
+                  timeoutMs: 15000
+                })
+                .then(() => query.refetch()),
+            title: 'ask the orchestrator to close this lane; it shows the plan first',
+            className:
+              'mx-2.5 my-1 shrink-0 self-start rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.625rem]',
+            hoverFill: 'var(--ui-bg-tertiary)',
+            children: 'close'
+          })
+        : null,
       lane.shelved ? null : jsx(Section, { title: 'task', band: true }),
       lane.shelved
         ? null
