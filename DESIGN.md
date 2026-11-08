@@ -146,12 +146,19 @@ otherwise paint over them.
 | Value | Meaning |
 |---|---|
 | `ICON_SIZE` 12 px | folder for a project or a feature, terminal for a lane |
-| `ICON_CENTER` 12 px | the line hangs from the centre of the icon |
-| `STUB_W` 12 px | the horizontal tick from the line to the next icon |
-| `LINE_X` −6 px | where the spine sits relative to the icon column |
+| `ICON_CENTER` 16 px | the line hangs under the centre of the icon: `ROW_PAD 10 + ICON_SIZE/2` |
+| `STUB_W` 12 px | the horizontal tick from the parent's axis to the child icon's LEFT edge: `GUIDE_STEP 18 − ICON_SIZE/2` |
+| `LINE_X` −2 px | where the spine sits relative to the child's own box: `ICON_CENTER − GUIDE_STEP 18` |
 | guide | 1 px, `var(--ui-text-quaternary)`, opacity 0.45 |
 | tick | 1 px, same colour, opacity 0.65 |
 | last child | its spine stops at 50% of the row instead of running on |
+
+**Derive these three, never write them twice.** `ICON_CENTER`, `LINE_X` and `STUB_W` all come from
+`ROW_PAD` and `GUIDE_STEP`; the code builds them from the two numbers, and the table above is their
+arithmetic. They were once hand-written against `ROW_PAD 6`: when the rhythm moved to 10 the icons
+moved right and the lines stayed, so every spine sat 4 px outside its icon's centre and every stub
+stopped 4 px short of the icon it was supposed to join. A measured gap at the end of a stub means the
+three numbers came from two different `ROW_PAD` values — check the arithmetic before touching pixels.
 
 The line physically cannot break between levels, because no element draws a line that belongs to
 another element.

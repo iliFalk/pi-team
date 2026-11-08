@@ -27,14 +27,21 @@ const BAND_BG = 'linear-gradient(to bottom, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0
 const TEXT_H = '100px'
 // Tree geometry: a node owns its line, so a level cannot break into loose segments.
 // The line hangs under the icon, so the icon column and the line are one axis.
-const GUIDE_STEP = '18px'
+const GUIDE_STEP_N = 18
+const ROW_PAD_N = 10
+const GUIDE_STEP = `${GUIDE_STEP_N}px`
 // One value for the row's two sides: a row and a header keep the same air left and right,
 // so a highlight sits in the middle of its row instead of hugging one edge.
-const ROW_PAD = '10px'
+const ROW_PAD = `${ROW_PAD_N}px`
 const ICON_SIZE = 12
-const ICON_CENTER = '12px'
-const LINE_X = '-6px'
-const STUB_W = '12px'
+// The line hangs under the icon's centre, and a child's box starts one GUIDE_STEP to the right of
+// its parent's — so in the child's own coordinates that axis sits at ICON_CENTER − GUIDE_STEP, and
+// the stub reaches from there to the child icon's LEFT edge, GUIDE_STEP − ICON_SIZE/2. All three
+// derive from ROW_PAD: when it moved 6 → 10 the two hand-written values stayed behind, which put
+// every spine 4px outside its icons and left a 4px gap at the end of every stub.
+const ICON_CENTER = `${ROW_PAD_N + ICON_SIZE / 2}px`
+const LINE_X = `${ROW_PAD_N + ICON_SIZE / 2 - GUIDE_STEP_N}px`
+const STUB_W = `${GUIDE_STEP_N - ICON_SIZE / 2}px`
 // Quaternary rather than the border tone: the elbow must stay visible on a
 // highlighted row, where a border-coloured line washes out.
 const STROKE = 'var(--ui-text-quaternary)'
