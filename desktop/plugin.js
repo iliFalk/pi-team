@@ -1636,13 +1636,20 @@ function Row({ label, value, color }) {
   })
 }
 
-function Section({ title, band, first }) {
+function Section({ title, band, first, right }) {
   // A section that opens a card carries no rule of its own: the card's header already ends in one,
   // and two of them land four pixels apart.
   return jsxs('div', {
     className: `${first ? '' : 'mt-1 border-t border-(--ui-stroke-secondary) '}px-2.5 pt-1.5 pb-0.5 text-[0.625rem] uppercase tracking-wide text-(--ui-text-tertiary)`,
     children: [
-      title,
+      // A value on the title's own line, right aligned: the heading says what the line is about,
+      // the value sits where every other value in the card sits.
+      right
+        ? jsxs('div', {
+            className: 'flex items-baseline justify-between gap-2',
+            children: [jsx('span', { children: title }), right]
+          })
+        : title,
       band
         ? jsx('div', {
             'aria-hidden': true,
@@ -2188,13 +2195,15 @@ function LaneStatus({ ctx }) {
         onDone: () => query.refetch()
       }),
 
-      jsx(Section, { title: 'state' }),
-      // The area is already called STATE, so the line carries the word alone — in the state's TEXT
-      // tone, not its frame tone: the frame hex is 1.9–2.9:1 on the surface.
-      jsx('div', {
-        className: 'px-2.5 py-[3px] font-mono text-[0.6875rem]',
-        style: { color: stateText(lane) || 'var(--ui-text-secondary)' },
-        children: lane.state
+      // The state word rides the heading's line, on its right — in the state's TEXT tone, not its
+      // frame tone: the frame hex is 1.9–2.9:1 on the surface.
+      jsx(Section, {
+        title: 'state',
+        right: jsx('span', {
+          className: 'shrink-0 font-mono text-[0.6875rem] normal-case',
+          style: { color: stateText(lane) || 'var(--ui-text-secondary)' },
+          children: lane.state
+        })
       }),
       !lane.shelved && ['done', 'stopped', 'failed', 'error'].includes(lane.state)
         ? lane.handed
