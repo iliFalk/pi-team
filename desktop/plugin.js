@@ -369,8 +369,9 @@ const FEATURE_GAP = '4px'
 // black because a groove's lower edge is shadow on any surface.
 const PROJECT_SEP_HI = 'color-mix(in srgb, var(--ui-text-quaternary) 35%, transparent)'
 const PROJECT_SEP_LO = 'rgba(0, 0, 0, 0.45)'
-// Air on both sides, on top of the list's own gap between blocks.
-const PROJECT_SEP_AIR = '2px'
+// Air on both sides, on top of the list's own gap between blocks: 6 + PROJECT_GAP 4 = the same 10px
+// the list keeps at its own top and bottom, so a project's row is one rhythm away from anything.
+const PROJECT_SEP_AIR = '6px'
 // The label rides a pixel lower inside its line box, which is where the eye wants it.
 const TEXT_NUDGE = { transform: 'translateY(1px)' }
 

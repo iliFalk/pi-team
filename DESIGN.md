@@ -199,7 +199,7 @@ another element.
 | Column seam | `1px` right border on the left column |
 | Header shadow | one `4px` gradient band under each header (the band, not a `box-shadow`) |
 | Band under a label | the same gradient, `4px`, 12% black at the edge |
-| Project divider | two `1px` lines: `var(--ui-text-quaternary)` at 35% above, `rgba(0,0,0,0.45)` below, plus `2px` of air on each side on top of the list's gap — 6 px between the line and a row |
+| Project divider | two `1px` lines: `var(--ui-text-quaternary)` at 35% above, `rgba(0,0,0,0.45)` below; air `PROJECT_SEP_AIR 6` on each side on top of the list's gap, so a row stands `10px` from the divider — the same `10px` the list keeps at its own top and bottom |
 | Highlight band | radius `4px`, padding `4px`, no shadow |
 
 Rules:
@@ -224,7 +224,10 @@ Rules:
   out of 255, so the old two-fade divider read as a smudge and its inner line disappeared. A groove
   needs two edges: a light one and a dark one. The light edge takes the theme's own quaternary tone
   (`color-mix(… 35%, transparent)`, 23 → 46 on `#171715`), the dark edge stays black at 45% (23 → 12).
-  Both are drawn as `1px` lines; the shadow fades around them are gone.
+  Both are drawn as `1px` lines; the shadow fades around them are gone. Its air is one number for the
+  whole list: `PROJECT_SEP_AIR 6 + PROJECT_GAP 4 = 10`, the same inset the list keeps above its first
+  project and below its last. A divider that stands closer to a row than the list's own edge does is
+  the first thing he circles on a screenshot.
 - **One shadow shape for the whole panel.** A gradient band, not a `box-shadow`, because a shadow
   belongs to a box and would cut off at the seam.
 - **An inset ring does not work for the frame**: it paints under the children. A real border on the
