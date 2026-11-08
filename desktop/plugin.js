@@ -1945,14 +1945,22 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
   }
   return jsxs('div', {
     children: [
+      // A chat is anchored at the bottom: the scroll box lays its children out from the bottom up
+      // (`column-reverse`), so the newest bubble sits on the composer and a short thread hugs that
+      // edge instead of hanging from the top. The children are listed newest first because reverse
+      // layout reads them the other way round.
       jsxs('div', {
         className: 'overflow-y-auto px-2.5 py-1',
-        style: { maxHeight: '38vh' },
+        // A fixed floor as tall as the task block, so a short thread shows its bubbles on the
+        // bottom edge instead of hanging at the top, and `38vh` as the ceiling for a long one.
+        style: { minHeight: TEXT_H, maxHeight: '38vh', display: 'flex', flexDirection: 'column-reverse' },
         children: [
           lane.last_text ? jsx(Bubble, { who: 'lane', text: lane.last_text }, 'now') : null,
-          messages.map((message, index) =>
-            jsx(Bubble, { who: message.who, text: message.text }, `${index}-${message.at}`)
-          )
+          messages
+            .map((message, index) =>
+              jsx(Bubble, { who: message.who, text: message.text }, `${index}-${message.at}`)
+            )
+            .reverse()
         ]
       }),
       jsxs('div', {
