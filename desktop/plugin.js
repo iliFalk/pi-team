@@ -872,25 +872,38 @@ function ScrollPill() {
 // A hover that moves the word and the box between two paints needs a fade, or it snaps.
 const HOVER_FADE = 'background-color 120ms linear, color 120ms linear, border-color 120ms linear'
 
-/** One control inside a header band: a word, or a square glyph box.
- *  A class hover cannot carry this: `--ui-fill-tertiary`, the token the old class named, does not
- *  exist in the app's built CSS, so the paint silently did nothing. The fill the app really has is
- *  `--ui-bg-tertiary`, and the word brightens to `--ui-text-secondary`. State, not a class, so the
- *  paint is unconditional. */
-function HeaderControl({ title, onClick, label, glyph, size, fontSize, colour, hoverColour, border }) {
+/** Hover as state, not a class. The app's build carries no `--ui-fill-*` token and generated no
+ *  `hover:text-(--ui-accent)` utility, so both classes painted nothing and left dead controls.
+ *  An inline value always applies. The tag belongs to the caller, so a real <button> stays one. */
+function HoverBox({ tag, title, onClick, className, style, hoverFill, hoverColour, children }) {
   const [over, setOver] = useState(false)
-  return jsx('span', {
-    // Not a <button>: the whole header row is already one, and a button inside a button is
-    // invalid — the browser rearranges it and the row drifts.
-    role: 'button',
-    tabIndex: 0,
+  const base = style || {}
+  const paints = {}
+  if (hoverFill) paints.background = over ? hoverFill : base.background || 'transparent'
+  if (hoverColour) paints.color = over ? hoverColour : base.color
+  return jsx(tag === 'button' ? 'button' : 'span', {
+    ...(tag === 'button' ? { type: 'button' } : { role: 'button', tabIndex: 0 }),
     title: title || '',
     onClick: event => {
-      event.stopPropagation()
-      if (onClick) onClick()
+      if (event && event.stopPropagation) event.stopPropagation()
+      if (onClick) onClick(event)
     },
     onMouseEnter: () => setOver(true),
     onMouseLeave: () => setOver(false),
+    className,
+    style: { ...base, ...paints, transition: base.transition || HOVER_FADE },
+    children
+  })
+}
+
+/** One control inside a header band: a word, or a square glyph box. The fill the app really has is
+ *  `--ui-bg-tertiary`, and the word brightens to `--ui-text-secondary`. */
+function HeaderControl({ title, onClick, label, glyph, size, fontSize, colour, hoverColour, border }) {
+  return jsx(HoverBox, {
+    title,
+    onClick,
+    // Not a <button>: the whole header row is already one, and a button inside a button is
+    // invalid — the browser rearranges it and the row drifts.
     className: 'flex shrink-0 items-center justify-center rounded border uppercase',
     style: {
       // The box sits half a pixel above the text's axis.
@@ -900,11 +913,11 @@ function HeaderControl({ title, onClick, label, glyph, size, fontSize, colour, h
       fontSize: fontSize || '10.5px',
       lineHeight: 1,
       borderColor: border || 'var(--ui-stroke-secondary)',
-      color: over ? hoverColour || colour || 'var(--ui-text-secondary)' : colour || 'var(--ui-text-quaternary)',
-      background: over ? 'var(--ui-bg-tertiary)' : 'transparent',
-      transition: HOVER_FADE,
+      color: colour || 'var(--ui-text-quaternary)',
       cursor: 'pointer'
     },
+    hoverFill: 'var(--ui-bg-tertiary)',
+    hoverColour: hoverColour || colour || 'var(--ui-text-secondary)',
     children: glyph || jsx('span', {
       // The box stays where it is; only the word drops one pixel inside it.
       style: { display: 'block', transform: 'translate(0.5px, 0.5px)' },
@@ -1301,15 +1314,16 @@ function LaneList({ ctx }) {
       TreeRow,
       {
         last: featureNodes.length === 0 && !handed.length && !shelved.length,
-        row: jsx('button', {
-          type: 'button',
+        row: jsx(HoverBox, {
+          tag: 'button',
           title: 'ask for a feature in one line',
           onClick: () => {
             setAskUpdate(false)
             showComposeFeature(project)
           },
+          hoverColour: 'var(--ui-accent)',
           className:
-            'flex w-full items-center gap-1 text-left text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary) hover:text-(--ui-accent)',
+            'flex w-full items-center gap-1 text-left text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary)',
           style: {
             marginLeft: ROW_PAD,
             width: `calc(100% - ${ROW_PAD})`,
@@ -1413,58 +1427,62 @@ function LaneList({ ctx }) {
         style: { height: HEADER_H },
         children: [
           jsx('span', { children: `projects · ${projects.length}` }),
-          jsx('span', {
-            role: 'button',
-            tabIndex: 0,
+          jsx(HeaderControl, {
             title: 'add a project by its repository',
-            onClick: () => {
-              showComposeProject()
-            },
-            className:
-              'flex shrink-0 items-center justify-center rounded border border-(--ui-stroke-secondary) hover:bg-(--ui-fill-tertiary)',
-            style: { width: '16px', height: '16px', lineHeight: 1, fontSize: '11.5px' },
-            children: '+'
+            glyph: '+',
+            size: BAND_MIN_H,
+            fontSize: '11.5px',
+            onClick: () => showComposeProject()
           }),
           askUpdate
             ? jsxs('span', {
                 className: 'ml-auto flex shrink-0 items-center gap-1',
                 children: [
-                  jsx('span', {
-                    role: 'button',
-                    tabIndex: 0,
-                    title: 'cancel',
-                    onClick: () => setAskUpdate(false),
-                    className: 'flex items-center justify-center rounded border text-[0.625rem]',
-                    style: { color: BAD_COLOR, borderColor: BAD_COLOR, width: '16px', height: '16px', lineHeight: 1 },
-                    children: '✕'
-                  }),
-                  jsx('span', {
-                    role: 'button',
-                    tabIndex: 0,
-                    title: 'ask the agent to update the plugin',
-                    onClick: () => {
-                      setAskUpdate(false)
-                      ctx
-                        .rest('/update/request', {
-                          method: 'POST',
-                          body: { session_key: sessionId },
-                          timeoutMs: 15000
-                        })
-                        .then(() => host.notify({ kind: 'info', message: 'update: the request went to the chat' }))
+                  jsx(
+                    HeaderControl,
+                    {
+                      title: 'cancel',
+                      glyph: '✕',
+                      size: BAND_MIN_H,
+                      fontSize: '10px',
+                      colour: BAD_COLOR,
+                      hoverColour: BAD_COLOR,
+                      border: BAD_COLOR,
+                      onClick: () => setAskUpdate(false)
                     },
-                    className: 'flex items-center justify-center rounded border text-[0.625rem]',
-                    style: { color: RUN_COLOR, borderColor: RUN_COLOR, width: '16px', height: '16px', lineHeight: 1 },
-                    children: '✓'
-                  })
+                    'cancel'
+                  ),
+                  jsx(
+                    HeaderControl,
+                    {
+                      title: 'ask the agent to update the plugin',
+                      glyph: '✓',
+                      size: BAND_MIN_H,
+                      fontSize: '10px',
+                      colour: RUN_COLOR,
+                      hoverColour: RUN_COLOR,
+                      border: RUN_COLOR,
+                      onClick: () => {
+                        setAskUpdate(false)
+                        ctx
+                          .rest('/update/request', {
+                            method: 'POST',
+                            body: { session_key: sessionId },
+                            timeoutMs: 15000
+                          })
+                          .then(() => host.notify({ kind: 'info', message: 'update: the request went to the chat' }))
+                      }
+                    },
+                    'go'
+                  )
                 ]
               })
-            : jsx('span', {
-                role: 'button',
-                tabIndex: 0,
+            : jsx(HoverBox, {
                 onClick: () => setAskUpdate(true),
                 title: 'ask the agent to pull the repo, copy the files and restart the backend',
+                hoverColour: 'var(--ui-accent)',
                 className:
-                  'ml-auto shrink-0 px-1 text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary) hover:text-(--ui-accent)',
+                  'ml-auto shrink-0 px-1 text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary)',
                 children: 'update plugin'
               }),
 
@@ -1486,7 +1504,9 @@ function LaneList({ ctx }) {
       query.error
         ? jsx('div', {
             className:
-              'border-t border-(--ui-stroke-secondary) px-2.5 py-1.5 text-[0.625rem] text-(--ui-danger)',
+              'border-t border-(--ui-stroke-secondary) px-2.5 py-1.5 text-[0.625rem]',
+            // The class named --ui-danger, which the app's build never defines; inline always paints.
+            style: { color: BAD_COLOR },
             children: 'backend: enable plugin pi-team'
           })
         : null
@@ -1557,12 +1577,12 @@ function AddSessionRow({ ctx, project, feature, sessionId, linked, onDone }) {
   return jsxs('div', {
     className: 'flex flex-col gap-1 px-2.5 py-[3px]',
     children: [
-      jsx('button', {
-        type: 'button',
+      jsx(HoverBox, {
+        tag: 'button',
         onClick: () => setAsking(!asking),
         title: linked ? 'this chat session is already linked' : 'link this chat session to the feature',
-        className:
-          'w-full text-left text-[0.625rem] text-(--ui-text-quaternary) hover:text-(--ui-accent)',
+        hoverColour: 'var(--ui-accent)',
+        className: 'w-full text-left text-[0.625rem] text-(--ui-text-quaternary)',
         children: linked ? 'this session is linked' : 'add this session +'
       }),
       asking
@@ -1701,12 +1721,13 @@ function SessionTitle({ ctx, entry, project, feature, onRemove, onChanged }) {
         className: iconClass,
         children: jsx(icons.ExternalLink, { size: 11 })
       }),
-      jsx('button', {
-        type: 'button',
+      jsx(HoverBox, {
+        tag: 'button',
         onClick: onRemove,
         title: 'remove this session from the feature',
-        className:
-          'shrink-0 px-1 text-[0.6875rem] leading-none text-(--ui-text-quaternary) hover:text-(--ui-danger)',
+        // --ui-danger is defined nowhere in the app's build; the panel's own red is the state colour.
+        hoverColour: BAD_COLOR,
+        className: 'shrink-0 px-1 text-[0.6875rem] leading-none text-(--ui-text-quaternary)',
         children: '×'
       })
     ]
@@ -1739,10 +1760,12 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
       }),
       ...options.map(option =>
         jsx(
-          'button',
+          HoverBox,
           {
+            tag: 'button',
             className:
-              'mt-1 mr-1 rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.625rem] text-(--ui-text-primary) hover:bg-(--ui-fill-tertiary)',
+              'mt-1 mr-1 rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.625rem] text-(--ui-text-primary)',
+            hoverFill: 'var(--ui-bg-tertiary)',
             onClick: () => send({ value: option }),
             children: option
           },
@@ -1823,12 +1846,11 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
             },
             className: 'h-6 flex-1 text-[0.625rem]'
           }),
-          jsx('span', {
-            role: 'button',
-            tabIndex: 0,
+          jsx(HoverBox, {
             onClick: send,
             className:
-              'shrink-0 rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.625rem] hover:bg-(--ui-fill-tertiary)',
+              'shrink-0 rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.625rem]',
+            hoverFill: 'var(--ui-bg-tertiary)',
             children: 'send'
           })
         ]
@@ -1979,9 +2001,7 @@ function LaneStatus({ ctx }) {
               style: { color: ASK_COLOR, borderColor: ASK_COLOR },
               children: 'in review'
             })
-          : jsx('span', {
-              role: 'button',
-              tabIndex: 0,
+          : jsx(HoverBox, {
               onClick: () =>
                 ctx
                   .rest(`/lanes/${encodeURIComponent(lane.lane)}/hand`, {
@@ -1992,7 +2012,8 @@ function LaneStatus({ ctx }) {
                   .then(() => query.refetch()),
               title: 'queue this lane for review; send on the review row asks the orchestrator',
               className:
-                'mx-2.5 my-1 shrink-0 rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.625rem] hover:bg-(--ui-fill-tertiary)',
+                'mx-2.5 my-1 shrink-0 rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.625rem]',
+              hoverFill: 'var(--ui-bg-tertiary)',
               children: 'to review'
             })
         : null,
@@ -2022,9 +2043,7 @@ function LaneStatus({ ctx }) {
           })
         : null,
       lane.handed && !lane.shelved
-        ? jsx('span', {
-            role: 'button',
-            tabIndex: 0,
+        ? jsx(HoverBox, {
             onClick: () =>
               ctx
                 .rest(`/lanes/${encodeURIComponent(lane.lane)}/say`, {
@@ -2035,7 +2054,8 @@ function LaneStatus({ ctx }) {
                 .then(() => query.refetch()),
             title: 'ask the orchestrator to close this lane; it shows the plan first',
             className:
-              'mx-2.5 my-1 shrink-0 self-start rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.625rem] hover:bg-(--ui-fill-tertiary)',
+              'mx-2.5 my-1 shrink-0 self-start rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.625rem]',
+            hoverFill: 'var(--ui-bg-tertiary)',
             children: 'close'
           })
         : null,

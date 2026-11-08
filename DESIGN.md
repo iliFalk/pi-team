@@ -253,7 +253,13 @@ animation does not.
   CSS at all, so every `hover:bg-(--ui-fill-tertiary)` in the panel painted nothing and read as a
   button with no hover. Grep the app's `main-<hash>.css` for the token before using it; the control
   fills that DO exist are `--ui-bg-tertiary`, `--ui-control-hover-background` (aliased as
-  `--chrome-action-hover`) and `--ui-control-active-background`.
+  `--chrome-action-hover`) and `--ui-control-active-background`. `--ui-danger` is the same trap: it is
+  defined nowhere, so a red that named it stayed grey. The panel's own failure colour is `BAD_COLOR`.
+- **Every hover is `HoverBox`.** One component owns the state, the `120ms` fade and the two paints:
+  a fill (`hoverFill`, `--ui-bg-tertiary`) and/or a word colour (`hoverColour`). A bordered control
+  inside a header band goes through `HeaderControl`, which is `HoverBox` plus the band's numbers. No
+  `hover:` utility class survives in `plugin.js` — the build only generates a fixed set, and the set
+  it generated never matched what the panel asked for.
 
 ## Where the values live
 
@@ -263,5 +269,6 @@ animation does not.
 | Tree | `desktop/plugin.js` | `GUIDE_STEP`, `ICON_SIZE`, `ICON_CENTER`, `STUB_W`, `LINE_X`, `LINE` |
 | Spacing | `desktop/plugin.js` | `ROW_PAD`, `ROW_PY`, `HEADER_PY`, `HEADER_H`, `PROJECT_GAP`, `FEATURE_GAP`, `BAND_PY`, `BAND_MIN_H` |
 | Surfaces | `desktop/plugin.js` | `SOFT_SHADOW`, `BAND_H`, `BAND_BG`, `PROJECT_SEP_*` |
+| Hover | `desktop/plugin.js` | `HOVER_FADE`, `HoverBox` (state + fade + paints), `HeaderControl` (band control) |
 | Pill | `desktop/plugin.js` | `PILL_H`, `ScrollPill`, `Scroller` |
 | State machine | `plugin/dashboard/plugin_api.py` | which lane is in which state, what a receipt holds |
