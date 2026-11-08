@@ -59,15 +59,17 @@ const STUB_W_DRAW = `${STUB_W_N - 1}px`
 // under the folder. Two pixels put it inside the bottom stroke, where the stroke is full opacity
 // and the segment's 0.45 paint reads as the same line.
 const TRUNK_OVERLAP = 2
-// Quaternary rather than the border tone: the elbow must stay visible on a
-// highlighted row, where a border-coloured line washes out.
-const STROKE = 'var(--ui-text-quaternary)'
+// The tertiary tone rather than the border tone: the elbow must stay visible on a highlighted row,
+// where a border-coloured line washes out. At 0.7 it measures 3.5:1 against the surface, the floor for
+// a graphic; the old 45% of quaternary measured 1.65:1.
+const STROKE = 'var(--ui-text-tertiary)'
+const GUIDE_OPACITY = 0.7
 
 const LINE = {
   position: 'absolute',
   width: 0,
   borderLeft: `1px solid ${STROKE}`,
-  opacity: 0.45,
+  opacity: GUIDE_OPACITY,
   pointerEvents: 'none'
 }
 
@@ -76,6 +78,13 @@ const RUN_COLOR = '#1A6543'
 const ASK_COLOR = '#0762B4'
 const ASK_OUTLINE = '#044A8A'
 const BAD_COLOR = '#8A1C0E'
+// The hexes above are FILL colours: white sits on the question blue, and the green and the red frame a
+// row. Written as words on the panel's own surface they measure 1.9–2.9:1, under the 4.5:1 floor for
+// text this small, so a word takes half its state and half the surface's brightest text:
+// running 7.1:1, question 7.3:1, failure 5.9:1. Fills, outlines and the ball keep the hexes.
+const RUN_TEXT = `color-mix(in srgb, ${RUN_COLOR} 50%, var(--ui-text-primary))`
+const ASK_TEXT = `color-mix(in srgb, ${ASK_COLOR} 50%, var(--ui-text-primary))`
+const BAD_TEXT = `color-mix(in srgb, ${BAD_COLOR} 50%, var(--ui-text-primary))`
 // 85%: white on this fill reaches 4.6:1, the threshold for text this small.
 const ASK_BG = 'rgba(7, 98, 180, 0.85)'
 const ASK_BG_SOFT = 'rgba(7, 98, 180, 0.18)'
@@ -111,12 +120,20 @@ function countStates(lanes) {
   return counts
 }
 
-/** The colour a state is written in, wherever the state is written. */
+/** The colour a state is FRAMED in, wherever the state frames something. */
 function stateColour(lane) {
   if (isBad(lane)) return BAD_COLOR
   if (lane.state === 'running') return RUN_COLOR
   if (lane.state === 'waiting') return ASK_COLOR
   if (lane.state === 'done') return `color-mix(in srgb, ${RUN_COLOR} 70%, transparent)`
+  return undefined
+}
+
+/** The colour a state is WRITTEN in: the same hue at half strength, legible on the surface. */
+function stateText(lane) {
+  if (isBad(lane)) return BAD_TEXT
+  if (lane.state === 'running') return RUN_TEXT
+  if (lane.state === 'waiting') return ASK_TEXT
   return undefined
 }
 
@@ -127,7 +144,7 @@ function Gear() {
     width: 12,
     height: 12,
     fill: 'none',
-    stroke: RUN_COLOR,
+    stroke: RUN_TEXT,
     strokeWidth: 2,
     strokeLinecap: 'round',
     strokeLinejoin: 'round',
@@ -319,7 +336,7 @@ function TreeRow({ last, orphan, trunk, runner, row, children, tail, trunkTail }
                   width: STUB_W_DRAW,
                   height: '1px',
                   background: STROKE,
-                  opacity: 0.45,
+                  opacity: GUIDE_OPACITY,
                   pointerEvents: 'none'
                 }
               }),
@@ -437,7 +454,7 @@ function LaneRow({ lane, active, onPick }) {
     asked || active || hover
       ? { ...bandStyle, background: fill, ...(active ? { marginRight: `-${ROW_PAD}` } : {}) }
       : bandStyle
-  const statusColor = asked ? '#ffffff' : bad ? BAD_COLOR : lane.state === 'running' ? RUN_COLOR : undefined
+  const statusColor = asked ? '#ffffff' : stateText(lane)
   // The frame colour, not the text colour: a question row writes white on blue.
   const frameColor = asked ? ASK_COLOR : bad ? BAD_COLOR : lane.state === 'running' ? RUN_COLOR : DONE_COLOR
   const className = [rowClass, dim]
@@ -492,7 +509,7 @@ function LaneRow({ lane, active, onPick }) {
               }),
               jsx('span', {
                 className: 'ml-auto flex shrink-0 items-center gap-1 text-[0.625rem]',
-                style: { color: statusColor || 'var(--ui-text-quaternary)' },
+                style: { color: statusColor || 'var(--ui-text-tertiary)' },
                 // A working lane says it with motion; the rest keep their word, and a
                 // question carries the same mark the headers use.
                 children: lane.state === 'running' ? jsx(Gear, {}) : asked ? `? ${lane.state}` : lane.state
@@ -957,7 +974,7 @@ function HeaderControl({ title, onClick, label, glyph, size, fontSize, colour, h
       fontSize: fontSize || '10.5px',
       lineHeight: 1,
       borderColor: border || 'var(--ui-stroke-secondary)',
-      color: colour || 'var(--ui-text-quaternary)',
+      color: colour || 'var(--ui-text-tertiary)',
       cursor: 'pointer'
     },
     hoverFill: 'var(--ui-bg-tertiary)',
@@ -977,14 +994,14 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim, tag, se
   const hasPlain = plain !== undefined && plain !== null
   const groups = hasCounts
     ? [
-        counts.ask ? mark('?', counts.ask, ASK_COLOR) : null,
-        counts.bad ? mark('!', counts.bad, BAD_COLOR) : null,
+        counts.ask ? mark('?', counts.ask, ASK_TEXT) : null,
+        counts.bad ? mark('!', counts.bad, BAD_TEXT) : null,
         counts.run
           ? jsxs(
               'span',
               {
                 className: 'flex items-center gap-0.5',
-                style: { color: RUN_COLOR },
+                style: { color: RUN_TEXT },
                 children: [
                   jsx('span', {
                     style: { display: 'flex', transform: 'translateY(-2px)' },
@@ -1011,7 +1028,7 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim, tag, se
         'data-pi-selected': selected ? '1' : undefined,
         'data-pi-colour': selected ? colour : undefined,
         className:
-          'flex min-w-0 flex-1 items-center gap-1 pr-2.5 text-left text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary)',
+          'flex min-w-0 flex-1 items-center gap-1 pr-2.5 text-left text-[0.625rem] uppercase tracking-wide text-(--ui-text-tertiary)',
         // One style object, and no focus ring: the panel draws its own selection frame.
         style: {
           marginLeft: ROW_PAD,
@@ -1050,7 +1067,7 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim, tag, se
               tag
                 ? jsx('span', {
                     className: 'shrink-0 uppercase',
-                    style: { ...TEXT_NUDGE, color: 'var(--ui-text-quaternary)', fontSize: '10.5px' },
+                    style: { ...TEXT_NUDGE, color: 'var(--ui-text-tertiary)', fontSize: '10.5px' },
                     children: tag
                   })
                 : null,
@@ -1074,9 +1091,9 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim, tag, se
                             glyph: '✕',
                             size: BAND_MIN_H,
                             fontSize: '12px',
-                            colour: BAD_COLOR,
-                            hoverColour: BAD_COLOR,
-                            border: BAD_COLOR,
+                            colour: BAD_TEXT,
+                            hoverColour: BAD_TEXT,
+                            border: BAD_TEXT,
                             onClick: () => setAsking(false)
                           },
                           'cancel'
@@ -1088,9 +1105,9 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim, tag, se
                             glyph: '✓',
                             size: BAND_MIN_H,
                             fontSize: '12px',
-                            colour: RUN_COLOR,
-                            hoverColour: RUN_COLOR,
-                            border: RUN_COLOR,
+                            colour: RUN_TEXT,
+                            hoverColour: RUN_TEXT,
+                            border: RUN_TEXT,
                             onClick: () => {
                               setAsking(false)
                               action.onClick()
@@ -1116,7 +1133,7 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim, tag, se
                       // one kind by definition.
                       hasPlain
                         ? jsx('span', {
-                            style: { color: 'var(--ui-text-quaternary)' },
+                            style: { color: 'var(--ui-text-tertiary)' },
                             children: String(plain)
                           })
                         : null
@@ -1381,7 +1398,7 @@ function LaneList({ ctx }) {
           },
           hoverColour: 'var(--ui-accent)',
           className:
-            'flex w-full items-center gap-1 text-left text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary)',
+            'flex w-full items-center gap-1 text-left text-[0.625rem] uppercase tracking-wide text-(--ui-text-tertiary)',
           style: {
             marginLeft: ROW_PAD,
             width: `calc(100% - ${ROW_PAD})`,
@@ -1471,7 +1488,7 @@ function LaneList({ ctx }) {
   )
 
   const emptyHint = jsx('div', {
-    className: 'px-2.5 py-2 text-[0.625rem] leading-relaxed text-(--ui-text-quaternary)',
+    className: 'px-2.5 py-2 text-[0.625rem] leading-relaxed text-(--ui-text-tertiary)',
     children: 'No lane yet.'
   })
 
@@ -1480,7 +1497,7 @@ function LaneList({ ctx }) {
     children: [
       jsxs('div', {
         className:
-          'flex shrink-0 items-center gap-2 border-b border-(--ui-stroke-secondary) px-2.5 text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary)',
+          'flex shrink-0 items-center gap-2 border-b border-(--ui-stroke-secondary) px-2.5 text-[0.625rem] uppercase tracking-wide text-(--ui-text-tertiary)',
         style: { height: HEADER_H },
         children: [
           jsx('span', { children: `projects · ${projects.length}` }),
@@ -1502,9 +1519,9 @@ function LaneList({ ctx }) {
                       glyph: '✕',
                       size: BAND_MIN_H,
                       fontSize: '10px',
-                      colour: BAD_COLOR,
-                      hoverColour: BAD_COLOR,
-                      border: BAD_COLOR,
+                      colour: BAD_TEXT,
+                      hoverColour: BAD_TEXT,
+                      border: BAD_TEXT,
                       onClick: () => setAskUpdate(false)
                     },
                     'cancel'
@@ -1516,9 +1533,9 @@ function LaneList({ ctx }) {
                       glyph: '✓',
                       size: BAND_MIN_H,
                       fontSize: '10px',
-                      colour: RUN_COLOR,
-                      hoverColour: RUN_COLOR,
-                      border: RUN_COLOR,
+                      colour: RUN_TEXT,
+                      hoverColour: RUN_TEXT,
+                      border: RUN_TEXT,
                       onClick: () => {
                         setAskUpdate(false)
                         ctx
@@ -1539,7 +1556,7 @@ function LaneList({ ctx }) {
                 title: 'ask the agent to pull the repo, copy the files and restart the backend',
                 hoverColour: 'var(--ui-accent)',
                 className:
-                  'ml-auto shrink-0 px-1 text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary)',
+                  'ml-auto shrink-0 px-1 text-[0.625rem] uppercase tracking-wide text-(--ui-text-tertiary)',
                 children: 'update plugin'
               }),
 
@@ -1563,7 +1580,7 @@ function LaneList({ ctx }) {
             className:
               'border-t border-(--ui-stroke-secondary) px-2.5 py-1.5 text-[0.625rem]',
             // The class named --ui-danger, which the app's build never defines; inline always paints.
-            style: { color: BAD_COLOR },
+            style: { color: BAD_TEXT },
             children: 'backend: enable plugin pi-team'
           })
         : null
@@ -1575,7 +1592,7 @@ function Row({ label, value, color }) {
   return jsxs('div', {
     className: 'flex items-baseline justify-between gap-2 px-2.5 py-[3px]',
     children: [
-      jsx('span', { className: 'shrink-0 text-[0.625rem] text-(--ui-text-quaternary)', children: label }),
+      jsx('span', { className: 'shrink-0 text-[0.625rem] text-(--ui-text-tertiary)', children: label }),
       jsx('span', {
         className: 'truncate text-right font-mono text-[0.625rem]',
         style: { color: color || 'var(--ui-text-secondary)' },
@@ -1588,7 +1605,7 @@ function Row({ label, value, color }) {
 function Section({ title, band }) {
   return jsxs('div', {
     className:
-      'mt-1 border-t border-(--ui-stroke-secondary) px-2.5 pt-1.5 pb-0.5 text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary)',
+      'mt-1 border-t border-(--ui-stroke-secondary) px-2.5 pt-1.5 pb-0.5 text-[0.625rem] uppercase tracking-wide text-(--ui-text-tertiary)',
     children: [
       title,
       band
@@ -1639,7 +1656,7 @@ function AddSessionRow({ ctx, project, feature, sessionId, linked, onDone }) {
         onClick: () => setAsking(!asking),
         title: linked ? 'this chat session is already linked' : 'link this chat session to the feature',
         hoverColour: 'var(--ui-accent)',
-        className: 'w-full text-left text-[0.625rem] text-(--ui-text-quaternary)',
+        className: 'w-full text-left text-[0.625rem] text-(--ui-text-tertiary)',
         children: linked ? 'this session is linked' : 'add this session +'
       }),
       asking
@@ -1660,9 +1677,9 @@ function AddSessionRow({ ctx, project, feature, sessionId, linked, onDone }) {
                   glyph: '✕',
                   size: BAND_MIN_H,
                   fontSize: '10px',
-                  colour: BAD_COLOR,
-                  hoverColour: BAD_COLOR,
-                  border: BAD_COLOR,
+                  colour: BAD_TEXT,
+                  hoverColour: BAD_TEXT,
+                  border: BAD_TEXT,
                   onClick: () => setAsking(false)
                 },
                 'cancel'
@@ -1674,9 +1691,9 @@ function AddSessionRow({ ctx, project, feature, sessionId, linked, onDone }) {
                   glyph: '✓',
                   size: BAND_MIN_H,
                   fontSize: '10px',
-                  colour: RUN_COLOR,
-                  hoverColour: RUN_COLOR,
-                  border: RUN_COLOR,
+                  colour: RUN_TEXT,
+                  hoverColour: RUN_TEXT,
+                  border: RUN_TEXT,
                   onClick: link
                 },
                 'link'
@@ -1763,7 +1780,7 @@ function SessionTitle({ ctx, entry, project, feature, onRemove, onChanged }) {
   }
 
   const iconClass =
-    'shrink-0 px-1 leading-none text-(--ui-text-quaternary) hover:text-(--ui-text-secondary)'
+    'shrink-0 px-1 leading-none text-(--ui-text-tertiary) hover:text-(--ui-text-secondary)'
 
   return jsxs('div', {
     className: 'flex items-center gap-0.5 pr-1.5 hover:bg-(--chrome-action-hover)',
@@ -1794,8 +1811,8 @@ function SessionTitle({ ctx, entry, project, feature, onRemove, onChanged }) {
         onClick: onRemove,
         title: 'remove this session from the feature',
         // --ui-danger is defined nowhere in the app's build; the panel's own red is the state colour.
-        hoverColour: BAD_COLOR,
-        className: 'shrink-0 px-1 text-[0.6875rem] leading-none text-(--ui-text-quaternary)',
+        hoverColour: BAD_TEXT,
+        className: 'shrink-0 px-1 text-[0.6875rem] leading-none text-(--ui-text-tertiary)',
         children: '×'
       })
     ]
@@ -1842,7 +1859,7 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
       ),
       jsx('button', {
         className:
-          'mt-1 rounded px-1.5 py-0.5 text-[0.625rem] text-(--ui-text-quaternary) hover:text-(--ui-text-secondary)',
+          'mt-1 rounded px-1.5 py-0.5 text-[0.625rem] text-(--ui-text-tertiary) hover:text-(--ui-text-secondary)',
         onClick: () => send({ cancelled: true }),
         children: 'dismiss'
       })
@@ -1858,7 +1875,7 @@ function Bubble({ who, text }) {
       ? { borderLeft: `2px solid ${RUN_COLOR}`, paddingLeft: '4px', color: 'var(--ui-text-secondary)' }
       : who === 'user'
         ? { background: 'var(--chrome-action-hover)', color: 'var(--ui-text-primary)' }
-        : { color: 'var(--ui-text-quaternary)', fontFamily: 'ui-monospace, monospace' }
+        : { color: 'var(--ui-text-tertiary)', fontFamily: 'ui-monospace, monospace' }
   return jsxs('div', {
     className: 'mb-1 whitespace-pre-wrap break-words rounded px-1 py-0.5 text-[0.625rem] leading-snug',
     style,
@@ -1932,7 +1949,7 @@ function Receipt({ merge }) {
   return jsxs('div', {
     children: [
       jsx(Section, { title: 'merge' }),
-      jsx(Row, { label: 'commit', value: merge.short, color: RUN_COLOR }),
+      jsx(Row, { label: 'commit', value: merge.short, color: RUN_TEXT }),
       jsx(Row, { label: 'date', value: merge.date }),
       jsx(Row, { label: 'into', value: merge.subject }),
       jsx(Row, {
@@ -1957,7 +1974,7 @@ function GroupList({ title, rows, onPick }) {
       }),
       rows.length === 0
         ? jsx('div', {
-            className: 'px-2.5 py-2 text-[0.625rem] text-(--ui-text-quaternary)',
+            className: 'px-2.5 py-2 text-[0.625rem] text-(--ui-text-tertiary)',
             children: 'No closed lane yet.'
           })
         : rows.map(row =>
@@ -1971,7 +1988,7 @@ function GroupList({ title, rows, onPick }) {
                 children: [
                   jsx('span', { className: 'truncate font-mono text-[0.6875rem]', children: row.lane }),
                   jsx('span', {
-                    className: 'ml-auto shrink-0 text-[0.625rem] text-(--ui-text-quaternary)',
+                    className: 'ml-auto shrink-0 text-[0.625rem] text-(--ui-text-tertiary)',
                     children: row.shelved_reason
                   })
                 ]
@@ -2020,13 +2037,13 @@ function LaneStatus({ ctx }) {
 
   if (!laneName) {
     return jsx('div', {
-      className: 'flex h-full items-center px-2.5 text-[0.625rem] text-(--ui-text-quaternary)',
+      className: 'flex h-full items-center px-2.5 text-[0.625rem] text-(--ui-text-tertiary)',
       children: 'Pick a lane on the left.'
     })
   }
   if (query.error) {
     return jsx('div', {
-      className: 'px-2.5 py-2 text-[0.625rem] text-(--ui-text-quaternary)',
+      className: 'px-2.5 py-2 text-[0.625rem] text-(--ui-text-tertiary)',
       children: 'Lane state unavailable. Is plugin pi-team enabled?'
     })
   }
@@ -2034,7 +2051,7 @@ function LaneStatus({ ctx }) {
   const lane = query.data
   if (!lane) {
     return jsx('div', {
-      className: 'px-2.5 py-2 text-[0.625rem] text-(--ui-text-quaternary)',
+      className: 'px-2.5 py-2 text-[0.625rem] text-(--ui-text-tertiary)',
       children: 'Loading…'
     })
   }
@@ -2066,7 +2083,7 @@ function LaneStatus({ ctx }) {
         ? lane.handed
           ? jsx('span', {
               className: 'mx-2.5 my-1 shrink-0 rounded border px-1.5 py-0.5 text-[0.625rem]',
-              style: { color: ASK_COLOR, borderColor: ASK_COLOR },
+              style: { color: ASK_TEXT, borderColor: ASK_TEXT },
               children: 'in review'
             })
           : jsx(HoverBox, {
@@ -2103,7 +2120,7 @@ function LaneStatus({ ctx }) {
                 ? jsx('div', {
                     className:
                       'shrink-0 overflow-y-auto whitespace-pre-wrap break-words px-2.5 py-0.5 font-mono text-[0.625rem] leading-snug',
-                    style: { maxHeight: TEXT_H, color: BAD_COLOR },
+                    style: { maxHeight: TEXT_H, color: BAD_TEXT },
                     children: lane.stderr
                   })
                 : null
@@ -2148,7 +2165,7 @@ function LaneStatus({ ctx }) {
           })
         : null,
       lane.last_error
-        ? jsx(Row, { label: 'error', value: lane.last_error, color: BAD_COLOR })
+        ? jsx(Row, { label: 'error', value: lane.last_error, color: BAD_TEXT })
         : null,
 
       lane.shelved ? null : jsx(Section, { title: `sessions · ${(lane.feature_sessions || []).length}` }),
@@ -2219,12 +2236,12 @@ function LaneStatus({ ctx }) {
                         children: file.path
                       }),
                       jsx('span', {
-                        style: { color: RUN_COLOR, marginLeft: 'auto' },
+                        style: { color: RUN_TEXT, marginLeft: 'auto' },
                         children: file.binary ? 'bin' : `+${file.insertions}`
                       }),
                       jsx('span', {
                         style: {
-                          color: file.deletions ? BAD_COLOR : 'var(--ui-text-quaternary)'
+                          color: file.deletions ? BAD_TEXT : 'var(--ui-text-tertiary)'
                         },
                         children: `−${file.deletions}`
                       })
@@ -2243,7 +2260,7 @@ function LaneStatus({ ctx }) {
             jsx(Row, { label: planGlyph(item.status), value: item.title }, `${index}-${item.title}`)
           )
         : jsx('div', {
-            className: 'px-2.5 py-0.5 text-[0.625rem] text-(--ui-text-quaternary)',
+            className: 'px-2.5 py-0.5 text-[0.625rem] text-(--ui-text-tertiary)',
             children: 'no plan'
           }),
 
@@ -2264,7 +2281,7 @@ function LaneStatus({ ctx }) {
                 children: node.title
               }),
               jsx('span', {
-                className: 'ml-auto shrink-0 text-(--ui-text-quaternary)',
+                className: 'ml-auto shrink-0 text-(--ui-text-tertiary)',
                 children: node.type === 'task-spec' ? 'task' : ''
               })
             ]
@@ -2349,7 +2366,7 @@ function ProjectCompose({ ctx, sessionId, onDone }) {
     title: 'new project',
     children: [
       jsx('div', {
-        className: 'text-[0.6875rem] leading-relaxed text-(--ui-text-quaternary)',
+        className: 'text-[0.6875rem] leading-relaxed text-(--ui-text-tertiary)',
         children:
           'Paste a GitHub repository. I check that it exists and that this machine can read it, then clone it into ~/work, register it, and the project appears in the tree.'
       }),
@@ -2371,7 +2388,7 @@ function ProjectCompose({ ctx, sessionId, onDone }) {
       check
         ? jsx('div', {
             className: 'rounded border border-(--ui-stroke-secondary) p-2 text-[0.6875rem] leading-relaxed',
-            style: { color: check.ok ? 'var(--ui-text-secondary)' : BAD_COLOR },
+            style: { color: check.ok ? 'var(--ui-text-secondary)' : BAD_TEXT },
             children: check.ok
               ? `${check.slug} · ${check.private ? 'private' : 'public'} · ${check.branch || 'branch unknown'} · clone to ${check.clone_target}${check.clone_exists ? ' (folder exists!)' : ''}`
               : check.error
@@ -2384,7 +2401,7 @@ function ProjectCompose({ ctx, sessionId, onDone }) {
             onClick: runCheck,
             hoverFill: 'var(--ui-bg-tertiary)',
             className: 'flex items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
-            style: { color: ASK_COLOR, borderColor: ASK_COLOR, opacity: busy || !url.trim() ? 0.5 : 1 },
+            style: { color: ASK_TEXT, borderColor: ASK_TEXT, opacity: busy || !url.trim() ? 0.5 : 1 },
             children: busy ? 'checking…' : 'check'
           }),
           jsx(HoverBox, {
@@ -2392,8 +2409,8 @@ function ProjectCompose({ ctx, sessionId, onDone }) {
             hoverFill: 'var(--ui-bg-tertiary)',
             className: 'flex items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
             style: {
-              color: RUN_COLOR,
-              borderColor: RUN_COLOR,
+              color: RUN_TEXT,
+              borderColor: RUN_TEXT,
               opacity: busy || !check || !check.ok ? 0.5 : 1
             },
             children: 'send'
@@ -2402,7 +2419,7 @@ function ProjectCompose({ ctx, sessionId, onDone }) {
             onClick: onDone,
             hoverFill: 'var(--ui-bg-tertiary)',
             className: 'flex items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
-            style: { color: BAD_COLOR, borderColor: BAD_COLOR },
+            style: { color: BAD_TEXT, borderColor: BAD_TEXT },
             children: 'cancel'
           })
         ]
@@ -2439,7 +2456,7 @@ function ProjectView({ ctx, project, onDone }) {
       jsx(Row, { label: 'repository', value: entry.remote || '—' }),
       jsx(Row, { label: 'waiting', value: minutes >= 1 ? `${minutes} min` : 'just now' }),
       jsx('div', {
-        className: 'text-[0.6875rem] leading-relaxed text-(--ui-text-quaternary)',
+        className: 'text-[0.6875rem] leading-relaxed text-(--ui-text-tertiary)',
         children:
           'Waiting for the clone. When it lands in ~/work and the project is registered, this placeholder becomes the project itself.'
       }),
@@ -2447,7 +2464,7 @@ function ProjectView({ ctx, project, onDone }) {
         onClick: drop,
         hoverFill: 'var(--ui-bg-tertiary)',
         className: 'mt-auto flex w-fit items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
-        style: { color: BAD_COLOR, borderColor: BAD_COLOR },
+        style: { color: BAD_TEXT, borderColor: BAD_TEXT },
         children: 'drop project'
       })
     ]
@@ -2487,7 +2504,7 @@ function FeatureCompose({ ctx, project, sessionId, onDone }) {
     title: `new feature · ${project}`,
     children: [
       jsx('div', {
-        className: 'text-[0.6875rem] leading-relaxed text-(--ui-text-quaternary)',
+        className: 'text-[0.6875rem] leading-relaxed text-(--ui-text-tertiary)',
         children:
           'Write what you want. The feature appears at once as preparation; I give it a name and the task for pi.'
       }),
@@ -2508,14 +2525,14 @@ function FeatureCompose({ ctx, project, sessionId, onDone }) {
             onClick: send,
             hoverFill: 'var(--ui-bg-tertiary)',
             className: 'flex items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
-            style: { color: RUN_COLOR, borderColor: RUN_COLOR, opacity: busy || !text.trim() ? 0.5 : 1 },
+            style: { color: RUN_TEXT, borderColor: RUN_TEXT, opacity: busy || !text.trim() ? 0.5 : 1 },
             children: busy ? 'sending…' : 'send'
           }),
           jsx(HoverBox, {
             onClick: onDone,
             hoverFill: 'var(--ui-bg-tertiary)',
             className: 'flex items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
-            style: { color: BAD_COLOR, borderColor: BAD_COLOR },
+            style: { color: BAD_TEXT, borderColor: BAD_TEXT },
             children: 'cancel'
           })
         ]
@@ -2566,7 +2583,7 @@ function FeatureView({ ctx, project, feature, onDone }) {
       jsx(Row, {
         label: 'chat',
         value: chats.length ? 'linked' : 'no chat',
-        color: chats.length ? undefined : 'var(--ui-text-quaternary)'
+        color: chats.length ? undefined : 'var(--ui-text-tertiary)'
       }),
       jsx(Row, { label: 'lanes', value: String(lanes.length) }),
       lanes.length
@@ -2591,7 +2608,7 @@ function FeatureView({ ctx, project, feature, onDone }) {
                     }),
                     jsx('span', {
                       className: 'shrink-0 text-[0.625rem]',
-                      style: { color: stateColour(lane) || 'var(--ui-text-quaternary)' },
+                      style: { color: stateText(lane) || 'var(--ui-text-tertiary)' },
                       children: lane.state
                     })
                   ]
@@ -2610,7 +2627,7 @@ function FeatureView({ ctx, project, feature, onDone }) {
           })
         : null,
       jsx('div', {
-        className: 'text-[0.6875rem] leading-relaxed text-(--ui-text-quaternary)',
+        className: 'text-[0.6875rem] leading-relaxed text-(--ui-text-tertiary)',
         children: preparing
           ? 'Waiting for a name, a task for pi and its first lane. Until it has a lane, the feature can be dropped.'
           : 'Pick a lane below, or write in the thread of one to send work back.'
@@ -2621,7 +2638,7 @@ function FeatureView({ ctx, project, feature, onDone }) {
             hoverFill: 'var(--ui-bg-tertiary)',
             className:
               'mt-auto flex w-fit items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
-            style: { color: BAD_COLOR, borderColor: BAD_COLOR },
+            style: { color: BAD_TEXT, borderColor: BAD_TEXT },
             children: 'drop feature'
           })
         : null

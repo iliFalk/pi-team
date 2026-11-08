@@ -11,8 +11,12 @@ colors:
   question-fill: 'rgba(7, 98, 180, 0.85)'
   question-fill-soft: 'rgba(7, 98, 180, 0.18)'
   bad: '#8A1C0E'
+  running-text: 'mix(#1A6543 50%, var(--ui-text-primary))  — 7.1:1 on the surface'
+  question-text: 'mix(#0762B4 50%, var(--ui-text-primary))  — 7.3:1'
+  bad-text: 'mix(#8A1C0E 50%, var(--ui-text-primary))  — 5.9:1'
   done: 'var(--ui-text-tertiary)'
-  stroke: 'var(--ui-text-quaternary)'
+  label: 'var(--ui-text-tertiary)  — 5.9:1; the old quaternary measured 3.4:1'
+  stroke: 'var(--ui-text-tertiary)'
   border: 'var(--ui-stroke-secondary)'
   text-primary: 'var(--ui-text-primary)'
   text-secondary: 'var(--ui-text-secondary)'
@@ -52,8 +56,9 @@ lines:
   border: 1px
   outline: 0.5px
   guide: 1px
-  guide-opacity: 0.45
-  tick-opacity: 0.65
+  guide-opacity: 0.7
+  tick-opacity: 0.7
+  contrast-floor: '4.5:1 text, 3:1 graphics, against the panel surface'
   panel-frame: 1px
 motion:
   poll: 3000ms
@@ -90,16 +95,23 @@ Three states, each with one meaning. Nothing else in the panel is coloured.
 
 | State | Colour | Where it appears |
 |---|---|---|
-| `running` | `#1A6543` | the word, the dot, the ball, the row outline, the gear |
+| `running` | fill/outline `#1A6543`, words `mix(#1A6543 50%, primary)` | the dot, the ball and the row outline keep the hex; the word, the gear and the count take the text tone |
 | question (`waiting`) | `#0762B4` at 85%, solid while hovered | the whole lane row, white text on it |
 | question, gentle | `#0762B4` at 18%, at 28% while hovered | the label band of the feature and the project above the lane |
-| `failed`, `error`, `stopped` | `#8A1C0E` | the word, the outline, the count, the reason line |
+| `failed`, `error`, `stopped` | fill/outline `#8A1C0E`, words `mix(#8A1C0E 50%, primary)` | the outline keeps the hex; the word, the count, the reason and the stderr block take the text tone |
 | `done` | `var(--ui-text-tertiary)` | the tick and its count only |
 
 Rules:
 
-- **White on the question fill must stay readable.** At 70% it is 3.5:1, at 85% it is 4.6:1, which is
-  the threshold for text this small. Do not lower the fill without re-measuring.
+- **Contrast is a measured number, not an intention.** Text floor 4.5:1, a graphic floor 3:1, both
+  against the surface the thing is drawn on. The hexes above are FILL colours; written as words on the
+  panel's own `#171715` they measured `failed` 1.9:1, `running` 2.6:1, `?` 2.9:1 — dark paint on a dark
+  surface. A word therefore takes half its state and half `var(--ui-text-primary)` (5.9 / 7.1 / 7.3:1)
+  while fills, outlines and the ball keep the hex. The same rule moved every label and counter from
+  `--ui-text-quaternary` (3.4:1) to `--ui-text-tertiary` (5.9:1) and the tree's guides from quaternary
+  at 45% (1.65:1) to tertiary at 70% (3.5:1).
+- **White on the question fill must stay readable.** At 70% it is 3.5:1, at 85% it is 7.4:1. Do not
+  lower the fill without re-measuring. A question row's snippet is white at 82% (5.5:1 on the fill).
 - **Counters climb to the deepest visible level.** A project always sums its lanes; a feature sums
   only while it is closed. `!` beats `?`, so a failed lane is never hidden behind a question.
 - **A painted band still answers the pointer.** A question's wash used to win the style branch, so the
@@ -117,7 +129,7 @@ Rules:
 
 | Role | Size | Notes |
 |---|---|---|
-| Project and feature labels | `0.625rem` | uppercase, wide tracking, quaternary |
+| Project and feature labels | `0.625rem` | uppercase, wide tracking, tertiary — quaternary measured 3.4:1 |
 | Lane name | `0.6875rem` | monospace, `0.625rem` for its snippet |
 | State word | `0.625rem` | coloured by state, never bold except a question |
 | Counters | `0.625rem` | one sign per state |
@@ -158,8 +170,8 @@ otherwise paint over them.
 | `STUB_W` 13 px | the horizontal tick from the parent's axis to the child icon's ink: `GUIDE_STEP 18 − ICON_SIZE/2 + STUB_OVERLAP 1` |
 | `LINE_X` −2 px | where the spine sits relative to the child's own box: `ICON_CENTER − GUIDE_STEP 18` |
 | trunk | from `50% + ICON_SIZE/2 − TRUNK_OVERLAP 2` down to `−FEATURE_GAP`: it starts inside the icon's bottom stroke, not at its box edge, because a folder's ink stops 2 px above the box |
-| guide | 1 px, `var(--ui-text-quaternary)`, opacity 0.45 |
-| tick | 1 px, same colour, opacity 0.65 |
+| guide | 1 px, `var(--ui-text-tertiary)`, opacity 0.7 — 3.5:1 |
+| tick | 1 px, same colour, opacity 0.7 |
 | last child | its spine stops at 50% of the row instead of running on |
 | `tail` | how far a row's own segment runs past its box to the next sibling: `FEATURE_GAP 4`, `0` for lanes, whose rows touch |
 | `trunkTail` | how far the trunk runs past its box to its first child: the child container's top padding — `4` for a feature, `0` for the review and closed rows, whose lanes start at the container's edge |
