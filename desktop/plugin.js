@@ -49,11 +49,12 @@ const LINE_X = `${LINE_X_N}px`
 const STUB_OVERLAP = 1
 const STUB_W_N = GUIDE_STEP_N - ICON_SIZE / 2 + STUB_OVERLAP
 const STUB_W = `${STUB_W_N}px`
-// The spine's own 1px stroke already covers the column the tick would start on, and two 45% paints
-// on one pixel darken it: every junction showed a dot. The tick starts one pixel right of the spine
-// and is one pixel shorter, so its far end still lands on the icon.
-const STUB_X = `${LINE_X_N + 1}px`
-const STUB_W_DRAW = `${STUB_W_N - 1}px`
+// The tick starts ON the spine's column, not one pixel right of it: at a fractional display scale a
+// 1px border snaps to one device pixel, so a tick starting a whole CSS pixel to the right landed two
+// device columns away and left a hole at the corner (measured at 1.65: the spine on column 33, the
+// tick from 35, column 34 empty). The overlap is a single pixel, and it is painted at 40% of the tone
+// so the junction does not darken into a dot.
+const STUB_CORNER = 'color-mix(in srgb, var(--ui-text-tertiary) 25%, transparent)'
 // The trunk leaves the ICON, not the icon's box: a glyph's ink stops about 1.5px above the box
 // bottom (the folder path ends at 20 of 24), so a segment that starts on the box hangs in the air
 // under the folder. Two pixels put it inside the bottom stroke, where the stroke is full opacity
@@ -331,13 +332,16 @@ function TreeRow({ last, orphan, trunk, runner, row, children, tail, trunkTail }
                 'aria-hidden': true,
                 style: {
                   position: 'absolute',
-                  left: STUB_X,
+                  left: LINE_X,
                   top: '50%',
-                  width: STUB_W_DRAW,
+                  width: STUB_W,
                   // A top BORDER, not a 1px background box: at a fractional display scale a background
                   // box straddles two device rows while a border snaps to one, so the ticks read twice
                   // as thick as the spines beside them (measured at 1.65: two rows against one column).
                   borderTop: `1px solid ${STROKE}`,
+                  // The corner pixel the tick owns, so the junction cannot open into a hole.
+                  borderLeft: `1px solid ${STUB_CORNER}`,
+                  boxSizing: 'border-box',
                   opacity: GUIDE_OPACITY,
                   pointerEvents: 'none'
                 }

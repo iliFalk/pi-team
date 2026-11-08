@@ -171,7 +171,7 @@ otherwise paint over them.
 | `LINE_X` −2 px | where the spine sits relative to the child's own box: `ICON_CENTER − GUIDE_STEP 18` |
 | trunk | from `50% + ICON_SIZE/2 − TRUNK_OVERLAP 2` down to `−FEATURE_GAP`: it starts inside the icon's bottom stroke, not at its box edge, because a folder's ink stops 2 px above the box |
 | guide | 1 px, `var(--ui-text-tertiary)`, opacity 0.7 — 3.5:1 |
-| tick | 1 px as a `border-top`, same colour, opacity 0.7 — a background box would straddle two device rows at a fractional scale and read twice as thick as the spines |
+| tick | 1 px as a `border-top` with a `border-left` on the spine's own column, same colour, opacity 0.7 — a background box would straddle two device rows, and a tick starting one CSS pixel right of the spine left a hole at the corner at a fractional scale |
 | last child | its spine stops at 50% of the row instead of running on |
 | `tail` | how far a row's own segment runs past its box to the next sibling: `FEATURE_GAP 4`, `0` for lanes, whose rows touch |
 | `trunkTail` | how far the trunk runs past its box to its first child: the child container's top padding — `4` for a feature, `0` for the review and closed rows, whose lanes start at the container's edge |
