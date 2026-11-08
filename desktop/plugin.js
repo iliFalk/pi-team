@@ -417,7 +417,8 @@ const bandStyle = {
 // same number as its height, and the label's line box (~13px for 10px text) stays under the
 // floor, so nothing but the floor can set the height. Content-box is explicit: the app may set
 // border-box globally, which would charge the padding against this number instead of adding it.
-const BAND_MIN_H = '16px'
+const BAND_MIN_H_N = 16
+const BAND_MIN_H = `${BAND_MIN_H_N}px`
 const headerBandStyle = { ...bandStyle, minHeight: BAND_MIN_H, boxSizing: 'content-box' }
 const labelBand = ''
 const labelBandOn = 'bg-(--chrome-action-hover)'
@@ -1420,19 +1421,24 @@ function LaneList({ ctx }) {
               children: jsx(FolderPlus, {})
             }),
             jsx('span', {
-              className: 'truncate',
+              // The shape of the band a hovered feature row paints — same left edge, same 24px height,
+              // same 4px radius and 4px of padding around the words — drawn as a dashed outline
+              // instead of a fill. Its content is 14px, not BAND_MIN_H 16, because the two borders add
+              // the missing 2 and the row must stay the height of its siblings.
+              className: 'flex min-w-0 flex-1 items-center',
               style: {
-                ...TEXT_NUDGE,
-                // The words sit inside a dotted line, the same way the folder beside them is dashed:
-                // currentColor keeps the tone and the hover accent, and the negative margin holds the
-                // row's height so the border cannot make this row taller than its siblings.
-                border: '1px dotted currentColor',
-                borderRadius: '4px',
-                padding: '0 4px',
-                margin: '-1px 0',
-                lineHeight: 1.1
+                border: '1px dashed currentColor',
+                borderRadius: `4px`,
+                padding: `${BAND_PY}px 4px`,
+                margin: `-${BAND_PY}px 0`,
+                minHeight: `${BAND_MIN_H_N - 2}px`,
+                boxSizing: 'content-box'
               },
-              children: 'new feature'
+              children: jsx('span', {
+                className: 'truncate',
+                style: TEXT_NUDGE,
+                children: 'new feature'
+              })
             })
           ]
         })
