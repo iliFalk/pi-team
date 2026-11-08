@@ -869,6 +869,50 @@ function ScrollPill() {
 }
 
 
+// A hover that moves the word and the box between two paints needs a fade, or it snaps.
+const HOVER_FADE = 'background-color 120ms linear, color 120ms linear, border-color 120ms linear'
+
+/** One control inside a header band: a word, or a square glyph box.
+ *  A class hover cannot carry this: `--ui-fill-tertiary`, the token the old class named, does not
+ *  exist in the app's built CSS, so the paint silently did nothing. The fill the app really has is
+ *  `--ui-bg-tertiary`, and the word brightens to `--ui-text-secondary`. State, not a class, so the
+ *  paint is unconditional. */
+function HeaderControl({ title, onClick, label, glyph, size, fontSize, colour, hoverColour, border }) {
+  const [over, setOver] = useState(false)
+  return jsx('span', {
+    // Not a <button>: the whole header row is already one, and a button inside a button is
+    // invalid — the browser rearranges it and the row drifts.
+    role: 'button',
+    tabIndex: 0,
+    title: title || '',
+    onClick: event => {
+      event.stopPropagation()
+      if (onClick) onClick()
+    },
+    onMouseEnter: () => setOver(true),
+    onMouseLeave: () => setOver(false),
+    className: 'flex shrink-0 items-center justify-center rounded border uppercase',
+    style: {
+      // The box sits half a pixel above the text's axis.
+      transform: 'translateY(-0.5px)',
+      height: BAND_MIN_H,
+      ...(size ? { width: size } : { padding: '0 5px' }),
+      fontSize: fontSize || '10.5px',
+      lineHeight: 1,
+      borderColor: border || 'var(--ui-stroke-secondary)',
+      color: over ? hoverColour || colour || 'var(--ui-text-secondary)' : colour || 'var(--ui-text-quaternary)',
+      background: over ? 'var(--ui-bg-tertiary)' : 'transparent',
+      transition: HOVER_FADE,
+      cursor: 'pointer'
+    },
+    children: glyph || jsx('span', {
+      // The box stays where it is; only the word drops one pixel inside it.
+      style: { display: 'block', transform: 'translate(0.5px, 0.5px)' },
+      children: label
+    })
+  })
+}
+
 function ListHeader({ label, counts, plain, action, open, onToggle, dim, tag, selected, colour }) {
   const [hover, setHover] = useState(false)
   const [asking, setAsking] = useState(false)
@@ -950,105 +994,54 @@ function ListHeader({ label, counts, plain, action, open, onToggle, dim, tag, se
                 : null,
               // A create action has nothing to confirm: one click opens the field.
               action && action.instant
-                ? jsx('span', {
-                    role: 'button',
-                    tabIndex: 0,
-                    title: action.title || '',
-                    onClick: event => {
-                      event.stopPropagation()
-                      action.onClick()
-                    },
-                    className:
-                      'shrink-0 rounded border border-(--ui-stroke-secondary) uppercase hover:bg-(--ui-fill-tertiary)',
-                    style: {
-                      transform: 'translateY(-0.5px)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      height: BAND_MIN_H,
-                      padding: '0 5px',
-                      fontSize: '10.5px',
-                      lineHeight: 1
-                      },
-                    children: jsx('span', {
-                      style: { display: 'block', transform: 'translate(0.5px, 0.5px)' },
-                      children: action.label
-                    })
+                ? jsx(HeaderControl, {
+                    title: action.title,
+                    label: action.label,
+                    onClick: action.onClick
                   })
                 : null,
               action && !action.instant
                 ? asking
                   ? jsxs('span', {
                       className: 'flex shrink-0 items-center gap-1',
-                      style: { transform: 'translateY(-0.5px)' },
                       children: [
-                        jsx('span', {
-                          role: 'button',
-                          tabIndex: 0,
-                          title: 'cancel',
-                          onClick: event => {
-                            event.stopPropagation()
-                            setAsking(false)
-                          },
-                          className: 'flex items-center justify-center rounded border',
-                          style: {
-                            color: BAD_COLOR,
-                            borderColor: BAD_COLOR,
-                            width: BAND_MIN_H,
-                            height: BAND_MIN_H,
+                        jsx(
+                          HeaderControl,
+                          {
+                            title: 'cancel',
+                            glyph: '✕',
+                            size: BAND_MIN_H,
                             fontSize: '12px',
-                            lineHeight: 1
+                            colour: BAD_COLOR,
+                            hoverColour: BAD_COLOR,
+                            border: BAD_COLOR,
+                            onClick: () => setAsking(false)
                           },
-                          children: '✕'
-                        }),
-                        jsx('span', {
-                          role: 'button',
-                          tabIndex: 0,
-                          title: action.title || '',
-                          onClick: event => {
-                            event.stopPropagation()
-                            setAsking(false)
-                            action.onClick()
-                          },
-                          className: 'flex items-center justify-center rounded border',
-                          style: {
-                            color: RUN_COLOR,
-                            borderColor: RUN_COLOR,
-                            width: BAND_MIN_H,
-                            height: BAND_MIN_H,
+                          'cancel'
+                        ),
+                        jsx(
+                          HeaderControl,
+                          {
+                            title: action.title,
+                            glyph: '✓',
+                            size: BAND_MIN_H,
                             fontSize: '12px',
-                            lineHeight: 1
+                            colour: RUN_COLOR,
+                            hoverColour: RUN_COLOR,
+                            border: RUN_COLOR,
+                            onClick: () => {
+                              setAsking(false)
+                              action.onClick()
+                            }
                           },
-                          children: '✓'
-                        })
+                          'go'
+                        )
                       ]
                     })
-                  : jsx('span', {
-                      // Not a button: the whole header is already one, and a button inside a
-                      // button is invalid — the browser rearranges it and the row drifts.
-                      role: 'button',
-                      tabIndex: 0,
-                      onClick: event => {
-                        event.stopPropagation()
-                        setAsking(true)
-                      },
-                      title: action.title || '',
-                      className:
-                        'shrink-0 rounded border border-(--ui-stroke-secondary) uppercase hover:bg-(--ui-fill-tertiary)',
-                      style: {
-                        // The box sits half a pixel above the text's axis.
-                        transform: 'translateY(-0.5px)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        height: BAND_MIN_H,
-                        padding: '0 5px',
-                        fontSize: '10.5px',
-                        lineHeight: 1
-                      },
-                      children: jsx('span', {
-                        // The box stays where it is; only the word drops one pixel inside it.
-                        style: { display: 'block', transform: 'translate(0.5px, 0.5px)' },
-                        children: action.label
-                      })
+                  : jsx(HeaderControl, {
+                      title: action.title,
+                      label: action.label,
+                      onClick: () => setAsking(true)
                     })
                 : null,
               hasCounts || hasPlain

@@ -99,7 +99,7 @@ const ctx = { rest: async () => ({}), i18n: { register: () => {} }, register: ()
 const results = {}
 selectedLane.set('theme-picker')
 
-for (const name of ['LaneList', 'LaneRow', 'ListHeader', 'Section', 'Row', 'LaneStatus', 'TeamPane', 'SessionTitle', 'AddSessionRow', 'QuestionBlock', 'FeatureCompose', 'FeatureView', 'ProjectCompose', 'ProjectView', 'ScrollPill', 'Scroller', 'FolderPlus', 'SelectionOutline', 'visibleFrame', 'framePath']) {
+for (const name of ['LaneList', 'LaneRow', 'ListHeader', 'Section', 'Row', 'LaneStatus', 'TeamPane', 'SessionTitle', 'AddSessionRow', 'QuestionBlock', 'FeatureCompose', 'FeatureView', 'ProjectCompose', 'ProjectView', 'ScrollPill', 'Scroller', 'FolderPlus', 'SelectionOutline', 'visibleFrame', 'framePath', 'HeaderControl']) {
   const fn = eval(name)
   try {
     const out = fn({
@@ -116,6 +116,9 @@ for (const name of ['LaneList', 'LaneRow', 'ListHeader', 'Section', 'Row', 'Lane
       question: ${JSON.stringify(fakeLane.question)},
       lane: ${JSON.stringify(fakeLane)},
       label: 'demo',
+      // The band's control renders only when an action arrives; a fixture without it leaves the
+      // whole branch — and any ReferenceError in it — unexercised.
+      action: { label: 'send', title: 'put this queue into the chat', onClick: () => {} },
       count: 1,
       open: true,
       onToggle: () => {},

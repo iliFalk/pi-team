@@ -19,6 +19,8 @@ colors:
   text-tertiary: 'var(--ui-text-tertiary)'
   text-quaternary: 'var(--ui-text-quaternary)'
   hover-paint: 'var(--chrome-action-hover)'
+  control-hover-fill: 'var(--ui-bg-tertiary)'
+  control-hover-text: 'var(--ui-text-secondary)'
 spacing:
   row-side: 10px
   row-vertical: 6px
@@ -195,7 +197,7 @@ Rules:
 |---|---|
 | Lane row | icon, name, state word, snippet; band behind the text only, never behind the icon; a selected lane's fill runs the last `10px` to the divider and fades to nothing over the final `14px`, so it dissolves where the right part begins |
 | Project or feature row | folder icon, label, counters |
-| Header control | one word, `10.5px` uppercase, `1px` stroke, radius `4px`, height `BAND_MIN_H` (`16px`); clicking it swaps the word for `✕` and `✓` at `16 × 16`, the same box, so the band never moves |
+| Header control | one word, `10.5px` uppercase, `1px` stroke, radius `4px`, height `BAND_MIN_H` (`16px`); clicking it swaps the word for `✕` and `✓` at `16 × 16`, the same box, so the band never moves. Hover fills it with `var(--ui-bg-tertiary)` and lifts the word to `var(--ui-text-secondary)` over `120ms`; the `✕` and `✓` take the same fill and keep their state colour. The hover is React state driving an inline style, never a utility class |
 | Add-feature row | the FIRST line inside an open project, directly under the project row: a dashed folder with a plus inside, label `new feature` in quaternary; the only way to create a feature. It opens the block so the gesture stays visible however long the list grows; the level's closing `last` mark moves to whichever row ends the block (a feature, `review`, or `closed`) |
 | Counter | `?` `!` gear `✓` with a number, one colour each, no separator between them |
 | Question block | inside the lane card, three controls at most, answer goes to the lane |
@@ -247,6 +249,11 @@ animation does not.
 - **Do not invent a fourth state colour.** Three states, one meaning each.
 - **Do not add a border where spacing can do the work.**
 - **Do not depend on a utility class the app may not have built** — see the constraint above.
+- **Do not name a token the app's build does not have.** `--ui-fill-*` does not exist in the shipped
+  CSS at all, so every `hover:bg-(--ui-fill-tertiary)` in the panel painted nothing and read as a
+  button with no hover. Grep the app's `main-<hash>.css` for the token before using it; the control
+  fills that DO exist are `--ui-bg-tertiary`, `--ui-control-hover-background` (aliased as
+  `--chrome-action-hover`) and `--ui-control-active-background`.
 
 ## Where the values live
 
