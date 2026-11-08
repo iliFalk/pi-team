@@ -425,7 +425,9 @@ function LaneRow({ lane, active, onPick }) {
   const ring = active ? null : outline
   // A selected lane lets its fill go: solid under the text, then a gradient to nothing at the right edge, so
   // the row dissolves toward the right part instead of ending on a hard line.
-  const softFill = asked ? ASK_BG : 'var(--chrome-action-hover)'
+  // A question lane already carries the 85% fill, so the plain hover paint would land under it and do
+  // nothing: the pointer deepens the same blue to solid instead. White on it goes 4.6:1 → 6.2:1.
+  const softFill = asked ? (hover ? ASK_COLOR : ASK_BG) : 'var(--chrome-action-hover)'
   const fill = active
     ? `linear-gradient(to right, ${softFill} calc(100% - ${ROW_FADE}px), rgba(0,0,0,0))`
     : softFill

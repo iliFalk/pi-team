@@ -91,7 +91,7 @@ Three states, each with one meaning. Nothing else in the panel is coloured.
 | State | Colour | Where it appears |
 |---|---|---|
 | `running` | `#1A6543` | the word, the dot, the ball, the row outline, the gear |
-| question (`waiting`) | `#0762B4` at 85% | the whole lane row, white text on it |
+| question (`waiting`) | `#0762B4` at 85%, solid while hovered | the whole lane row, white text on it |
 | question, gentle | `#0762B4` at 18%, at 28% while hovered | the label band of the feature and the project above the lane |
 | `failed`, `error`, `stopped` | `#8A1C0E` | the word, the outline, the count, the reason line |
 | `done` | `var(--ui-text-tertiary)` | the tick and its count only |
@@ -106,7 +106,10 @@ Rules:
   one row that carries news was the only row that ignored a hover. Hover deepens the same hue
   (`18% → 28%`) and lifts the label to `var(--ui-text-secondary)`; the label's contrast against that
   band goes from 2.2:1 to 5.3:1 rather than falling with the deeper paint. Every header row brightens
-  its label on hover for the same reason the band's control does: one gesture, one meaning.
+  its label on hover for the same reason the band's control does: one gesture, one meaning. A LANE
+  follows the same rule from the other side: plain lanes take the ordinary hover fill, and a question
+  lane — already solid blue at 85% — goes to the solid hue, which lifts white on it from 4.6:1 to
+  6.2:1. A fill that is already painted cannot be answered by painting under it.
 - **App tokens, not hex, for text and lines.** `var(--ui-text-quaternary)` for a guide, because a
   border-toned line disappears on a highlighted row; `var(--ui-stroke-secondary)` for real borders.
 
