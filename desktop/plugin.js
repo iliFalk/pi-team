@@ -47,6 +47,11 @@ const LINE_X = `${ROW_PAD_N + ICON_SIZE / 2 - GUIDE_STEP_N}px`
 // cutting into it.
 const STUB_OVERLAP = 1
 const STUB_W = `${GUIDE_STEP_N - ICON_SIZE / 2 + STUB_OVERLAP}px`
+// The trunk leaves the ICON, not the icon's box: a glyph's ink stops about 1.5px above the box
+// bottom (the folder path ends at 20 of 24), so a segment that starts on the box hangs in the air
+// under the folder. Two pixels put it inside the bottom stroke, where the stroke is full opacity
+// and the segment's 0.45 paint reads as the same line.
+const TRUNK_OVERLAP = 2
 // Quaternary rather than the border tone: the elbow must stay visible on a
 // highlighted row, where a border-coloured line washes out.
 const STROKE = 'var(--ui-text-quaternary)'
@@ -302,7 +307,7 @@ function TreeRow({ last, orphan, trunk, runner, row, children }) {
                 style: {
                   ...LINE,
                   left: ICON_CENTER,
-                  top: `calc(50% + ${ICON_SIZE / 2}px)`,
+                  top: `calc(50% + ${ICON_SIZE / 2 - TRUNK_OVERLAP}px)`,
                   bottom: `-${FEATURE_GAP}`
                 }
               })

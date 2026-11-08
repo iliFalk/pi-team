@@ -149,6 +149,7 @@ otherwise paint over them.
 | `ICON_CENTER` 16 px | the line hangs under the centre of the icon: `ROW_PAD 10 + ICON_SIZE/2` |
 | `STUB_W` 13 px | the horizontal tick from the parent's axis to the child icon's ink: `GUIDE_STEP 18 − ICON_SIZE/2 + STUB_OVERLAP 1` |
 | `LINE_X` −2 px | where the spine sits relative to the child's own box: `ICON_CENTER − GUIDE_STEP 18` |
+| trunk | from `50% + ICON_SIZE/2 − TRUNK_OVERLAP 2` down to `−FEATURE_GAP`: it starts inside the icon's bottom stroke, not at its box edge, because a folder's ink stops 2 px above the box |
 | guide | 1 px, `var(--ui-text-quaternary)`, opacity 0.45 |
 | tick | 1 px, same colour, opacity 0.65 |
 | last child | its spine stops at 50% of the row instead of running on |
