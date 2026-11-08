@@ -153,6 +153,7 @@ otherwise paint over them.
 | guide | 1 px, `var(--ui-text-quaternary)`, opacity 0.45 |
 | tick | 1 px, same colour, opacity 0.65 |
 | last child | its spine stops at 50% of the row instead of running on |
+| `tail` | how far a segment runs past its own row: `FEATURE_GAP 4` for features and group rows, `0` for lanes, whose rows touch |
 
 **The tick ends on the GLYPH, not on the icon's box.** A `1.75px` stroke inside a 12 px box leaves
 one empty pixel column at the box edge, so a tick that stops on the box reads as "this line does not
@@ -167,6 +168,12 @@ arithmetic. They were once hand-written against `ROW_PAD 6`: when the rhythm mov
 moved right and the lines stayed, so every spine sat 4 px outside its icon's centre and every stub
 stopped 4 px short of the icon it was supposed to join. A measured gap at the end of a stub means the
 three numbers came from two different `ROW_PAD` values — check the arithmetic before touching pixels.
+
+**A segment runs exactly the air below it, never more.** Two 1-px strokes at 45% opacity painted over
+each other darken the pixel, so an extension that lands on the next row's own segment shows as a
+short brighter piece on an otherwise even line. Features stand `4px` apart and lanes touch, so the
+extension is the row's own `tail`: `FEATURE_GAP` for a feature or a group row, `0` for a lane. Lane
+rows lived on the shared default and every pair of them carried a 4-px doubled chunk.
 
 **Every row with visible children passes `trunk`.** A tree row draws its own segment under its own
 icon and hands the rest to its children; a row that forgets the flag has no segment, so the line

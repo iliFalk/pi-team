@@ -267,14 +267,20 @@ function FolderPlus() {
 /** A row, the segment of its level's line that belongs to it, and its children.
  *  Every measurement here is row-relative: a percentage of the node would put the
  *  stub and the end of the line in the middle of the children instead of the row. */
-function TreeRow({ last, orphan, trunk, runner, row, children }) {
+function TreeRow({ last, orphan, trunk, runner, row, children, tail }) {
   const blocks = (Array.isArray(children) ? children : [children]).filter(Boolean)
+  // How far this row's segment runs past its own box: exactly the air to the row below.
+  // Features stand a gap apart, so the extension fills that gap; lanes stand shoulder to
+  // shoulder, so an extension there lands on the next lane's own segment, paints the same
+  // pixel twice and shows as a brighter 4px piece on the line.
+  const tailPx = tail === undefined ? parseInt(FEATURE_GAP, 10) : Number(tail)
+  const tailBottom = tailPx ? `-${tailPx}px` : '0px'
 
   // The last row stops at its own middle, so its half is measured inside the row.
   // Every other row runs on beside its children, so its line spans the whole node.
   const insideRow = last ? { ...LINE, left: LINE_X, top: 0, height: '50%' } : null
   // Runs on past the row so the air between rows does not cut the line.
-  const wholeNode = last || orphan ? null : { ...LINE, left: LINE_X, top: 0, bottom: `-${FEATURE_GAP}` }
+  const wholeNode = last || orphan ? null : { ...LINE, left: LINE_X, top: 0, bottom: tailBottom }
 
   return jsxs('div', {
     // The node is the box the full-height line is measured against.
@@ -308,7 +314,7 @@ function TreeRow({ last, orphan, trunk, runner, row, children }) {
                   ...LINE,
                   left: ICON_CENTER,
                   top: `calc(50% + ${ICON_SIZE / 2 - TRUNK_OVERLAP}px)`,
-                  bottom: `-${FEATURE_GAP}`
+                  bottom: tailBottom
                 }
               })
             : null,
@@ -1147,6 +1153,8 @@ function LaneList({ ctx }) {
       TreeRow,
       {
         last,
+        // Lane rows touch: their own extension would overlap the next lane's segment.
+        tail: 0,
         runner: lane.state === 'running',
         row: jsx(LaneRow, {
           lane,
