@@ -1906,15 +1906,27 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
 /** One message in a lane's thread: the lane's own words, mine, or Ilja's. */
 function Bubble({ who, text }) {
   const label = who === 'jarvis' ? 'me' : who === 'lane' ? 'lane' : 'you'
+  // The author is named in the label; a left border in a second hue now cuts through the bubble's
+  // own ring, so the bubble is one shape and the words carry who spoke.
   const style =
     who === 'jarvis'
-      ? { borderLeft: `2px solid ${RUN_COLOR}`, paddingLeft: '4px', color: 'var(--ui-text-secondary)' }
+      ? { color: 'var(--ui-text-secondary)' }
       : who === 'user'
         ? { background: 'var(--chrome-action-hover)', color: 'var(--ui-text-primary)' }
         : { color: 'var(--ui-text-tertiary)', fontFamily: 'ui-monospace, monospace' }
   return jsxs('div', {
-    className: 'mb-1 whitespace-pre-wrap break-words rounded px-1 py-0.5 text-[0.625rem] leading-snug',
-    style,
+    className: 'mb-1 whitespace-pre-wrap break-words rounded text-[0.625rem] leading-snug',
+    // A bubble is a row of the panel, not a chat cloud: the height of a band, the same 4px radius,
+    // and the panel's blue hairline around it.
+    style: {
+      ...style,
+      display: 'flex',
+      alignItems: 'baseline',
+      minHeight: `${BAND_MIN_H_N + 2 * BAND_PY}px`,
+      boxSizing: 'border-box',
+      padding: `${BAND_PY}px 4px`,
+      boxShadow: `inset 0 0 0 1px ${ASK_COLOR}`
+    },
     children: [
       jsx('span', {
         className: 'mr-1 text-[0.5625rem] uppercase',
