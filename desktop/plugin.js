@@ -427,6 +427,9 @@ const STATE_CONTROL_CLASS =
   'mx-2.5 my-1 flex shrink-0 items-center justify-center rounded border border-(--ui-stroke-secondary) text-[0.6875rem]'
 // The app's composer measures 42px outer with a 40px fill: our thread composer copies it.
 const COMPOSER_H_N = 40
+// How far the field may grow before it scrolls instead, and the taller SEND that sits on its edge.
+const COMPOSER_MAX_H_N = 120
+const SEND_H_N = BAND_MIN_H_N + 2 * BAND_PY + 4
 const STATE_CONTROL_STYLE = {
   height: `${BAND_MIN_H_N + 2 * BAND_PY}px`,
   boxSizing: 'border-box'
@@ -1977,40 +1980,55 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
             .reverse()
         ]
       }),
-      // The composer wears the app's own input field: `42px` outer (40 of fill plus its 1px border),
+      // The composer wears the app's own input field: `42px` at rest (40 of fill plus its 1px border),
       // radius `4`, the accent as its border, the panel's own surface inside, and the same `8px` of
-      // air below it that the app's composer keeps above the window edge. The input IS the shape: it
-      // fills the whole box and only the send word sits over its right end.
+      // air below it that the app's composer keeps above the window edge. A textarea, not an Input:
+      // it grows with its text, the words wrap ABOVE the SEND control, and the SEND sits on the
+      // bottom-right corner so the writing area keeps its full width as the field rises.
       jsxs('div', {
+        // Centred while the field is one line; the SEND pins itself to the bottom edge as the field
+        // grows, which is what makes the words wrap above it.
         className: 'flex shrink-0 items-center gap-1',
         style: {
-          height: `${COMPOSER_H_N + 2}px`,
+          minHeight: `${COMPOSER_H_N + 2}px`,
           boxSizing: 'border-box',
           margin: '0 10px 8px',
-          padding: '0 4px',
+          padding: '4px 4px',
           borderRadius: '4px',
           border: '1px solid var(--ui-accent)',
           background: 'var(--ui-bg-editor)'
         },
         children: [
-          jsx(Input, {
+          jsx('textarea', {
             value: draft,
+            rows: 1,
             placeholder: 'say something about this lane',
             onChange: event => setDraft(event.target.value),
-            onKeyDown: event => {
-              if (event.key === 'Enter') send()
+            // Height follows the content: reset it, read what the browser needs, cap the field so a
+            // pasted wall of text cannot swallow the card.
+            onInput: event => {
+              const element = event.currentTarget
+              element.style.height = 'auto'
+              element.style.height = `${Math.min(element.scrollHeight, COMPOSER_MAX_H_N)}px`
             },
-            className: 'h-full flex-1 border-0 bg-transparent text-[0.625rem]',
-            // The app's Input brings its own border and fill; inside the composer that drew a second
-            // outline a few pixels in from the first. The composer's box is the only frame.
-            style: { border: 'none', background: 'transparent', boxShadow: 'none', outline: 'none' }
+            onKeyDown: event => {
+              // Enter sends, Shift+Enter is a new line.
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault()
+                send()
+              }
+            },
+            className:
+              'w-full min-w-0 flex-1 resize-none border-0 bg-transparent px-1 py-0 text-[0.625rem] leading-snug outline-none',
+            style: { color: 'var(--ui-text-primary)', overflowY: 'auto', maxHeight: `${COMPOSER_MAX_H_N}px` }
           }),
           jsx(HoverBox, {
             onClick: send,
             className:
               'flex shrink-0 items-center justify-center rounded border border-(--ui-stroke-secondary) px-2 text-[0.625rem] uppercase',
-            // The height every control in the panel keeps: BAND_MIN_H plus the band's padding.
-            style: { height: `${BAND_MIN_H_N + 2 * BAND_PY}px`, boxSizing: 'border-box' },
+            // A little taller than the panel's standard control; it drops to the field's bottom edge
+            // once the text needs more than one line.
+            style: { height: `${SEND_H_N}px`, boxSizing: 'border-box', alignSelf: 'flex-end' },
             hoverFill: 'var(--ui-bg-tertiary)',
             children: 'send'
           })
