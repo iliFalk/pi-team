@@ -96,6 +96,9 @@ const ASK_BG = 'rgba(7, 98, 180, 0.85)'
 // honey that clears the graphic floor on both, which is why it is not a brighter amber.
 const PI_COLOR = '#A97D14'
 const PI_TEXT = `color-mix(in srgb, ${PI_COLOR} 50%, var(--ui-text-primary))`
+// The bubble's hairline: 70 % transparent, as he asked. Measured 1.28:1 on the dark panel and 1.57:1 on
+// the light one — it is a hint of a frame now, not a line; the speaker's dot and word carry the identity.
+const BUBBLE_RING = `color-mix(in srgb, ${ASK_COLOR} 30%, transparent)`
 const ASK_BG_SOFT = 'rgba(7, 98, 180, 0.18)'
 // A question row keeps its blue on hover: the wash deepens and the label brightens to text-secondary,
 // the same two paints the band's control uses. Without this the wash wins the style branch and the
@@ -2094,7 +2097,7 @@ function Bubble({ who, text, agent }) {
           minHeight: `${BAND_MIN_H_N + 2 * BAND_PY}px`,
           boxSizing: 'border-box',
           padding: `${BAND_PY}px 4px`,
-          boxShadow: `inset 0 0 0 1px ${ASK_COLOR}`
+          boxShadow: `inset 0 0 0 1px ${BUBBLE_RING}`
         },
         children: text
       })
