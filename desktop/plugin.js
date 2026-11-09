@@ -427,11 +427,14 @@ const STATE_CONTROL_CLASS =
   'mx-2.5 my-1 flex shrink-0 items-center justify-center rounded border border-(--ui-stroke-secondary) text-[0.6875rem]'
 // The app's composer measures 42px outer with a 40px fill: our thread composer copies it.
 const COMPOSER_H_N = 40
-// How far the field may grow before it scrolls instead, and the taller SEND that sits on its edge:
-// 32px fills the field's inner 40 with an even 4px of air above it and 4px below.
-const COMPOSER_MAX_H_N = 120
+// The taller SEND that sits on the field's edge: 32px fills the field's inner 40 with an even 4px of
+// air above it and 4px below. The field itself has no ceiling — it grows with its text and the thread
+// block above it rises, so nothing ever needs a scroll bar.
 // The writing's own vertical nudge against the field's exact middle.
 const COMPOSER_NUDGE = '2px'
+// One line of the composer's own text: the floor for the field's height. The BOX keeps its 42px
+// through `minHeight`, so an empty field stays one line tall instead of one line plus padding.
+const COMPOSER_LINE_H_N = 12
 const SEND_H_N = BAND_MIN_H_N + 2 * BAND_PY + 8
 // Room the writing keeps free on its right so a line that reaches the SEND's band stops beside it:
 // the button's width plus the gap it keeps from the edge.
@@ -442,7 +445,7 @@ const SEND_RESERVE_N = 58
  *  never at the element's current padding: a measurement that depends on the very layout it decides
  *  flips back and forth on every keystroke. */
 function measureComposer(element, style, width) {
-  const fallback = { last: 0, height: COMPOSER_H_N }
+  const fallback = { last: 0, height: COMPOSER_LINE_H_N }
   if (typeof document === 'undefined' || !element || !(width > 0)) return fallback
   const mirror = document.createElement('div')
   mirror.style.cssText = [
@@ -477,7 +480,7 @@ function measureComposer(element, style, width) {
  *  depend on the mode it decides. The HEIGHT is then measured at the width that mode really gives
  *  the text, because the writing wraps differently on each side of the switch. */
 function measureField(element) {
-  const fallback = { stacked: false, height: COMPOSER_H_N }
+  const fallback = { stacked: false, height: COMPOSER_LINE_H_N }
   if (typeof document === 'undefined' || !element) return fallback
   const style = window.getComputedStyle(element)
   const boxWidth = element.parentElement ? element.parentElement.clientWidth : element.clientWidth
@@ -487,7 +490,7 @@ function measureField(element) {
   const atFull = measureComposer(element, style, full)
   const beside = atFull.last <= full - SEND_RESERVE_N
   const used = beside ? measureComposer(element, style, Math.max(40, full - (SEND_RESERVE_N - 6))) : atFull
-  const height = Math.min(Math.max(used.height, COMPOSER_H_N), COMPOSER_MAX_H_N)
+  const height = Math.max(used.height, COMPOSER_LINE_H_N)
   return { stacked: !beside, height }
 }
 const STATE_CONTROL_STYLE = {
@@ -2008,7 +2011,7 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
   // The composer's layout, decided from its text and owned by React: a `stacked` flag (the SEND under
   // the writing) and the height the text needs. Written straight into the DOM, both were undone by
   // the next render — that overwrote the inline height and made the field jump.
-  const [field, setField] = useState({ stacked: false, height: COMPOSER_H_N })
+  const [field, setField] = useState({ stacked: false, height: COMPOSER_LINE_H_N })
   const messages = lane.thread || []
   const send = () => {
     const text = draft.trim()
@@ -2021,7 +2024,7 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
       })
       .then(() => {
         setDraft('')
-        setField({ stacked: false, height: COMPOSER_H_N })
+        setField({ stacked: false, height: COMPOSER_LINE_H_N })
         onSent()
       })
   }
@@ -2089,8 +2092,8 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
               height: `${field.height}px`,
               color: 'var(--ui-text-primary)',
               lineHeight: 1.2,
-              overflowY: 'auto',
-              maxHeight: `${COMPOSER_MAX_H_N}px`
+              // No scroll bar of its own: the field grows and the whole block rises with it.
+              overflow: 'hidden'
             }
           }),
           jsx('div', {
