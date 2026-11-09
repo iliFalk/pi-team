@@ -2000,12 +2000,17 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
             onKeyDown: event => {
               if (event.key === 'Enter') send()
             },
-            className: 'h-full flex-1 text-[0.625rem]'
+            className: 'h-full flex-1 border-0 bg-transparent text-[0.625rem]',
+            // The app's Input brings its own border and fill; inside the composer that drew a second
+            // outline a few pixels in from the first. The composer's box is the only frame.
+            style: { border: 'none', background: 'transparent', boxShadow: 'none', outline: 'none' }
           }),
           jsx(HoverBox, {
             onClick: send,
             className:
-              'shrink-0 rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.625rem]',
+              'flex shrink-0 items-center justify-center rounded border border-(--ui-stroke-secondary) px-2 text-[0.625rem] uppercase',
+            // The height every control in the panel keeps: BAND_MIN_H plus the band's padding.
+            style: { height: `${BAND_MIN_H_N + 2 * BAND_PY}px`, boxSizing: 'border-box' },
             hoverFill: 'var(--ui-bg-tertiary)',
             children: 'send'
           })
