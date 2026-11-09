@@ -854,7 +854,6 @@ SETTINGS_KEYS = [
     "OPENCODE_GO_API_KEY",
 ]
 KEY_NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]{2,48}$")
-PANEL_MODES = ("dark", "light")
 
 
 def _settings_path() -> Path:
@@ -862,10 +861,14 @@ def _settings_path() -> Path:
 
 
 def _settings() -> Dict[str, Any]:
-    """The panel's own record. One file, read on every request: it changes nothing else."""
+    """The panel's own record: the keys it offers beyond the fixed five. Read on every request."""
     data = _read_json(_settings_path()) or {}
-    mode = str(data.get("mode") or "dark")
-    return {"mode": mode if mode in PANEL_MODES else "dark"}
+    extra: List[str] = []
+    for name in data.get("extra_keys") or []:
+        text = str(name).strip().upper()
+        if text and text not in extra:
+            extra.append(text)
+    return {"extra_keys": extra}
 
 
 def _settings_write(values: Dict[str, Any]) -> Dict[str, Any]:
@@ -879,11 +882,15 @@ def _settings_write(values: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _key_rows() -> List[Dict[str, Any]]:
-    """Every key the panel can hold, with whether it has a value. The value itself stays in the file."""
+    """The five providers the panel always offers, then every key added through it. Nothing else:
+    a *_API_KEY that happens to sit in the file (a scraped key for some other tool) is not the panel's.
+
+    The value itself stays in the file; a row carries only its name and whether it has one.
+    """
     keys = _env_file()
     names = list(SETTINGS_KEYS)
-    for name in sorted(keys):
-        if name.endswith("_API_KEY") and name not in names:
+    for name in _settings()["extra_keys"]:
+        if name not in names:
             names.append(name)
     return [{"name": name, "set": bool(keys.get(name))} for name in names]
 
@@ -922,15 +929,6 @@ def get_settings() -> Dict[str, Any]:
     return {**_settings(), "keys": _key_rows()}
 
 
-@router.post("/settings")
-def set_settings(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
-    """The panel's own palette. The app's theme is never touched."""
-    mode = str(payload.get("mode") or "").strip()
-    if mode not in PANEL_MODES:
-        raise HTTPException(status_code=422, detail=f"mode must be one of {', '.join(PANEL_MODES)}")
-    return _settings_write({"mode": mode})
-
-
 @router.post("/settings/key")
 def set_key(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
     """Write one API key into $HERMES_HOME/.env; an empty value clears it."""
@@ -939,6 +937,10 @@ def set_key(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
     if not name or not KEY_NAME_RE.match(name):
         raise HTTPException(status_code=422, detail="a key name is CAPITALS_WITH_UNDERSCORES")
     _env_write(name, value)
+    if name not in SETTINGS_KEYS:
+        extra = _settings()["extra_keys"]
+        if name not in extra:
+            _settings_write({"extra_keys": extra + [name]})
     # A new key must reach the model list at once, not after the catalogue's ten minutes.
     _MODEL_CACHE["payload"] = None
     return {"name": name, "set": bool(value)}

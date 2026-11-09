@@ -88,22 +88,6 @@ const ASK_TEXT = `color-mix(in srgb, ${ASK_COLOR} 50%, var(--ui-text-primary))`
 const BAD_TEXT = `color-mix(in srgb, ${BAD_COLOR} 50%, var(--ui-text-primary))`
 // 85%: white on this fill reaches 4.6:1, the threshold for text this small.
 const ASK_BG = 'rgba(7, 98, 180, 0.85)'
-// The panel's own light palette. Dark mode keeps the app's tokens untouched; light mode replaces the same
-// handful on the pane root, so the panel alone flips and the app keeps its theme. Measured against the
-// light surface `#F4F4F1`: primary 15.8:1, secondary 7.6:1, tertiary 4.9:1, quaternary 3.1:1, and the
-// state words stay above 10:1 (`run` 10.5, `question` 10.0, `failure` 12.5).
-const PANEL_LIGHT_SURFACE = '#F4F4F1'
-const PANEL_LIGHT = {
-  '--ui-text-primary': '#1A1A18',
-  '--ui-text-secondary': '#4E4E49',
-  '--ui-text-tertiary': '#6A6A64',
-  '--ui-text-quaternary': '#8C8C85',
-  '--ui-stroke-secondary': '#D5D5CF',
-  '--ui-bg-editor': '#FFFFFF',
-  '--ui-bg-tertiary': '#E9E9E4',
-  '--chrome-action-hover': 'rgba(0, 0, 0, 0.05)'
-}
-
 const ASK_BG_SOFT = 'rgba(7, 98, 180, 0.18)'
 // A question row keeps its blue on hover: the wash deepens and the label brightens to text-secondary,
 // the same two paints the band's control uses. Without this the wash wins the style branch and the
@@ -1668,7 +1652,8 @@ function LaneList({ ctx }) {
           // The gear sits on the plus's own line and shape: the app's lucide settings icon at 11px, which
           // is the one pictograph this panel allows, because he named it by its picture.
           jsx(HoverBox, {
-            title: 'settings: the panel theme and the API keys',
+            'data-settings': 'gear',
+            title: 'settings: the API keys the model list needs',
             onClick: () => showSettings.set(true),
             className: 'flex shrink-0 items-center justify-center rounded border',
             style: {
@@ -3182,7 +3167,6 @@ function SettingsView({ ctx, data, onChanged }) {
   const [adding, setAdding] = useState(false)
   const [name, setName] = useState('')
   const [value, setValue] = useState('')
-  const mode = (data && data.mode) || 'dark'
   const keys = (data && data.keys) || []
   const post = (path, body) => ctx.rest(path, { method: 'POST', body, timeoutMs: 8000 }).then(() => onChanged())
   const save = () => {
@@ -3266,45 +3250,15 @@ function SettingsView({ ctx, data, onChanged }) {
       ]
     }),
     children: [
-      jsx(Section, { title: 'panel theme', band: true, first: true }),
-      jsxs('div', {
-        className: 'flex shrink-0 items-center gap-1',
-        children: [
-          jsx(HoverBox, {
-            onClick: () => post('/settings', { mode: 'dark' }),
-            title: 'the panel draws with the app tokens',
-            className: 'flex flex-1 items-center justify-center rounded border text-[0.6875rem] uppercase',
-            style: {
-              height: `${MODEL_ROW_H_N}px`,
-              boxSizing: 'border-box',
-              borderColor: mode === 'dark' ? 'var(--ui-text-secondary)' : 'var(--ui-stroke-secondary)',
-              color: mode === 'dark' ? 'var(--ui-text-primary)' : 'var(--ui-text-tertiary)'
-            },
-            hoverFill: 'var(--ui-bg-tertiary)',
-            children: 'dark'
-          }),
-          jsx(HoverBox, {
-            onClick: () => post('/settings', { mode: 'light' }),
-            title: 'the panel draws with its own light palette; the app keeps its theme',
-            className: 'flex flex-1 items-center justify-center rounded border text-[0.6875rem] uppercase',
-            style: {
-              height: `${MODEL_ROW_H_N}px`,
-              boxSizing: 'border-box',
-              borderColor: mode === 'light' ? 'var(--ui-text-secondary)' : 'var(--ui-stroke-secondary)',
-              color: mode === 'light' ? 'var(--ui-text-primary)' : 'var(--ui-text-tertiary)'
-            },
-            hoverFill: 'var(--ui-bg-tertiary)',
-            children: 'light'
-          })
-        ]
-      }),
-      jsx(Section, { title: 'api keys', band: true }),
+      // No shadow band and no theme switch: the panel takes the app's look, and each section is closed by
+      // one plain 1px rule so the column reads as a list of blocks.
+      jsx(Section, { title: 'api keys', first: true }),
       jsx('div', {
         className: 'text-[0.625rem] leading-relaxed',
         style: { color: 'var(--ui-text-tertiary)' },
         children: 'A key is written into ~/.hermes/.env and never read back. Empty clears it. The model list follows on its next fetch.'
       }),
-      ...keys.flatMap(row => {
+      ...keys.flatMap((row, index) => {
         const isEditing = editing === row.name
         return isEditing
           ? [jsx('div', { style: { display: 'flex', flexDirection: 'column', gap: '2px' }, children: saveRow }, `edit-${row.name}`)]
@@ -3320,7 +3274,11 @@ function SettingsView({ ctx, data, onChanged }) {
                   },
                   title: `set ${row.name}`,
                   className: 'flex shrink-0 items-center gap-2 rounded',
-                  style: rowStyle,
+                  // One plain rule between rows: the settings screen carries no shadow and no band.
+                  style: {
+                    ...rowStyle,
+                    borderBottom: index === keys.length - 1 ? 'none' : '1px solid var(--ui-stroke-secondary)'
+                  },
                   hoverFill: 'var(--ui-bg-tertiary)',
                   children: [
                     jsx('span', {
@@ -3349,6 +3307,7 @@ function SettingsView({ ctx, data, onChanged }) {
             style: {
               height: `${MODEL_ROW_H_N}px`,
               boxSizing: 'border-box',
+              marginTop: '4px',
               borderColor: 'var(--ui-stroke-secondary)',
               color: 'var(--ui-text-tertiary)'
             },
@@ -3361,12 +3320,12 @@ function SettingsView({ ctx, data, onChanged }) {
 
 function TeamPane({ ctx }) {
   const settingsOpen = useValue(showSettings)
-  // The panel's own appearance, and the keys the model list needs, come from one record on the backend.
+  // The keys the model list needs come from one record on the backend. The panel takes the app's theme:
+  // every colour is an app token, so there is no second palette to keep in step.
   const settingsQuery = useQuery({
     queryKey: ['pi-team', 'settings'],
     queryFn: () => ctx.rest('/settings', REST)
   })
-  const light = Boolean(settingsQuery.data && settingsQuery.data.mode === 'light')
   const compose = useValue(composeAtom)
   const feature = useValue(selectedFeature)
   const project = useValue(selectedProject)
@@ -3378,14 +3337,8 @@ function TeamPane({ ctx }) {
     className: 'relative flex h-full min-h-0 overflow-hidden',
     'data-pi-root': '',
     // One frame for the whole panel. A single border on the root, not four on the pieces:
-    // an inset ring would be painted under the columns and never show. The light palette lives on this
-    // one element, so the panel flips and every app token around it stays where it was.
-    style: {
-      border: '1px solid var(--ui-stroke-secondary)',
-      boxSizing: 'border-box',
-      ...(light ? PANEL_LIGHT : null),
-      ...(light ? { background: PANEL_LIGHT_SURFACE, color: 'var(--ui-text-primary)' } : null)
-    },
+    // an inset ring would be painted under the columns and never show.
+    style: { border: '1px solid var(--ui-stroke-secondary)', boxSizing: 'border-box' },
     children: [
       jsx('style', {
         children:
@@ -3455,20 +3408,23 @@ function TeamPane({ ctx }) {
         },
         children: jsx(ScrollPill, {})
       }),
-      // One shadow for the whole width: per-header shadows doubled up at the seam.
-      jsx('div', {
-        'aria-hidden': true,
-        style: {
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          top: HEADER_H,
-          height: BAND_H,
-          // A gradient, not a box-shadow: it paints one band across both columns.
-          background: BAND_BG,
-          pointerEvents: 'none'
-        }
-      })
+      // One shadow for the whole width: per-header shadows doubled up at the seam. The settings screen
+      // carries none — it is a flat column of rows closed by 1px rules.
+      settingsOpen
+        ? null
+        : jsx('div', {
+            'aria-hidden': true,
+            style: {
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              top: HEADER_H,
+              height: BAND_H,
+              // A gradient, not a box-shadow: it paints one band across both columns.
+              background: BAND_BG,
+              pointerEvents: 'none'
+            }
+          })
     ]
   })
 }
