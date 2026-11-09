@@ -2748,13 +2748,14 @@ function LaneStatus({ ctx }) {
         title: 'state',
         right: jsxs('div', {
           className: 'flex shrink-0 items-center gap-2',
+          // He swapped them: the state word first, the action after it.
           children: [
-            stateAction,
             jsx('span', {
               className: 'shrink-0 font-mono text-[0.6875rem] normal-case',
               style: { color: stateText(lane) || 'var(--ui-text-secondary)' },
               children: lane.state
-            })
+            }),
+            stateAction
           ]
         })
       }),
