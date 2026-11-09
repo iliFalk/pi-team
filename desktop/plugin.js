@@ -25,9 +25,9 @@ const BAND_H = '4px'
 const BAND_BG = 'linear-gradient(to bottom, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0))'
 // Both text blocks share one height and scroll inside it.
 const TEXT_H = '100px'
-// The TASK area stands 30 % shorter than a plain text block (`100 - 30`), his number; it keeps its own
-// scroll, so a long task is still readable without pushing the areas under it off the card.
-const TASK_H = `${100 - 30}px`
+// The TASK area, cut by 30 % twice: 100 -> 70 -> 49. It keeps its own scroll, so a long task stays readable
+// without pushing the areas under it off the card. The steps stay visible, so the next "30 %" is arithmetic.
+const TASK_H = `${Math.round((100 - 30) * 0.7)}px`
 // The thread's bubble area starts 150 px taller than a plain text block, so its header sits that much
 // higher on the card: the block is pinned to the bottom, so growing it upward is the same as lifting that
 // header. `100 + 50` was his first step and `+ 100` his second, kept as arithmetic so the numbers stay visible.
