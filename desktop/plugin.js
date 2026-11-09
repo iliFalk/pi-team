@@ -2062,36 +2062,14 @@ function ModelLine({ ctx, lane, onChanged }) {
   }
   const rowStyle = { height: `${MODEL_ROW_H_N}px`, boxSizing: 'border-box', padding: '0 4px' }
   return jsxs('div', {
-    style: { margin: '0 10px 4px', display: 'flex', flexDirection: 'column' },
+    // The card's last row: the 8px of air the composer keeps above the window edge now sits under the
+    // model, not under the field.
+    style: { margin: '0 10px 8px', display: 'flex', flexDirection: 'column', gap: '4px' },
     children: [
-      // One row: the word, the model, the gesture. The whole row is the control, so a 290-px line needs no
-      // second box, and the model's own name is the value the card shows everywhere else.
-      jsx(HoverBox, {
-        onClick: () => setOpen(!open),
-        title: 'the model the next run of this lane uses',
-        className: 'flex shrink-0 items-center gap-2 rounded',
-        style: rowStyle,
-        hoverFill: 'var(--ui-bg-tertiary)',
-        children: [
-          jsx('span', {
-            className: 'shrink-0 text-[0.625rem] uppercase tracking-wide',
-            style: { color: 'var(--ui-text-tertiary)' },
-            children: 'model'
-          }),
-          jsx('span', {
-            className: 'min-w-0 flex-1 truncate font-mono text-[0.625rem]',
-            style: { color: 'var(--ui-text-secondary)' },
-            children: name
-          }),
-          jsx('span', {
-            className: 'shrink-0 text-[0.625rem] uppercase tracking-wide',
-            style: { color: 'var(--ui-text-tertiary)' },
-            children: open ? 'close' : 'change'
-          })
-        ]
-      }),
-      // The list opens in the flow, above the field: the card is bottom-pinned, so it pushes the thread up
-      // instead of hanging over it. The model in use takes the brightest tone; the provider names the lane.
+      // The list opens ABOVE the row it belongs to — between the field and the footer — because a menu
+      // that hangs below its trigger would leave the card. It opens in the flow, so the card, which is
+      // bottom-pinned, pushes the thread up instead of the list hanging over it. The model in use takes
+      // the brightest tone; the provider names the lane.
       open
         ? jsx('div', {
             style: { display: 'flex', flexDirection: 'column' },
@@ -2125,7 +2103,33 @@ function ModelLine({ ctx, lane, onChanged }) {
               )
             )
           })
-        : null
+        : null,
+      // The row itself: the word, the model, the gesture. The whole row is the control, so a 290-px line
+      // needs no second box, and the model's own name is the value the card shows everywhere else.
+      jsx(HoverBox, {
+        onClick: () => setOpen(!open),
+        title: 'the model the next run of this lane uses',
+        className: 'flex shrink-0 items-center gap-2 rounded',
+        style: rowStyle,
+        hoverFill: 'var(--ui-bg-tertiary)',
+        children: [
+          jsx('span', {
+            className: 'shrink-0 text-[0.625rem] uppercase tracking-wide',
+            style: { color: 'var(--ui-text-tertiary)' },
+            children: 'model'
+          }),
+          jsx('span', {
+            className: 'min-w-0 flex-1 truncate font-mono text-[0.625rem]',
+            style: { color: 'var(--ui-text-secondary)' },
+            children: name
+          }),
+          jsx('span', {
+            className: 'shrink-0 text-[0.625rem] uppercase tracking-wide',
+            style: { color: 'var(--ui-text-tertiary)' },
+            children: open ? 'close' : 'change'
+          })
+        ]
+      })
     ]
   })
 }
@@ -2178,12 +2182,8 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
             .reverse()
         ]
       }),
-      // The model of this lane on its own row above the box: the choice is written into the lane record,
-      // and the runner reads it back for every later run.
-      jsx(ModelLine, { ctx, lane, onChanged: onSent }),
       // The composer wears the app's own input field: `42px` at rest (40 of fill plus its 1px border),
-      // radius `4`, the accent as its border, the panel's own surface inside, and the same `8px` of air
-      // below it that the app's composer keeps above the window edge. The writing and the SEND share one
+      // radius `4`, the accent as its border, the panel's own surface inside. The writing and the SEND share one
       // row while the text still ends before the button's column; the moment the text would reach the
       // button, the writing takes the whole width and the SEND drops under it, right aligned. The test
       // reads the UNWRAPPED line against the room beside the button, so it depends on the text alone and
@@ -2195,7 +2195,8 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
           position: 'relative',
           minHeight: `${COMPOSER_H_N + 2}px`,
           boxSizing: 'border-box',
-          margin: '0 10px 8px',
+          // 4px to the model row under it; the 8px of air above the window edge now sits under that row.
+          margin: '0 10px 4px',
           padding: `${COMPOSER_PAD_N / 2}px`,
           borderRadius: '4px',
           border: '1px solid var(--ui-accent)',
@@ -2268,7 +2269,10 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
             ]
           })
         ]
-      })
+      }),
+      // The lane's model closes the card, under the field: the choice is written into the lane record and
+      // the runner reads it back for every later run.
+      jsx(ModelLine, { ctx, lane, onChanged: onSent })
     ]
   })
 }
