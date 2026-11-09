@@ -2314,6 +2314,8 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
       })
   }
   return jsxs('div', {
+    // A column that may shrink: the bubble area is the only part of it allowed to lose height.
+    style: { display: 'flex', flexDirection: 'column', minHeight: 0, flexShrink: 1 },
     children: [
       // A chat is anchored at the bottom: the scroll box lays its children out from the bottom up
       // (`column-reverse`), so the newest bubble sits on the composer and a short thread hugs that
@@ -2323,7 +2325,16 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
         className: 'overflow-y-auto px-2.5 py-1',
         // A fixed floor as tall as the task block, so a short thread shows its bubbles on the
         // bottom edge instead of hanging at the top, and `38vh` as the ceiling for a long one.
-        style: { minHeight: THREAD_MIN_H, maxHeight: '38vh', display: 'flex', flexDirection: 'column-reverse' },
+        // 250 px is the PREFERRED height, not a floor the card must honour: on a short window the bubbles give
+        // way first, so the composer's own bottom air and border can never be clipped by the card's edge.
+        style: {
+          height: THREAD_MIN_H,
+          minHeight: 0,
+          flex: '1 1 auto',
+          maxHeight: '38vh',
+          display: 'flex',
+          flexDirection: 'column-reverse'
+        },
         children: [
           lane.last_text ? jsx(Bubble, { who: 'lane', text: lane.last_text, agent: lane.agent }, 'now') : null,
           messages
@@ -2595,7 +2606,10 @@ function LaneStatus({ ctx }) {
       // it, so a long TASK block or a long thread can push nothing out of the card's top. The question block
       // rides in the same static head, because it belongs above STATUS and must not be pushed under it.
       jsx('div', {
-        className: 'shrink-0 border-b border-(--ui-stroke-secondary) pb-1',
+        className: 'border-b border-(--ui-stroke-secondary) pb-1',
+        // Normally exactly its content's height. In a card too short to hold it, it gives way — it scrolls
+        // itself instead of pushing the composer past the card's edge.
+        style: { flexShrink: 1, minHeight: 0, overflowY: 'auto' },
         children: [
       lane.question
         ? jsx(QuestionBlock, {
@@ -2812,7 +2826,10 @@ function LaneStatus({ ctx }) {
       lane.shelved
         ? null
         : jsx('div', {
-            className: 'shrink-0 border-t border-(--ui-stroke-secondary)',
+            className: 'border-t border-(--ui-stroke-secondary)',
+            // It may give way when the card is short: the bubbles shrink, the composer never does, and its own
+            // 8 px of air can never be clipped by the card's edge.
+            style: { flexShrink: 1, minHeight: 0, display: 'flex', flexDirection: 'column' },
             children: [
               jsx(Section, { title: 'thread', band: true, first: true }),
               jsx(ThreadView, { ctx, lane, draft, setDraft, onSent: () => query.refetch() })
