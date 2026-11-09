@@ -1978,8 +1978,9 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
         ]
       }),
       // The composer wears the app's own input field: `42px` outer (40 of fill plus its 1px border),
-      // radius `8`, the accent as its border, a 4% surface as its fill, and the same `8px` of air
-      // below it that the app's composer keeps above the window edge.
+      // radius `4`, the accent as its border, the panel's own surface inside, and the same `8px` of
+      // air below it that the app's composer keeps above the window edge. The input IS the shape: it
+      // fills the whole box and only the send word sits over its right end.
       jsxs('div', {
         className: 'flex shrink-0 items-center gap-1',
         style: {
@@ -1987,9 +1988,9 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
           boxSizing: 'border-box',
           margin: '0 10px 8px',
           padding: '0 4px',
-          borderRadius: '8px',
+          borderRadius: '4px',
           border: '1px solid var(--ui-accent)',
-          background: 'var(--ui-bg-quaternary)'
+          background: 'var(--ui-bg-editor)'
         },
         children: [
           jsx(Input, {
@@ -1999,7 +2000,7 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
             onKeyDown: event => {
               if (event.key === 'Enter') send()
             },
-            className: 'h-6 flex-1 text-[0.625rem]'
+            className: 'h-full flex-1 text-[0.625rem]'
           }),
           jsx(HoverBox, {
             onClick: send,
