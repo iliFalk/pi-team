@@ -2607,7 +2607,9 @@ function LaneStatus({ ctx }) {
       // it, so a long TASK block or a long thread can push nothing out of the card's top. The question block
       // rides in the same static head, because it belongs above STATUS and must not be pushed under it.
       jsx('div', {
-        className: 'border-b border-(--ui-stroke-secondary) pb-1',
+        className: 'pb-1',
+        // No bottom rule: the thread block below already draws one, and two adjacent rules read as a narrow
+        // empty strip when the body between them has no height.
         // It may give height, but only through the TASK window: every other child sits in a `flexShrink: 0`
         // wrapper, so STATUS, SESSIONS and STATE keep their place and their size at every window height.
         style: { display: 'flex', flexDirection: 'column', flexShrink: 1, minHeight: 0 },
@@ -2762,7 +2764,9 @@ function LaneStatus({ ctx }) {
         // It does NOT grow: an empty diff must not hold a strip of air between TASK and THREAD. Leftover
         // height belongs to the thread, which is the one thing on this card that can read it.
         flex: '0 1 auto',
-        className: 'flex flex-col pb-2 text-xs',
+        // No bottom padding either: the sections carry their own air, and `pb-2` alone held an 8-px strip
+        // between TASK and THREAD when there was no diff to show.
+        className: 'flex flex-col text-xs',
         children: [
       lane.archived
         ? jsx(Row, { label: 'record', value: 'closed · folder removed, receipt kept' })
