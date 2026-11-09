@@ -92,6 +92,10 @@ const ASK_TEXT = `color-mix(in srgb, ${ASK_COLOR} 50%, var(--ui-text-primary))`
 const BAD_TEXT = `color-mix(in srgb, ${BAD_COLOR} 50%, var(--ui-text-primary))`
 // 85%: white on this fill reaches 4.6:1, the threshold for text this small.
 const ASK_BG = 'rgba(7, 98, 180, 0.85)'
+// The third speaker: pi. Ochre, measured 4.81:1 on the dark panel and 3.38:1 on the light one — the only
+// honey that clears the graphic floor on both, which is why it is not a brighter amber.
+const PI_COLOR = '#A97D14'
+const PI_TEXT = `color-mix(in srgb, ${PI_COLOR} 50%, var(--ui-text-primary))`
 const ASK_BG_SOFT = 'rgba(7, 98, 180, 0.18)'
 // A question row keeps its blue on hover: the wash deepens and the label brightens to text-secondary,
 // the same two paints the band's control uses. Without this the wash wins the style branch and the
@@ -2043,36 +2047,57 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
 }
 
 /** One message in a lane's thread: the lane's own words, mine, or Ilja's. */
-function Bubble({ who, text }) {
-  const label = who === 'jarvis' ? 'me' : who === 'lane' ? 'lane' : 'you'
-  // The author is named in the label; a left border in a second hue now cuts through the bubble's
-  // own ring, so the bubble is one shape and the words carry who spoke.
-  const style =
+function Bubble({ who, text, agent }) {
+  // Three speakers, three hues: he reads whose words these are before he reads the words. The name over a
+  // blue dot is the AGENT'S OWN NAME from the machine (`Jarvis` here), not a constant in this file.
+  const name = who === 'jarvis' ? `${agent || 'agent'}`.toLowerCase() : who === 'lane' ? 'pi' : 'user'
+  const dot = who === 'jarvis' ? ASK_COLOR : who === 'lane' ? PI_COLOR : RUN_COLOR
+  const tone = who === 'jarvis' ? ASK_TEXT : who === 'lane' ? PI_TEXT : RUN_TEXT
+  const body =
     who === 'jarvis'
       ? { color: 'var(--ui-text-secondary)' }
       : who === 'user'
         ? { background: 'var(--chrome-action-hover)', color: 'var(--ui-text-primary)' }
         : { color: 'var(--ui-text-tertiary)', fontFamily: 'ui-monospace, monospace' }
   return jsxs('div', {
-    className: 'mb-1 whitespace-pre-wrap break-words rounded text-[0.625rem] leading-snug',
-    // A bubble is a row of the panel, not a chat cloud: the height of a band, the same 4px radius,
-    // and the panel's blue hairline around it.
-    style: {
-      ...style,
-      display: 'flex',
-      alignItems: 'baseline',
-      minHeight: `${BAND_MIN_H_N + 2 * BAND_PY}px`,
-      boxSizing: 'border-box',
-      padding: `${BAND_PY}px 4px`,
-      boxShadow: `inset 0 0 0 1px ${ASK_COLOR}`
-    },
+    className: 'mb-1',
+    'data-bubble': who,
     children: [
-      jsx('span', {
-        className: 'mr-1 text-[0.5625rem] uppercase',
-        style: { opacity: 0.65 },
-        children: label
+      // The author rides ABOVE the bubble: a dot in the speaker's own hue and the name in the state-word
+      // tone (half the hue, half the panel's text) so it stays readable in either theme.
+      jsxs('div', {
+        style: { display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '2px' },
+        children: [
+          jsx('span', {
+            'data-dot': who,
+            style: {
+              width: '5px',
+              height: '5px',
+              flex: 'none',
+              borderRadius: '999px',
+              background: dot
+            }
+          }),
+          jsx('span', {
+            className: 'text-[0.625rem]',
+            style: { color: tone, lineHeight: 1 },
+            children: name
+          })
+        ]
       }),
-      text
+      // A bubble is a row of the panel, not a chat cloud: the height of a band, the same 4px radius, and
+      // the panel's blue hairline around it.
+      jsx('div', {
+        className: 'whitespace-pre-wrap break-words rounded text-[0.625rem] leading-snug',
+        style: {
+          ...body,
+          minHeight: `${BAND_MIN_H_N + 2 * BAND_PY}px`,
+          boxSizing: 'border-box',
+          padding: `${BAND_PY}px 4px`,
+          boxShadow: `inset 0 0 0 1px ${ASK_COLOR}`
+        },
+        children: text
+      })
     ]
   })
 }
@@ -2308,10 +2333,10 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
         // bottom edge instead of hanging at the top, and `38vh` as the ceiling for a long one.
         style: { minHeight: THREAD_MIN_H, maxHeight: '38vh', display: 'flex', flexDirection: 'column-reverse' },
         children: [
-          lane.last_text ? jsx(Bubble, { who: 'lane', text: lane.last_text }, 'now') : null,
+          lane.last_text ? jsx(Bubble, { who: 'lane', text: lane.last_text, agent: lane.agent }, 'now') : null,
           messages
             .map((message, index) =>
-              jsx(Bubble, { who: message.who, text: message.text }, `${index}-${message.at}`)
+              jsx(Bubble, { who: message.who, text: message.text, agent: lane.agent }, `${index}-${message.at}`)
             )
             .reverse()
         ]

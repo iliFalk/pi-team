@@ -434,6 +434,20 @@ def _append_thread(lane_dir: Path, who: str, text: str) -> Dict[str, Any]:
     return entry
 
 
+def _agent_name() -> str:
+    """The name this machine states for the agent: the identity line of $HERMES_HOME/SOUL.md.
+
+    The panel shows it above the agent's messages, so it must follow the machine, not the panel's source:
+    a renamed agent renames the speaker without a code change.
+    """
+    try:
+        text = (_hermes_home() / "SOUL.md").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return "agent"
+    match = re.search(r"^You are ([A-Z][\w'-]+)", text, re.M)
+    return match.group(1) if match else "agent"
+
+
 def _lane_entry(lane_dir: Path) -> Optional[Dict[str, Any]]:
     record = _read_json(lane_dir / "lane.json")
     if record is None:
@@ -446,6 +460,7 @@ def _lane_entry(lane_dir: Path) -> Optional[Dict[str, Any]]:
         state = "stopped"
 
     entry: Dict[str, Any] = {
+        "agent": _agent_name(),
         "lane": record.get("lane") or lane_dir.name,
         "task": record.get("task") or "",
         "project": record.get("project") or (Path(str(record.get("repo") or "")).name or "—"),

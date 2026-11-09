@@ -70,6 +70,7 @@ const fakeLane = {
   last_tool: 'edit',
   last_tool_detail: 'app.js',
   last_error: '',
+  agent: 'Jarvis',
   provider: 'nvidia',
   model: 'nvidia/nemotron-3.5-super-vl-120b-a12b',
   turns: 3,
