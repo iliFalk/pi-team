@@ -2042,25 +2042,33 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
       .then(() => onDone && onDone())
 
   const options = (question.options || []).filter(Boolean)
+  // One row per answer, the panel's own control height and the card's own inset: chips that wrapped into a
+  // ragged block were the layout he marked. `dismiss` is the last row, a word without a frame.
+  const row = {
+    className: 'mx-2.5 my-1 flex shrink-0 items-center justify-center rounded border text-[0.6875rem]',
+    style: { minHeight: SEND_H_N - 8, boxSizing: 'border-box', padding: '2px 6px' }
+  }
 
   return jsxs('div', {
-    className: 'px-2.5 py-1.5',
+    className: 'flex flex-col pt-1',
     children: [
       jsx('div', {
-        className: 'text-[0.625rem] font-medium text-(--ui-accent)',
+        className: 'px-2.5 text-[0.625rem] uppercase tracking-wide',
+        style: { color: ASK_TEXT },
         children: 'the lane asks'
       }),
       jsx('div', {
-        className: 'mt-0.5 text-[0.6875rem] leading-relaxed text-(--ui-text-primary)',
+        className: 'px-2.5 pb-0.5 pt-1 text-[0.6875rem] leading-relaxed',
+        style: { color: 'var(--ui-text-primary)' },
         children: question.title || question.message || 'a question without text'
       }),
       ...options.map(option =>
         jsx(
           HoverBox,
           {
+            ...row,
             tag: 'button',
-            className:
-              'mt-1 mr-1 rounded border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.625rem] text-(--ui-text-primary)',
+            style: { ...row.style, borderColor: 'var(--ui-stroke-secondary)', color: 'var(--ui-text-primary)' },
             hoverFill: 'var(--ui-bg-tertiary)',
             onClick: () => send({ value: option }),
             children: option
@@ -2068,9 +2076,11 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
           option
         )
       ),
-      jsx('button', {
-        className:
-          'mt-1 rounded px-1.5 py-0.5 text-[0.625rem] uppercase text-(--ui-text-tertiary) hover:text-(--ui-text-secondary)',
+      jsx(HoverBox, {
+        tag: 'button',
+        className: 'mx-2.5 my-1 flex shrink-0 items-center justify-center rounded px-2 text-[0.625rem] uppercase tracking-wide',
+        style: { minHeight: SEND_H_N - 8, boxSizing: 'border-box', color: 'var(--ui-text-tertiary)' },
+        hoverColour: 'var(--ui-text-primary)',
         onClick: () => send({ cancelled: true }),
         children: 'dismiss'
       })
@@ -2693,16 +2703,9 @@ function LaneStatus({ ctx }) {
       jsx('div', {
         style: { flexShrink: 0 },
         children: [
-      lane.question
-        ? jsx(QuestionBlock, {
-            ctx,
-            lane: lane.lane,
-            question: lane.question,
-            onDone: () => query.refetch()
-          })
-        : null,
       // Three areas, always in this order: STATUS first, then SESSIONS, then STATE.
-      jsx(Section, { title: 'status', first: !lane.question }),
+      // STATUS opens the head, so it always carries no top rule — the question block moved below it.
+      jsx(Section, { title: 'status', first: true }),
       lane.shelved ? jsx(Row, { label: 'closed', value: lane.shelved_reason }) : null,
       lane.merge ? jsx(Receipt, { merge: lane.merge }) : null,
 
@@ -2843,6 +2846,16 @@ function LaneStatus({ ctx }) {
               hoverFill: 'var(--ui-bg-tertiary)',
               children: 'close'
             })
+        : null,
+      // The question stands BELOW state: it is what the lane needs from him now, and it is the last thing in
+      // the static head, so it can never be pushed under the rows above it.
+      lane.question
+        ? jsx(QuestionBlock, {
+            ctx,
+            lane: lane.lane,
+            question: lane.question,
+            onDone: () => query.refetch()
+          })
         : null,
         ]
       }),
