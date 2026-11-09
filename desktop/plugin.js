@@ -2084,16 +2084,16 @@ function ModelChip({ label, open, onClick }) {
     'data-model-chip': 'chip',
     onClick,
     title: 'the model the next run of this lane uses',
-    className: 'flex shrink-0 items-center rounded',
+    // The chip runs from the name to the button: it takes the whole row it sits on, so its right edge
+    // meets `SEND` (stacked) or the box's edge (one line, where the button is on the row above).
+    className: 'flex min-w-0 flex-1 items-center rounded',
     style: {
       height: '18px',
       boxSizing: 'border-box',
       padding: '0 5px',
-      // A FIXED cap, never a percentage: a percentage makes the chip's own wrapper shrink-to-fit against
-      // that percentage, the wrapper then takes the whole row and the writing is squeezed to a few pixels.
-      // 110 px is the width his own mock showed (`nemotron-3.5-super`): long enough to name the model,
-      // short enough that the writing still keeps about 120 px on a 290-px box.
-      maxWidth: '110px',
+      // Inline as well as the class: the growth is what makes the chip reach the button.
+      flex: '1 1 auto',
+      minWidth: 0,
       background: 'var(--ui-bg-tertiary)',
       color: 'var(--ui-text-secondary)'
     },
