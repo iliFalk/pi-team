@@ -430,9 +430,6 @@ const COMPOSER_H_N = 40
 // How far the field may grow before it scrolls instead, and the taller SEND that sits on its edge.
 const COMPOSER_MAX_H_N = 120
 const SEND_H_N = BAND_MIN_H_N + 2 * BAND_PY + 4
-// Room the writing keeps free on its right so no line runs under the SEND: the button's own width
-// plus a gap, rounded up.
-const SEND_RESERVE_N = 58
 const STATE_CONTROL_STYLE = {
   height: `${BAND_MIN_H_N + 2 * BAND_PY}px`,
   boxSizing: 'border-box'
@@ -1984,17 +1981,21 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
         ]
       }),
       // The composer wears the app's own input field: `42px` at rest (40 of fill plus its 1px border),
-      // radius `4`, the accent as its border, the panel's own surface inside, and the same `8px` of air
-      // below it that the app's composer keeps above the window edge. The textarea IS the box and the
-      // SEND floats on its bottom-right corner, so the writing runs the full width above the button
-      // and keeps clear of it through a right padding — exactly the app's own arrangement.
+      // radius `4`, the accent as its border, the panel's own surface inside, and the same `8px` of
+      // air below it that the app's composer keeps above the window edge. A textarea, not an Input:
+      // it grows with its text, the words wrap ABOVE the SEND control, and the SEND sits on the
+      // bottom-right corner so the writing area keeps its full width as the field rises.
       jsxs('div', {
-        className: 'shrink-0',
+        // Two rows, like the app's own field when it carries text: the writing across the full width,
+        // then a line of controls under it with SEND on the right. The text therefore runs ABOVE the
+        // button instead of beside it, and the field only rises when the writing needs more lines.
+        className: 'flex shrink-0 flex-col',
         style: {
-          position: 'relative',
           minHeight: `${COMPOSER_H_N + 2}px`,
           boxSizing: 'border-box',
           margin: '0 10px 8px',
+          // One inset on every side: the SEND keeps the same air above, below and to its right.
+          padding: '4px',
           borderRadius: '4px',
           border: '1px solid var(--ui-accent)',
           background: 'var(--ui-bg-editor)'
@@ -2019,22 +2020,22 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
                 send()
               }
             },
-            className: 'w-full resize-none border-0 bg-transparent text-[0.625rem] outline-none',
+            className:
+              'w-full min-w-0 flex-1 resize-none border-0 bg-transparent px-1 py-0 text-[0.625rem] outline-none',
+            // A tight line box: the words keep their own air, so the gap above the SEND is the box's
+            // padding and not a descender's worth of leading.
             style: {
-              display: 'block',
-              minHeight: `${COMPOSER_H_N}px`,
-              boxSizing: 'border-box',
-              // The right padding is the SEND's own room: no line ever runs under the button.
-              padding: `4px ${SEND_RESERVE_N}px 4px 6px`,
               color: 'var(--ui-text-primary)',
               lineHeight: 1.2,
               overflowY: 'auto',
               maxHeight: `${COMPOSER_MAX_H_N}px`
             }
           }),
-          // The control floats inside the box, on its bottom-right corner, as the app's does.
+          // The control line under the writing: SEND on the right, where the app puts its own.
           jsx('div', {
-            style: { position: 'absolute', right: '4px', bottom: '4px' },
+            className: 'flex shrink-0 items-center justify-end',
+            // The same air the box keeps on its sides, so the SEND sits in an even inset.
+            style: { marginTop: '4px' },
             children: jsx(HoverBox, {
               onClick: send,
               className:
