@@ -25,6 +25,8 @@ const BAND_H = '4px'
 const BAND_BG = 'linear-gradient(to bottom, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0))'
 // Both text blocks share one height and scroll inside it.
 const TEXT_H = '100px'
+// A receipt row of the STATUS area: 10px text inside a 15px box (`12 + 2·1.5`). He asked for tighter rows.
+const ROW_H_N = 15
 // The TASK area, cut by 30 % twice: 100 -> 70 -> 49. It keeps its own scroll, so a long task stays readable
 // without pushing the areas under it off the card. The steps stay visible, so the next "30 %" is arithmetic.
 const TASK_H = `${Math.round((100 - 30) * 0.7)}px`
@@ -1772,12 +1774,21 @@ function LaneList({ ctx }) {
 
 function Row({ label, value, color }) {
   return jsxs('div', {
-    className: 'flex items-baseline justify-between gap-2 px-2.5 py-[3px]',
+    // 15px, not 18: the row is a fixed height with the padding inside it (`boxSizing: border-box`), so ten
+    // rows of STATUS cost ~30 px less than they did. Inline, because an arbitrary `py-[1.5px]` is not a
+    // utility the app's build is known to carry.
+    className: 'flex items-center justify-between gap-2',
+    style: {
+      height: `${ROW_H_N}px`,
+      boxSizing: 'border-box',
+      padding: '0 10px'
+    },
     children: [
       jsx('span', { className: 'shrink-0 text-[0.625rem] text-(--ui-text-tertiary)', children: label }),
       jsx('span', {
         className: 'truncate text-right font-mono text-[0.625rem]',
-        style: { color: color || 'var(--ui-text-secondary)' },
+        // The value in the panel's own text tone: it is what he reads, and secondary sat a step under the label.
+        style: { color: color || 'var(--ui-text-primary)' },
         children: value
       })
     ]
@@ -2455,9 +2466,9 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
 function Receipt({ merge }) {
   return jsxs('div', {
     children: [
-      jsx(Row, { label: 'commit', value: merge.short, color: RUN_TEXT }),
-      jsx(Row, { label: 'date', value: merge.date }),
-      jsx(Row, { label: 'into', value: merge.subject }),
+      // Commit and date share one row: they are one fact, and a separate line for a date cost a whole row.
+      // No `into`: it always reads `Merge lane <this lane>`, which the card's own header already says.
+      jsx(Row, { label: 'commit', value: `${merge.short} · ${merge.date}`, color: RUN_TEXT }),
       jsx(Row, {
         label: 'diff',
         value: `${merge.files} files  +${merge.insertions} −${merge.deletions}`
@@ -2630,11 +2641,14 @@ function LaneStatus({ ctx }) {
       jsx(Section, { title: 'status', first: !lane.question }),
       lane.shelved ? jsx(Row, { label: 'closed', value: lane.shelved_reason }) : null,
       lane.merge ? jsx(Receipt, { merge: lane.merge }) : null,
-      jsx(Row, { label: 'branch', value: lane.branch || '—' }),
-      jsx(Row, {
-        label: 'changes',
-        value: `${lane.files} files  +${lane.insertions} −${lane.deletions}`
-      }),
+
+      // With a receipt the same numbers already stand on its `diff` row: one row, not two rows saying "1 files".
+      lane.merge
+        ? null
+        : jsx(Row, {
+            label: 'changes',
+            value: `${lane.files} files  +${lane.insertions} −${lane.deletions}`
+          }),
       lane.turns ? jsx(Row, { label: 'turns', value: String(lane.turns) }) : null,
       usage.output
         ? jsx(Row, {
@@ -2642,14 +2656,8 @@ function LaneStatus({ ctx }) {
             value: `in ${usage.input} · out ${usage.output} · $${Number(usage.total || 0).toFixed(4)}`
           })
         : null,
-      lane.last_tool
-        ? jsx(Row, {
-            label: 'tool',
-            value: lane.last_tool_detail
-              ? `${lane.last_tool}: ${lane.last_tool_detail}`
-              : lane.last_tool
-          })
-        : null,
+      // No `branch` (it is `lane/<the header>`) and no `tool` (he removed it): both rows said what the card
+      // or the last message already says.
       lane.last_error
         ? jsx(Row, { label: 'error', value: lane.last_error, color: BAD_TEXT })
         : null,
