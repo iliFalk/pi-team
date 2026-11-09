@@ -25,10 +25,10 @@ const BAND_H = '4px'
 const BAND_BG = 'linear-gradient(to bottom, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0))'
 // Both text blocks share one height and scroll inside it.
 const TEXT_H = '100px'
-// The thread's bubble area starts 50 px taller than a plain text block, so its header sits 50 px higher
-// on the card: the block is pinned to the bottom, so growing it upward is the same as lifting that header.
-// `100 + 50`, kept as arithmetic so the number he gave stays visible.
-const THREAD_MIN_H = `${100 + 50}px`
+// The thread's bubble area starts 150 px taller than a plain text block, so its header sits that much
+// higher on the card: the block is pinned to the bottom, so growing it upward is the same as lifting that
+// header. `100 + 50` was his first step and `+ 100` his second, kept as arithmetic so the numbers stay visible.
+const THREAD_MIN_H = `${100 + 50 + 100}px`
 // Tree geometry: a node owns its line, so a level cannot break into loose segments.
 // The line hangs under the icon, so the icon column and the line are one axis.
 const GUIDE_STEP_N = 18
