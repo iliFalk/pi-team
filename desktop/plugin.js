@@ -2032,22 +2032,62 @@ function SessionTitle({ ctx, entry, project, feature, onRemove, onChanged }) {
 
 
 function QuestionBlock({ ctx, lane, question, onDone }) {
-  const send = body =>
+  // Answers go to pi; words go to ME. The protocol takes one of the option strings as the answer and nothing
+  // else, so anything he adds travels as a thread note beside the answer (see `sendWithNote`).
+  const ask = body =>
     ctx
-      .rest(`/lanes/${encodeURIComponent(lane)}/answer`, {
-        method: 'POST',
-        body,
-        timeoutMs: 8000
-      })
+      .rest(`/lanes/${encodeURIComponent(lane)}/answer`, { method: 'POST', body, timeoutMs: 8000 })
+      .then(() => onDone && onDone())
+  const note = text =>
+    ctx
+      .rest(`/lanes/${encodeURIComponent(lane)}/say`, { method: 'POST', body: { text }, timeoutMs: 15000 })
       .then(() => onDone && onDone())
 
   const options = (question.options || []).filter(Boolean)
-  // One row per answer, the panel's own control height and the card's own inset: chips that wrapped into a
-  // ragged block were the layout he marked. `dismiss` is the last row, a word without a frame.
-  const row = {
-    className: 'mx-2.5 my-1 flex shrink-0 items-center justify-center rounded border text-[0.6875rem]',
-    style: { minHeight: SEND_H_N - 8, boxSizing: 'border-box', padding: '2px 6px' }
+  const [noteFor, setNoteFor] = useState(null)
+  const [noteText, setNoteText] = useState('')
+  const [own, setOwn] = useState('')
+  const other = options.find(option => /^other/i.test(option))
+
+  const sendWithNote = (option, text) => {
+    const trimmed = text.trim()
+    const worded = trimmed ? `on "${option}": ${trimmed}` : ''
+    // The answer first: pi is blocked on it. The note rides behind, so the orchestrator reads both.
+    ask({ value: option }).then(() => (worded ? note(worded) : null))
   }
+  const sendOwn = () => {
+    const text = own.trim()
+    if (!text) return
+    // A select dialog accepts an option string and nothing else: with an `Other…` on the list the text rides
+    // beside it, without one it can only reach the orchestrator.
+    if (other) sendWithNote(other, text)
+    else note(text)
+    setOwn('')
+  }
+
+  const inputStyle = {
+    height: `${SEND_H_N - 8}px`,
+    boxSizing: 'border-box',
+    padding: '0 6px',
+    borderColor: 'var(--ui-stroke-secondary)',
+    color: 'var(--ui-text-primary)'
+  }
+  const inputClass = 'min-w-0 flex-1 rounded border bg-transparent text-[0.625rem] outline-none'
+  const sendWord = onClick =>
+    jsx(HoverBox, {
+      onClick,
+      title: 'send',
+      className:
+        'flex shrink-0 items-center justify-center rounded border px-2 text-[0.625rem] uppercase tracking-wide',
+      style: {
+        height: `${SEND_H_N - 8}px`,
+        boxSizing: 'border-box',
+        borderColor: 'var(--ui-stroke-secondary)',
+        color: 'var(--ui-text-secondary)'
+      },
+      hoverFill: 'var(--ui-bg-tertiary)',
+      children: 'send'
+    })
 
   return jsxs('div', {
     className: 'flex flex-col pt-1',
@@ -2062,26 +2102,111 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
         style: { color: 'var(--ui-text-primary)' },
         children: question.title || question.message || 'a question without text'
       }),
-      ...options.map(option =>
-        jsx(
-          HoverBox,
+      ...options.map((option, index) =>
+        jsxs(
+          'div',
           {
-            ...row,
-            tag: 'button',
-            style: { ...row.style, borderColor: 'var(--ui-stroke-secondary)', color: 'var(--ui-text-primary)' },
-            hoverFill: 'var(--ui-bg-tertiary)',
-            onClick: () => send({ value: option }),
-            children: option
+            className: 'mx-2.5 my-1 flex flex-col gap-1',
+            children: [
+              jsxs('div', {
+                className: 'flex items-stretch gap-1',
+                children: [
+                  // The answer row: LEFT aligned — a list of choices reads as a list, not as three buttons.
+                  jsx(HoverBox, {
+                    tag: 'button',
+                    className:
+                      'flex min-w-0 flex-1 items-center rounded border text-[0.6875rem] text-left',
+                    style: {
+                      minHeight: `${SEND_H_N - 8}px`,
+                      boxSizing: 'border-box',
+                      padding: '2px 6px',
+                      // Inline, not the class: an answer reads from the left edge like every other row.
+                      textAlign: 'left',
+                      justifyContent: 'flex-start',
+                      borderColor: 'var(--ui-stroke-secondary)',
+                      color: 'var(--ui-text-primary)'
+                    },
+                    hoverFill: 'var(--ui-bg-tertiary)',
+                    onClick: () => ask({ value: option }),
+                    children: option
+                  }),
+                  // The way to say more about THIS answer without leaving the card.
+                  jsx(HoverBox, {
+                    onClick: () => {
+                      setNoteFor(noteFor === index ? null : index)
+                      setNoteText('')
+                    },
+                    title: 'add a word to this answer',
+                    className: 'flex shrink-0 items-center justify-center rounded border',
+                    style: {
+                      width: `${SEND_H_N - 8}px`,
+                      boxSizing: 'border-box',
+                      borderColor: 'var(--ui-stroke-secondary)',
+                      color: 'var(--ui-text-tertiary)',
+                      fontSize: '12px'
+                    },
+                    hoverFill: 'var(--ui-bg-tertiary)',
+                    hoverColour: 'var(--ui-text-primary)',
+                    children: noteFor === index ? '−' : '+'
+                  })
+                ]
+              }),
+              noteFor === index
+                ? jsxs('div', {
+                    className: 'flex items-center gap-1',
+                    children: [
+                      jsx('input', {
+                        value: noteText,
+                        autoFocus: true,
+                        placeholder: 'a word to add to this answer',
+                        onChange: event => setNoteText(event.target.value),
+                        onKeyDown: event => {
+                          if (event.key === 'Enter') {
+                            setNoteFor(null)
+                            sendWithNote(option, noteText)
+                            setNoteText('')
+                          }
+                        },
+                        className: inputClass,
+                        style: inputStyle
+                      }),
+                      sendWord(() => {
+                        setNoteFor(null)
+                        sendWithNote(option, noteText)
+                        setNoteText('')
+                      })
+                    ]
+                  })
+                : null
+            ]
           },
           option
         )
       ),
+      // The user's own variant, at the bottom: it becomes the `Other…` answer when pi offers one.
+      jsxs('div', {
+        className: 'mx-2.5 my-1 flex items-center gap-1',
+        children: [
+          jsx('input', {
+            value: own,
+            placeholder: other ? 'write your own answer' : 'write your own — the lane has no “other” field',
+            onChange: event => setOwn(event.target.value),
+            onKeyDown: event => {
+              if (event.key === 'Enter') sendOwn()
+            },
+            className: inputClass,
+            style: inputStyle
+          }),
+          sendWord(sendOwn)
+        ]
+      }),
       jsx(HoverBox, {
         tag: 'button',
-        className: 'mx-2.5 my-1 flex shrink-0 items-center justify-center rounded px-2 text-[0.625rem] uppercase tracking-wide',
-        style: { minHeight: SEND_H_N - 8, boxSizing: 'border-box', color: 'var(--ui-text-tertiary)' },
+        className:
+          'mx-2.5 my-1 flex shrink-0 items-center justify-start rounded px-2 text-[0.625rem] uppercase tracking-wide',
+        style: { minHeight: `${SEND_H_N - 8}px`, boxSizing: 'border-box', color: 'var(--ui-text-tertiary)' },
         hoverColour: 'var(--ui-text-primary)',
-        onClick: () => send({ cancelled: true }),
+        onClick: () => ask({ cancelled: true }),
         children: 'dismiss'
       })
     ]
