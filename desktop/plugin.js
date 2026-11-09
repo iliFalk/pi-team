@@ -456,6 +456,9 @@ const FIELD_PAD_R_N = 6
 const FIELD_PAD_N = FIELD_PAD_L_N + FIELD_PAD_R_N
 // The box's own padding, 4px on each side.
 const COMPOSER_PAD_N = 8
+// The box's top edge, dragged up: he asked for 5 px more than the app's own field, and the box is pinned
+// to the card's bottom edge, so the extra height lifts that edge and leaves everything inside centred.
+const COMPOSER_EXTRA_N = 5
 
 /** The height this text needs when it is wrapped at a given width, in the element's own font metrics.
  *  The mirror wraps at the width it is GIVEN, never at the element's current padding: a measurement
@@ -2332,8 +2335,10 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
         'data-composer': 'box',
         style: {
           position: 'relative',
-          minHeight: `${COMPOSER_H_N + 2}px`,
+          minHeight: `${COMPOSER_H_N + 2 + COMPOSER_EXTRA_N}px`,
           boxSizing: 'border-box',
+          // The inner row is centred in the extra height, so the button stays on the box's middle.
+          justifyContent: 'center',
           // The box closes the card, so it carries the 8px of air above the window edge itself.
           margin: '0 10px 8px',
           padding: `${COMPOSER_PAD_N / 2}px`,
