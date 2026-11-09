@@ -137,7 +137,12 @@ Rules:
 | Header control label | `10.5px` | `SEND` in a project, feature or review band; the `✕` and `✓` that replace it are `12px` |
 | Badge | `0.5625rem` | the only place this size is allowed |
 
-No weights beyond regular and medium. A question row uses `font-medium` on the name only.
+**A word you can press is caps; a word you read is not.** Every control's word renders uppercase — `SEND`, `SET`,
+`CHANGE`, `CLOSE`, `TO REVIEW`, `CHECK`, `CANCEL`, `DROP PROJECT`, `DISMISS`, `ADD THIS SESSION +` — through the
+`uppercase` utility, never through a literal in the source. A message that stands where a control stood keeps its
+own case: `in review` is not a button. Values keep their case too — state words, lane and project names, model ids,
+option strings from pi — and a field's placeholder or text is never transformed, because it is typed text. The rule
+exists so a word's case says what it does: caps is something to press, and nothing else is.
 
 ## Spacing
 

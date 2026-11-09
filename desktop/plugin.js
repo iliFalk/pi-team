@@ -425,6 +425,9 @@ const headerBandStyle = { ...bandStyle, minHeight: BAND_MIN_H, boxSizing: 'conte
 // multiplies: a const that reads them earlier dies on the temporal dead zone.
 const STATE_CONTROL_CLASS =
   'mx-2.5 my-1 flex shrink-0 items-center justify-center rounded border border-(--ui-stroke-secondary) text-[0.6875rem]'
+// A control in that row takes CAPS; `in review` keeps the plain class, because it is a message standing
+// where the control stood, not a thing to press. One gesture, one meaning: a word you can press is caps.
+const STATE_ACTION_CLASS = `${STATE_CONTROL_CLASS} uppercase`
 // The app's composer measures 42px outer with a 40px fill: our thread composer copies it.
 const COMPOSER_H_N = 40
 // One line of the composer's own text: the floor for the field's height, and the height the field
@@ -1800,7 +1803,7 @@ function AddSessionRow({ ctx, project, feature, sessionId, linked, onDone }) {
         onClick: () => setAsking(!asking),
         title: linked ? 'this chat session is already linked' : 'link this chat session to the feature',
         hoverColour: 'var(--ui-accent)',
-        className: 'w-full text-left text-[0.625rem] text-(--ui-text-tertiary)',
+        className: 'w-full text-left text-[0.625rem] uppercase text-(--ui-text-tertiary)',
         children: linked ? 'this session is linked' : 'add this session +'
       }),
       asking
@@ -1910,7 +1913,7 @@ function SessionTitle({ ctx, entry, project, feature, onRemove, onChanged }) {
           tag: 'button',
           onClick: save,
           hoverColour: 'var(--ui-text-primary)',
-          className: 'shrink-0 px-1 text-[0.625rem] text-(--ui-accent)',
+          className: 'shrink-0 px-1 text-[0.625rem] uppercase text-(--ui-accent)',
           children: 'ok'
         })
       ]
@@ -1997,7 +2000,7 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
       ),
       jsx('button', {
         className:
-          'mt-1 rounded px-1.5 py-0.5 text-[0.625rem] text-(--ui-text-tertiary) hover:text-(--ui-text-secondary)',
+          'mt-1 rounded px-1.5 py-0.5 text-[0.625rem] uppercase text-(--ui-text-tertiary) hover:text-(--ui-text-secondary)',
         onClick: () => send({ cancelled: true }),
         children: 'dismiss'
       })
@@ -2625,7 +2628,7 @@ function LaneStatus({ ctx }) {
                   })
                   .then(() => query.refetch()),
               title: 'queue this lane for review; send on the review row asks the orchestrator',
-              className: STATE_CONTROL_CLASS,
+              className: STATE_ACTION_CLASS,
               style: STATE_CONTROL_STYLE,
               hoverFill: 'var(--ui-bg-tertiary)',
               children: 'to review'
@@ -2642,7 +2645,7 @@ function LaneStatus({ ctx }) {
                 })
                 .then(() => query.refetch()),
             title: 'ask the orchestrator to close this lane; it shows the plan first',
-            className: STATE_CONTROL_CLASS,
+            className: STATE_ACTION_CLASS,
             style: STATE_CONTROL_STYLE,
             hoverFill: 'var(--ui-bg-tertiary)',
             children: 'close'
@@ -2848,7 +2851,7 @@ function ProjectCompose({ ctx, sessionId, onDone }) {
           jsx(HoverBox, {
             onClick: runCheck,
             hoverFill: 'var(--ui-bg-tertiary)',
-            className: 'flex items-center justify-center rounded border px-2 text-[0.6875rem]',
+            className: 'flex items-center justify-center rounded border px-2 text-[0.6875rem] uppercase',
             style: {
             // The hover band's own size, split three ways, word centred.
             flex: '1 1 0',
@@ -2864,7 +2867,7 @@ function ProjectCompose({ ctx, sessionId, onDone }) {
           jsx(HoverBox, {
             onClick: send,
             hoverFill: 'var(--ui-bg-tertiary)',
-            className: 'flex items-center justify-center rounded border px-2 text-[0.6875rem]',
+            className: 'flex items-center justify-center rounded border px-2 text-[0.6875rem] uppercase',
             style: {
             // The hover band's own size, split three ways, word centred.
             flex: '1 1 0',
@@ -2880,7 +2883,7 @@ function ProjectCompose({ ctx, sessionId, onDone }) {
           jsx(HoverBox, {
             onClick: onDone,
             hoverFill: 'var(--ui-bg-tertiary)',
-            className: 'flex items-center justify-center rounded border px-2 text-[0.6875rem]',
+            className: 'flex items-center justify-center rounded border px-2 text-[0.6875rem] uppercase',
             style: {
             // The hover band's own size, split three ways, word centred.
             flex: '1 1 0',
@@ -2933,7 +2936,7 @@ function ProjectView({ ctx, project, onDone }) {
       jsx(HoverBox, {
         onClick: drop,
         hoverFill: 'var(--ui-bg-tertiary)',
-        className: 'mt-auto flex w-fit items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
+        className: 'mt-auto flex w-fit items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem] uppercase',
         style: { color: BAD_TEXT, borderColor: BAD_TEXT },
         children: 'drop project'
       })
@@ -2994,7 +2997,7 @@ function FeatureCompose({ ctx, project, sessionId, onDone }) {
           jsx(HoverBox, {
             onClick: send,
             hoverFill: 'var(--ui-bg-tertiary)',
-            className: 'flex items-center justify-center rounded border px-2 text-[0.6875rem]',
+            className: 'flex items-center justify-center rounded border px-2 text-[0.6875rem] uppercase',
             style: {
             // The hover band's own size: 16px of content plus 4px above and below, and the row's full
             // width split between the buttons, with the word centred in each.
@@ -3011,7 +3014,7 @@ function FeatureCompose({ ctx, project, sessionId, onDone }) {
           jsx(HoverBox, {
             onClick: onDone,
             hoverFill: 'var(--ui-bg-tertiary)',
-            className: 'flex items-center justify-center rounded border px-2 text-[0.6875rem]',
+            className: 'flex items-center justify-center rounded border px-2 text-[0.6875rem] uppercase',
             style: {
             // The hover band's own size: 16px of content plus 4px above and below, and the row's full
             // width split between the buttons, with the word centred in each.
@@ -3126,7 +3129,7 @@ function FeatureView({ ctx, project, feature, onDone }) {
             onClick: drop,
             hoverFill: 'var(--ui-bg-tertiary)',
             className:
-              'mt-auto flex w-fit items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem]',
+              'mt-auto flex w-fit items-center justify-center rounded border px-2 py-[2px] text-[0.6875rem] uppercase',
             style: { color: BAD_TEXT, borderColor: BAD_TEXT },
             children: 'drop feature'
           })
