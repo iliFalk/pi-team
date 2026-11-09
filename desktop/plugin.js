@@ -511,18 +511,27 @@ function measureLineWidth(element, style, text) {
   return width
 }
 
-/** How tall the writing is at the width it has. One shape: the writing and the model chip sit in a column
- *  beside the button, so nothing about this number depends on where the button stands. */
+/** How tall the writing is, and whether its line still ends before the button.
+
+ *  ONE decision from two numbers that do not depend on the shape it picks: the line's UNWRAPPED width
+ *  against the room beside the button, and a typed break. Once the line would reach the button the writing
+ *  takes the whole box, above it. The chip sits under the writing and takes no part in this test. */
 function measureField(element) {
-  if (typeof document === 'undefined' || !element) return COMPOSER_LINE_H_N
+  const fallback = { height: COMPOSER_LINE_H_N, inline: true }
+  if (typeof document === 'undefined' || !element) return fallback
   const box = element.closest ? element.closest('[data-composer]') : null
-  if (!box || !box.clientWidth) return COMPOSER_LINE_H_N
+  if (!box || !box.clientWidth) return fallback
   const style = window.getComputedStyle(element)
   // The box's inner width: `clientWidth` keeps its padding and drops its border.
   const inner = box.clientWidth - COMPOSER_PAD_N
   const send = box.querySelector('[data-send]')
-  const room = inner - (send ? send.getBoundingClientRect().width : 0) - COMPOSER_GAP_N - FIELD_PAD_N
-  return measureWrappedHeight(element, style, room)
+  // The room a line has while the button stands beside it — the number the decision reads.
+  const beside = inner - (send ? send.getBoundingClientRect().width : 0) - COMPOSER_GAP_N - FIELD_PAD_N
+  const text = `${element.value || ''}`
+  // A line break is a second line by definition, whatever its width says.
+  const inline = text.indexOf('\n') === -1 && measureLineWidth(element, style, text) <= beside
+  // The height is measured at the width the field will really have in that shape.
+  return { height: measureWrappedHeight(element, style, inline ? beside : inner - FIELD_PAD_N), inline }
 }
 const STATE_CONTROL_STYLE = {
   height: `${BAND_MIN_H_N + 2 * BAND_PY}px`,
@@ -2221,15 +2230,15 @@ function ModelChooser({ models, providers, current, onSet }) {
 
 /** The conversation about one lane, with a box that sends into the chat, not into pi. */
 function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
-  // The field's height lives in state — React owns it, because a height written straight into the DOM is
-  // dropped by the next render. There is one shape now: growing this number pushes the box's top up.
-  const [fieldHeight, setFieldHeight] = useState(COMPOSER_LINE_H_N)
-  // A ref callback settles the height when the card opens with text already in the draft: the draft
-  // belongs to the pane and outlives a lane switch. The guard makes it a no-op once the numbers agree.
+  // The field's height AND shape live in state — React owns them, because a height written straight into
+  // the DOM is dropped by the next render.
+  const [field, setField] = useState({ height: COMPOSER_LINE_H_N, inline: true })
+  // A ref callback settles both when the card opens with text already in the draft: the draft belongs to
+  // the pane and outlives a lane switch. The guard makes it a no-op once the numbers agree.
   const settle = node => {
     if (!node) return
     const next = measureField(node)
-    setFieldHeight(prev => (prev === next ? prev : next))
+    setField(prev => (prev.height === next.height && prev.inline === next.inline ? prev : next))
   }
   const messages = lane.thread || []
   // The model lives in the field now: the chip on the writing's row opens the chooser, and the chooser
@@ -2280,7 +2289,7 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
       })
       .then(() => {
         setDraft('')
-        setFieldHeight(COMPOSER_LINE_H_N)
+        setField({ height: COMPOSER_LINE_H_N, inline: true })
         onSent()
       })
   }
@@ -2313,9 +2322,11 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
           })
         : null,
       // The composer wears the app's own input field: radius `4`, the accent as its border, the panel's own
-      // surface inside. Inside it ONE column and one button: the writing on top, the model chip under it,
-      // and `SEND` at the right, centred against BOTH rows — the box's horizontal middle is the button's
-      // middle, and the chip runs from its name up to the button's left edge.
+      // surface inside. TWO shapes, and the test between them reads the line's unwrapped width:
+      //   one line  — a column (writing, then the model chip) that stops at the button, with `SEND` at the
+      //               right centred against both rows;
+      //   the line reached the button — the writing takes the whole box ABOVE it, and the chip and the
+      //               button share the row under. That is the jump he asked for.
       jsxs('div', {
         className: 'flex shrink-0 flex-col',
         'data-composer': 'box',
@@ -2332,52 +2343,64 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
         },
         children: [
           jsxs('div', {
-            style: { display: 'flex', alignItems: 'center', gap: `${COMPOSER_GAP_N}px` },
+            style: {
+              display: 'flex',
+              flexDirection: field.inline ? 'row' : 'column',
+              alignItems: field.inline ? 'center' : 'stretch',
+              gap: `${COMPOSER_GAP_N}px`
+            },
             children: [
               jsxs('div', {
-                // The column stops at the button: this is what puts the chip's right edge on the button's
-                // left edge, and keeps the writing clear of it.
+                // Beside the button this column stops at it, so the chip's right edge lands on the
+                // button's left edge. Above the button the writing owns the whole width and the chip
+                // travels down with the button.
                 style: {
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '2px',
-                  flex: '1 1 auto',
+                  flex: field.inline ? '1 1 auto' : '0 0 auto',
                   minWidth: 0
                 },
-                children: [
-                  jsx('textarea', {
-                    value: draft,
-                    rows: 1,
-                    ref: settle,
-                    placeholder: 'say something about this lane',
-                    onChange: event => setDraft(event.target.value),
-                    onInput: event => setFieldHeight(measureField(event.currentTarget)),
-                    onKeyDown: event => {
-                      // Enter sends, Shift+Enter is a new line.
-                      if (event.key === 'Enter' && !event.shiftKey) {
-                        event.preventDefault()
-                        send()
-                      }
-                    },
-                    // No `flex-1`: a flex-grown item ignores the height the auto-grow reads, and the field
-                    // then never rises — the measurement showed 12px asked, 12px painted.
-                    className: 'w-full min-w-0 resize-none border-0 bg-transparent text-[0.625rem] outline-none',
-                    style: {
-                      width: '100%',
-                      boxSizing: 'border-box',
-                      padding: `0 ${FIELD_PAD_R_N}px 0 ${FIELD_PAD_L_N}px`,
-                      // The height lives in the state, not in a write into the DOM: React drops the write.
-                      height: `${fieldHeight}px`,
-                      color: 'var(--ui-text-primary)',
-                      lineHeight: 1.2,
-                      // No scroll bar of its own: the field grows and the whole block rises with it.
-                      overflow: 'hidden'
+                children: [jsx('textarea', {
+                  value: draft,
+                  rows: 1,
+                  ref: settle,
+                  placeholder: 'say something about this lane',
+                  onChange: event => setDraft(event.target.value),
+                  onInput: event => setField(measureField(event.currentTarget)),
+                  onKeyDown: event => {
+                    // Enter sends, Shift+Enter is a new line.
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault()
+                      send()
                     }
-                  }),
-                  chipNode
-                ]
+                  },
+                  // No `flex-1`: a flex-grown item ignores the height the auto-grow reads, and the field
+                  // then never rises — the measurement showed 12px asked, 12px painted.
+                  className: 'w-full min-w-0 resize-none border-0 bg-transparent text-[0.625rem] outline-none',
+                  style: {
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    padding: `0 ${FIELD_PAD_R_N}px 0 ${FIELD_PAD_L_N}px`,
+                    // The height lives in the state, not in a write into the DOM: React drops the write.
+                    height: `${field.height}px`,
+                    color: 'var(--ui-text-primary)',
+                    lineHeight: 1.2,
+                    // No scroll bar of its own: the field grows and the whole block rises with it.
+                    overflow: 'hidden'
+                  }
+                }), field.inline ? chipNode : null]
               }),
-              sendNode
+              field.inline
+                ? sendNode
+                : jsxs('div', {
+                    style: {
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: `${COMPOSER_GAP_N}px`
+                    },
+                    children: [chipNode, sendNode]
+                  })
             ]
           })
         ]
