@@ -2086,10 +2086,9 @@ function Bubble({ who, text, agent }) {
           })
         ]
       }),
-      // A bubble is a row of the panel, not a chat cloud: the height of a band, the same 4px radius, and
-      // a 2px bar on the LEFT in the speaker's hue. The bar replaced a 1px ring he found too solid: the
-      // ring could not reach the 3:1 graphic floor on the dark panel at any alpha, the bar clears it on
-      // the light one and sits at 2.9:1 on the dark.
+      // A bubble is a row of the panel, not a chat cloud: the height of a band, the same 4px radius, and a
+      // 1px ring in the SPEAKER'S own hue at 85 % — his number. On the light panel he runs: green 4.62:1,
+      // blue 4.21:1, ochre 2.75:1; on the dark one 2.17 / 2.44 / 3.83. Only the ochre stays under 3:1.
       jsx('div', {
         className: 'whitespace-pre-wrap break-words rounded text-[0.625rem] leading-snug',
         style: {
@@ -2097,7 +2096,7 @@ function Bubble({ who, text, agent }) {
           minHeight: `${BAND_MIN_H_N + 2 * BAND_PY}px`,
           boxSizing: 'border-box',
           padding: `${BAND_PY}px 4px`,
-          borderLeft: `2px solid ${dot}`
+          boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${dot} 85%, transparent)`
         },
         children: text
       })
