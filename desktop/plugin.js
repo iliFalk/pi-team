@@ -456,9 +456,9 @@ const FIELD_PAD_R_N = 6
 const FIELD_PAD_N = FIELD_PAD_L_N + FIELD_PAD_R_N
 // The box's own padding, 4px on each side.
 const COMPOSER_PAD_N = 8
-// The box's top edge, dragged up: he asked for 5 px more than the app's own field, and the box is pinned
-// to the card's bottom edge, so the extra height lifts that edge and leaves everything inside centred.
-const COMPOSER_EXTRA_N = 5
+// The box's top edge, dragged up: 5 px first, then 10 more. The box is pinned to the card's bottom edge,
+// so the extra height lifts that edge and leaves everything inside centred.
+const COMPOSER_EXTRA_N = 5 + 10
 
 /** The height this text needs when it is wrapped at a given width, in the element's own font metrics.
  *  The mirror wraps at the width it is GIVEN, never at the element's current padding: a measurement
