@@ -2894,6 +2894,12 @@ function LaneStatus({ ctx }) {
               jsx(Section, {
                 title: `diff · ${lane.files} files  +${lane.insertions} −${lane.deletions}`
               }),
+              // The file list is a WINDOW, like TASK: the same height (`TASK_H`) and its own scroll, so a
+              // twenty-file run cannot push the thread off the card and the two windows read as one pair.
+              jsxs('div', {
+                className: 'flex flex-col overflow-y-auto',
+                style: { height: TASK_H, flexShrink: 0 },
+                children: [
               (lane.diff_files || []).slice(0, 12).map(file =>
                 jsxs(
                   'div',
@@ -2920,6 +2926,8 @@ function LaneStatus({ ctx }) {
                   file.path
                 )
               )
+                ]
+              })
             ]
           })
         : null,
