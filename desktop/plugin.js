@@ -2333,6 +2333,12 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
       jsxs('div', {
         className: 'flex shrink-0 flex-col',
         'data-composer': 'box',
+        // A click anywhere in the box puts the caret in the field: the air around the writing is part of
+        // the control, not dead paint. The chip and the button stop their own clicks.
+        onClick: event => {
+          const field = event.currentTarget.querySelector('textarea')
+          if (field) field.focus()
+        },
         style: {
           position: 'relative',
           minHeight: `${COMPOSER_H_N + 2 + COMPOSER_EXTRA_N}px`,
@@ -2358,11 +2364,12 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
               jsxs('div', {
                 // Beside the button this column stops at it, so the chip's right edge lands on the
                 // button's left edge. Above the button the writing owns the whole width and the chip
-                // travels down with the button.
+                // travels down with the button. The gap is the panel's own 4 px, so the writing has air
+                // under it before the chip starts.
                 style: {
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '2px',
+                  gap: `${COMPOSER_GAP_N}px`,
                   flex: field.inline ? '1 1 auto' : '0 0 auto',
                   minWidth: 0
                 },
