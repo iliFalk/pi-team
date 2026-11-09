@@ -526,8 +526,16 @@ function measureField(element) {
   const inner = box.clientWidth - COMPOSER_PAD_N
   const text = `${element.value || ''}`
   // The room a line has while the SEND stands beside it.
+  // The row beside the writing holds the model chip and the button; the chip is measured the same way the
+  // button is, because the writing must stop before EITHER of them.
   const send = box.querySelector('[data-send]')
-  const beside = inner - FIELD_PAD_N - (send ? send.getBoundingClientRect().width : 0) - COMPOSER_GAP_N
+  const chip = box.querySelector('[data-model-chip]')
+  const beside =
+    inner -
+    FIELD_PAD_N -
+    (send ? send.getBoundingClientRect().width : 0) -
+    (chip ? chip.getBoundingClientRect().width : 0) -
+    2 * COMPOSER_GAP_N
   const height = measureWrappedHeight(element, style, inner - FIELD_PAD_N)
   // A line break is a second line by definition, whatever its width says.
   const inline =
@@ -2075,196 +2083,156 @@ function Bubble({ who, text }) {
   })
 }
 
-/** The lane's model, at the card's bottom edge, with the search that changes it. `pi-lane continue` reads
- *  `provider` and `model` back out of the lane record, so a choice binds the NEXT run of this lane and
- *  never the one already going. The offer is the providers' own catalogues, which the backend fetches. */
-function ModelLine({ ctx, lane, onChanged }) {
-  const [open, setOpen] = useState(false)
+/** The model, as a chip INSIDE the composer: the field's row carries the writing, the model and the
+ *  button, the way he drew it. A click opens the chooser above the box. */
+function ModelChip({ label, open, onClick }) {
+  return jsx(HoverBox, {
+    'data-model-chip': 'chip',
+    onClick,
+    title: 'the model the next run of this lane uses',
+    className: 'flex shrink-0 items-center rounded',
+    style: {
+      height: '18px',
+      boxSizing: 'border-box',
+      padding: '0 5px',
+      // A FIXED cap, never a percentage: a percentage makes the chip's own wrapper shrink-to-fit against
+      // that percentage, the wrapper then takes the whole row and the writing is squeezed to a few pixels.
+      // 110 px is the width his own mock showed (`nemotron-3.5-super`): long enough to name the model,
+      // short enough that the writing still keeps about 120 px on a 290-px box.
+      maxWidth: '110px',
+      background: 'var(--ui-bg-tertiary)',
+      color: 'var(--ui-text-secondary)'
+    },
+    hoverFill: 'var(--chrome-action-hover)',
+    hoverColour: 'var(--ui-text-primary)',
+    children: jsx('span', {
+      className: 'truncate font-mono text-[0.625rem]',
+      // Inline too: the ellipsis must not depend on a utility the app's build may trim.
+      style: {
+        minWidth: 0,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        color: 'inherit'
+      },
+      children: label
+    })
+  })
+}
+
+/** The model chooser: a search over the providers' own catalogues, the results, and the one word that
+ *  writes the choice into the lane record. It opens in the flow above the composer, never over it. */
+function ModelChooser({ models, providers, current, onSet }) {
   const [search, setSearch] = useState('')
-  // The model picked in the list, until `set` writes it: the list is a chooser, the button is the gesture.
   const [chosen, setChosen] = useState(null)
-  const query = useQuery({ queryKey: ['pi-team', 'models'], queryFn: () => ctx.rest('/models', REST) })
-  const catalog = (query.data && query.data.models) || []
-  const providers = (query.data && query.data.providers) || []
-  const provider = lane.provider || ''
-  const model = lane.model || ''
-  const down = providers.filter(row => !row.ok)
   const needle = search.trim().toLowerCase()
-  // One needle over id AND display name: the provider's own catalogues name the model only in `name`.
   const shown = needle
-    ? catalog.filter(row => `${row.provider}/${row.model} ${row.name || ''}`.toLowerCase().includes(needle))
-    : catalog
-  const target = chosen || (model ? { provider, model } : null)
-  const toggle = () => {
-    setOpen(!open)
-    setSearch('')
-    setChosen(null)
-  }
-  const apply = () => {
-    if (!target || !target.model) return
-    const same = target.provider === provider && target.model === model
-    setOpen(false)
-    setSearch('')
-    setChosen(null)
-    if (same) return
-    ctx
-      .rest(`/lanes/${encodeURIComponent(lane.lane)}/model`, {
-        method: 'POST',
-        body: { provider: target.provider, model: target.model },
-        timeoutMs: 8000
-      })
-      .then(() => onChanged())
-  }
+    ? models.filter(row => `${row.provider}/${row.model} ${row.name || ''}`.toLowerCase().includes(needle))
+    : models
+  const target = chosen || current
+  const down = providers.filter(row => !row.ok)
   const label = { color: 'var(--ui-text-tertiary)' }
   const rowStyle = { height: `${MODEL_ROW_H_N}px`, boxSizing: 'border-box', padding: '0 4px' }
-  const line = {
-    className: 'shrink-0 text-[0.625rem] uppercase tracking-wide',
-    style: label
-  }
   return jsxs('div', {
-    // The card's last row: the 8px of air the composer keeps above the window edge sits under the model.
-    style: { margin: '0 10px 8px', display: 'flex', flexDirection: 'column', gap: '4px' },
+    style: { margin: '0 10px 4px', display: 'flex', flexDirection: 'column', gap: '2px' },
     children: [
-      // The chooser opens ABOVE the row it belongs to — between the field and the footer — because a menu
-      // that hangs below its trigger would leave the card. The card is bottom-pinned, so it pushes the
-      // thread up instead of the list hanging over anything.
-      open
-        ? jsxs('div', {
-            style: { display: 'flex', flexDirection: 'column', gap: '2px' },
-            children: [
-              jsxs('div', {
-                style: { display: 'flex', alignItems: 'center', gap: '4px' },
-                children: [
-                  jsx('input', {
-                    'data-model-search': 'search',
-                    value: search,
-                    autoFocus: true,
-                    placeholder: 'search id or name',
-                    onChange: event => setSearch(event.target.value),
-                    onKeyDown: event => {
-                      // Enter takes the first result: a search is a pick with one keystroke more.
-                      if (event.key === 'Enter' && shown.length) {
-                        event.preventDefault()
-                        setChosen(shown[0])
-                      }
-                    },
-                    className: 'min-w-0 flex-1 rounded border bg-transparent text-[0.625rem] outline-none',
-                    style: {
-                      height: `${MODEL_ROW_H_N}px`,
-                      boxSizing: 'border-box',
-                      padding: '0 6px',
-                      borderColor: 'var(--ui-stroke-secondary)',
-                      color: 'var(--ui-text-primary)'
-                    }
-                  }),
-                  jsx(HoverBox, {
-                    'data-model-set': 'set',
-                    onClick: apply,
-                    title: 'write this model into the lane record',
-                    className:
-                      'flex shrink-0 items-center justify-center rounded border px-2 text-[0.625rem] uppercase',
-                    style: {
-                      height: `${MODEL_ROW_H_N}px`,
-                      boxSizing: 'border-box',
-                      borderColor: 'var(--ui-stroke-secondary)',
-                      color: target ? 'var(--ui-text-secondary)' : 'var(--ui-text-quaternary)'
-                    },
-                    hoverFill: 'var(--ui-bg-tertiary)',
-                    children: 'set'
-                  })
-                ]
-              }),
-              // Seven rows of results, the rest by scrolling: the whole catalog is 550 ids.
-              jsxs('div', {
-                'data-model-results': 'results',
-                className: 'overflow-y-auto',
-                style: { maxHeight: `${MODEL_ROW_H_N * 7}px`, display: 'flex', flexDirection: 'column' },
-                children: [
-                  shown.length
-                    ? shown.map(row =>
-                        jsx(
-                          HoverBox,
-                          {
-                            'data-model-option': `${row.provider}/${row.model}`,
-                            onClick: () => setChosen(row),
-                            title: row.name || row.model,
-                            className: 'flex shrink-0 items-center gap-2 rounded',
-                            style: rowStyle,
-                            hoverFill: 'var(--ui-bg-tertiary)',
-                            children: [
-                              jsx('span', {
-                                className: 'min-w-0 flex-1 truncate font-mono text-[0.625rem]',
-                                style: {
-                                  color:
-                                    row.provider === (target && target.provider) &&
-                                    row.model === (target && target.model)
-                                      ? 'var(--ui-text-primary)'
-                                      : 'var(--ui-text-secondary)'
-                                },
-                                children: row.model
-                              }),
-                              jsx('span', {
-                                className: 'shrink-0 text-[0.625rem]',
-                                style: label,
-                                children: row.provider
-                              })
-                            ]
-                          },
-                          `${row.provider}/${row.model}`
-                        )
-                      )
-                    : jsx('div', {
-                        className: 'px-1 py-1 text-[0.625rem]',
-                        style: label,
-                        children: catalog.length ? 'no match' : 'the catalog is empty'
-                      })
-                ]
-              }),
-              // A provider that could not answer names itself, so a short list is never a mystery.
-              down.length
-                ? jsx('div', {
-                    style: { display: 'flex', flexDirection: 'column' },
-                    children: down.map(row =>
-                      jsx(
-                        'div',
-                        {
-                          className: 'px-1 text-[0.625rem]',
-                          style: label,
-                          children: `${row.provider}: ${row.error || 'failed'}`
-                        },
-                        `down-${row.provider}`
-                      )
-                    )
-                  })
-                : null
-            ]
-          })
-        : null,
-      // The footer: what the lane runs with, in the id the provider publishes, and the word that opens the
-      // chooser. Two lines, because a full id does not fit beside a label in 290 px.
-      jsx(HoverBox, {
-        onClick: toggle,
-        title: 'the model the next run of this lane uses',
-        className: 'flex shrink-0 flex-col rounded',
-        style: { padding: '3px 4px', boxSizing: 'border-box', gap: '2px' },
-        hoverFill: 'var(--ui-bg-tertiary)',
+      jsxs('div', {
+        style: { display: 'flex', alignItems: 'center', gap: '4px' },
         children: [
-          jsxs('div', {
-            style: { display: 'flex', alignItems: 'baseline', gap: '8px' },
-            children: [
-              jsx('span', { ...line, children: 'pi-model' }),
-              jsx('span', { ...line, children: provider }),
-              jsx('span', { className: 'min-w-0 flex-1' }),
-              jsx('span', { ...line, children: open ? 'close' : 'change' })
-            ]
+          jsx('input', {
+            'data-model-search': 'search',
+            value: search,
+            autoFocus: true,
+            placeholder: 'search id or name',
+            onChange: event => setSearch(event.target.value),
+            onKeyDown: event => {
+              // Enter takes the first result: a search is a pick with one keystroke more.
+              if (event.key === 'Enter' && shown.length) {
+                event.preventDefault()
+                setChosen(shown[0])
+              }
+            },
+            className: 'min-w-0 flex-1 rounded border bg-transparent text-[0.625rem] outline-none',
+            style: {
+              height: `${MODEL_ROW_H_N}px`,
+              boxSizing: 'border-box',
+              padding: '0 6px',
+              borderColor: 'var(--ui-stroke-secondary)',
+              color: 'var(--ui-text-primary)'
+            }
           }),
-          jsx('span', {
-            className: 'truncate font-mono text-[0.625rem]',
-            style: { color: 'var(--ui-text-secondary)', lineHeight: '1.2' },
-            children: model || 'no model recorded'
+          jsx(HoverBox, {
+            'data-model-set': 'set',
+            onClick: () => onSet(target),
+            title: 'write this model into the lane record',
+            className: 'flex shrink-0 items-center justify-center rounded border px-2 text-[0.625rem] uppercase',
+            style: {
+              height: `${MODEL_ROW_H_N}px`,
+              boxSizing: 'border-box',
+              borderColor: 'var(--ui-stroke-secondary)',
+              color: target ? 'var(--ui-text-secondary)' : 'var(--ui-text-quaternary)'
+            },
+            hoverFill: 'var(--ui-bg-tertiary)',
+            children: 'set'
           })
         ]
-      })
+      }),
+      jsxs('div', {
+        'data-model-results': 'results',
+        className: 'overflow-y-auto',
+        style: { maxHeight: `${MODEL_ROW_H_N * 7}px`, display: 'flex', flexDirection: 'column' },
+        children: [
+          shown.length
+            ? shown.map(row =>
+                jsx(
+                  HoverBox,
+                  {
+                    'data-model-option': `${row.provider}/${row.model}`,
+                    onClick: () => setChosen(row),
+                    title: row.name || row.model,
+                    className: 'flex shrink-0 items-center gap-2 rounded',
+                    style: rowStyle,
+                    hoverFill: 'var(--ui-bg-tertiary)',
+                    children: [
+                      jsx('span', {
+                        className: 'min-w-0 flex-1 truncate font-mono text-[0.625rem]',
+                        style: {
+                          color:
+                            row.provider === (target && target.provider) && row.model === (target && target.model)
+                              ? 'var(--ui-text-primary)'
+                              : 'var(--ui-text-secondary)'
+                        },
+                        children: row.model
+                      }),
+                      jsx('span', { className: 'shrink-0 text-[0.625rem]', style: label, children: row.provider })
+                    ]
+                  },
+                  `${row.provider}/${row.model}`
+                )
+              )
+            : jsx('div', {
+                className: 'px-1 py-1 text-[0.625rem]',
+                style: label,
+                children: models.length ? 'no match' : 'the catalog is empty'
+              })
+        ]
+      }),
+      down.length
+        ? jsx('div', {
+            style: { display: 'flex', flexDirection: 'column' },
+            children: down.map(row =>
+              jsx(
+                'div',
+                {
+                  className: 'px-1 text-[0.625rem]',
+                  style: label,
+                  children: `${row.provider}: ${row.error || 'failed'}`
+                },
+                `down-${row.provider}`
+              )
+            )
+          })
+        : null
     ]
   })
 }
@@ -2282,6 +2250,29 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
     setField(prev => (prev.height === next.height && prev.inline === next.inline ? prev : next))
   }
   const messages = lane.thread || []
+  // The model lives in the field now: the chip on the writing's row opens the chooser, and the chooser
+  // writes the lane record. One query for both, because the catalogue does not change with the lane.
+  const modelsQuery = useQuery({ queryKey: ['pi-team', 'models'], queryFn: () => ctx.rest('/models', REST) })
+  const catalog = (modelsQuery.data && modelsQuery.data.models) || []
+  const modelProviders = (modelsQuery.data && modelsQuery.data.providers) || []
+  const [modelOpen, setModelOpen] = useState(false)
+  const provider = lane.provider || ''
+  const model = lane.model || ''
+  const picked = catalog.find(row => row.provider === provider && row.model === model)
+  const modelLabel =
+    (picked && picked.name) || model.replace(`${provider}/`, '') || (model ? model : 'no model')
+  const setModel = next => {
+    setModelOpen(false)
+    if (!next || !next.model) return
+    if (next.provider === provider && next.model === model) return
+    ctx
+      .rest(`/lanes/${encodeURIComponent(lane.lane)}/model`, {
+        method: 'POST',
+        body: { provider: next.provider, model: next.model },
+        timeoutMs: 8000
+      })
+      .then(() => onSent())
+  }
   const send = () => {
     const text = draft.trim()
     if (!text) return
@@ -2317,6 +2308,14 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
             .reverse()
         ]
       }),
+      modelOpen
+        ? jsx(ModelChooser, {
+            models: catalog,
+            providers: modelProviders,
+            current: model ? { provider, model } : null,
+            onSet: setModel
+          })
+        : null,
       // The composer wears the app's own input field: `42px` at rest (40 of fill plus its 1px border),
       // radius `4`, the accent as its border, the panel's own surface inside. The writing and the SEND share one
       // row while the text still ends before the button's column; the moment the text would reach the
@@ -2330,8 +2329,8 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
           position: 'relative',
           minHeight: `${COMPOSER_H_N + 2}px`,
           boxSizing: 'border-box',
-          // 4px to the model row under it; the 8px of air above the window edge now sits under that row.
-          margin: '0 10px 4px',
+          // The box closes the card again, so it carries the 8px of air above the window edge itself.
+          margin: '0 10px 8px',
           padding: `${COMPOSER_PAD_N / 2}px`,
           borderRadius: '4px',
           border: '1px solid var(--ui-accent)',
@@ -2380,34 +2379,41 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
                   overflow: 'hidden'
                 }
               }),
-              jsx('div', {
-                'data-send': 'send',
+              jsxs('div', {
+                // The last group of the row: the model chip and the button, in that order, as he drew it.
+                // It is measured through its two children, never through itself: a wrapper that stretched
+                // in the stacked shape would answer the measurement's own question.
                 style: {
                   display: 'flex',
                   flex: '0 0 auto',
-                  // The wrapper measures the button in BOTH shapes — the measurement reads its width to
-                  // find the room a line has, and a wrapper that stretched to the full column in the
-                  // stacked shape would answer its own question.
+                  alignItems: 'center',
+                  gap: `${COMPOSER_GAP_N}px`,
                   width: 'fit-content',
-                  justifyContent: 'flex-end',
                   alignSelf: field.inline ? 'center' : 'flex-end'
                 },
-                children: jsx(HoverBox, {
-                  onClick: send,
-                  className:
-                    'flex shrink-0 items-center justify-center rounded border border-(--ui-stroke-secondary) px-2 text-[0.625rem] uppercase',
-                  style: { height: `${SEND_H_N}px`, boxSizing: 'border-box' },
-                  hoverFill: 'var(--ui-bg-tertiary)',
-                  children: 'send'
-                })
+                children: [
+                  model
+                    ? jsx(ModelChip, {
+                        label: modelLabel,
+                        open: modelOpen,
+                        onClick: () => setModelOpen(!modelOpen)
+                      })
+                    : null,
+                  jsx(HoverBox, {
+                    'data-send': 'send',
+                    onClick: send,
+                    className:
+                      'flex shrink-0 items-center justify-center rounded border border-(--ui-stroke-secondary) px-2 text-[0.625rem] uppercase',
+                    style: { height: `${SEND_H_N}px`, boxSizing: 'border-box' },
+                    hoverFill: 'var(--ui-bg-tertiary)',
+                    children: 'send'
+                  })
+                ]
               })
             ]
           })
         ]
-      }),
-      // The lane's model closes the card, under the field: the choice is written into the lane record and
-      // the runner reads it back for every later run.
-      jsx(ModelLine, { ctx, lane, onChanged: onSent })
+      })
     ]
   })
 }

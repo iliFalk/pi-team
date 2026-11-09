@@ -108,7 +108,7 @@ const ctx = { rest: async () => ({}), i18n: { register: () => {} }, register: ()
 const results = {}
 selectedLane.set('theme-picker')
 
-for (const name of ['LaneList', 'LaneRow', 'ListHeader', 'Section', 'Row', 'LaneStatus', 'TeamPane', 'SessionTitle', 'AddSessionRow', 'QuestionBlock', 'FeatureCompose', 'FeatureView', 'ProjectCompose', 'ProjectView', 'ScrollPill', 'Scroller', 'FolderPlus', 'SelectionOutline', 'visibleFrame', 'framePath', 'HeaderControl', 'HoverBox', 'ThreadView', 'ModelLine', 'SettingsView', 'Bubble']) {
+for (const name of ['LaneList', 'LaneRow', 'ListHeader', 'Section', 'Row', 'LaneStatus', 'TeamPane', 'SessionTitle', 'AddSessionRow', 'QuestionBlock', 'FeatureCompose', 'FeatureView', 'ProjectCompose', 'ProjectView', 'ScrollPill', 'Scroller', 'FolderPlus', 'SelectionOutline', 'visibleFrame', 'framePath', 'HeaderControl', 'HoverBox', 'ThreadView', 'ModelChip', 'ModelChooser', 'SettingsView', 'Bubble']) {
   const fn = eval(name)
   try {
     const out = fn({
@@ -133,6 +133,11 @@ for (const name of ['LaneList', 'LaneRow', 'ListHeader', 'Section', 'Row', 'Lane
       onToggle: () => {},
       // The thread's composer: a draft clears its early returns, so the whole box renders.
       draft: 'the quick brown fox',
+      // the model chip and the chooser read the catalogue from this fixture
+      models: [{ provider: 'nvidia', model: 'nvidia/nemotron-3.5-super-vl-120b-a12b', name: '' }],
+      providers: [{ provider: 'nvidia', ok: true, error: '' }],
+      current: { provider: 'nvidia', model: 'nvidia/nemotron-3.5-super-vl-120b-a12b' },
+      onSet: () => {},
       setDraft: () => {},
       onSent: () => {},
       who: 'lane',
