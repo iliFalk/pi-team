@@ -427,24 +427,29 @@ const STATE_CONTROL_CLASS =
   'mx-2.5 my-1 flex shrink-0 items-center justify-center rounded border border-(--ui-stroke-secondary) text-[0.6875rem]'
 // The app's composer measures 42px outer with a 40px fill: our thread composer copies it.
 const COMPOSER_H_N = 40
-// The taller SEND that sits on the field's edge: 32px fills the field's inner 40 with an even 4px of
-// air above it and 4px below. The field itself has no ceiling — it grows with its text and the thread
-// block above it rises, so nothing ever needs a scroll bar.
-// One line of the composer's own text: the floor for the field's height. The BOX keeps its 42px
-// through `minHeight`, so an empty field stays one line tall instead of one line plus padding.
+// One line of the composer's own text: the floor for the field's height, and the height the field
+// keeps while the writing still fits beside the SEND. The BOX keeps its 42px through `minHeight`, so an
+// empty field stays one line tall instead of one line plus padding. The field itself has no ceiling —
+// it grows with its text and the thread block above it rises, so nothing ever needs a scroll bar.
 const COMPOSER_LINE_H_N = 12
+// The SEND: 32px fills the field's inner 40 with an even 4px of air above it and 4px below.
 const SEND_H_N = BAND_MIN_H_N + 2 * BAND_PY + 8
-// Room the writing keeps free on its right so a line that reaches the SEND's band stops beside it:
-// the button's width plus the gap it keeps from the edge.
-const SEND_RESERVE_N = 58
+// Air between the writing and the SEND: the gap a line stops short of while the two share a row, and
+// the space above the SEND's row once it moves under the writing.
+const COMPOSER_GAP_N = 4
+// The field's own padding, 2px at the left and 6px at the right. It is part of the field's width, so a
+// line's real room is the field minus their sum.
+const FIELD_PAD_L_N = 2
+const FIELD_PAD_R_N = 6
+const FIELD_PAD_N = FIELD_PAD_L_N + FIELD_PAD_R_N
+// The box's own padding, 4px on each side.
+const COMPOSER_PAD_N = 8
 
-/** Measure a text wrapped at a given width with the element's own font metrics.
- *  Returns the last line's width and the height it needs. The mirror wraps at the width it is GIVEN,
- *  never at the element's current padding: a measurement that depends on the very layout it decides
- *  flips back and forth on every keystroke. */
-function measureComposer(element, style, width) {
-  const fallback = { last: 0, height: COMPOSER_LINE_H_N }
-  if (typeof document === 'undefined' || !element || !(width > 0)) return fallback
+/** The height this text needs when it is wrapped at a given width, in the element's own font metrics.
+ *  The mirror wraps at the width it is GIVEN, never at the element's current padding: a measurement
+ *  that depends on the very layout it decides flips back and forth on every keystroke. */
+function measureWrappedHeight(element, style, width) {
+  if (typeof document === 'undefined' || !element || !(width > 0)) return COMPOSER_LINE_H_N
   const mirror = document.createElement('div')
   mirror.style.cssText = [
     'position:absolute',
@@ -463,27 +468,59 @@ function measureComposer(element, style, width) {
     'word-break:break-word'
   ].join(';')
   mirror.textContent = element.value
-  const marker = document.createElement('span')
-  mirror.appendChild(marker)
   document.body.appendChild(mirror)
-  const box = mirror.getBoundingClientRect()
-  const end = marker.getBoundingClientRect()
   const height = mirror.scrollHeight
   document.body.removeChild(mirror)
-  return { last: Math.max(0, end.left - box.left), height }
+  return Math.max(height, COMPOSER_LINE_H_N)
 }
 
-/** How tall the field must be for its text. Nothing here decides where the SEND goes: the writing is
- *  bottom-aligned, its last line always stands beside the button and every earlier line sits above —
- *  so the layout has one shape and can never jump between two. */
-function measureHeight(element) {
-  if (typeof document === 'undefined' || !element) return COMPOSER_LINE_H_N
+/** The width one line of this text needs when nothing wraps it. `white-space: pre` with an auto width,
+ *  so the answer depends on the text alone and never on the shape this number decides. */
+function measureLineWidth(element, style, text) {
+  if (typeof document === 'undefined' || !element || !text) return 0
+  const mirror = document.createElement('span')
+  mirror.style.cssText = [
+    'position:absolute',
+    'left:-9999px',
+    'top:0',
+    'visibility:hidden',
+    'pointer-events:none',
+    'display:inline-block',
+    'white-space:pre',
+    `font-family:${style.fontFamily}`,
+    `font-size:${style.fontSize}`,
+    `line-height:${style.lineHeight}`,
+    `letter-spacing:${style.letterSpacing}`
+  ].join(';')
+  mirror.textContent = text
+  document.body.appendChild(mirror)
+  const width = mirror.getBoundingClientRect().width
+  document.body.removeChild(mirror)
+  return width
+}
+
+/** Where the writing goes, and how tall the field must be — ONE decision, taken from two numbers that
+ *  do not depend on the shape it picks. The writing stands on the SEND's row while its line still ends
+ *  before the button's column; the moment that line would reach the button, the writing takes the whole
+ *  width and the SEND drops under it. Both widths come from the BOX, never from the field: the field's
+ *  own width changes with the shape, and a measurement that reads it answers its own question. */
+function measureField(element) {
+  const fallback = { height: COMPOSER_LINE_H_N, inline: true }
+  if (typeof document === 'undefined' || !element) return fallback
+  const box = element.closest ? element.closest('[data-composer]') : null
+  if (!box || !box.clientWidth) return fallback
   const style = window.getComputedStyle(element)
-  const boxWidth = element.parentElement ? element.parentElement.clientWidth : element.clientWidth
-  // the field's inner width: minus its own 4px padding twice, then the text's 2px and 6px insets
-  const width = boxWidth - 8 - 2 - 6
-  if (!(width > 0)) return COMPOSER_LINE_H_N
-  return Math.max(measureComposer(element, style, width).height, COMPOSER_LINE_H_N)
+  // The box's inner width: `clientWidth` keeps its padding and drops its border.
+  const inner = box.clientWidth - COMPOSER_PAD_N
+  const text = `${element.value || ''}`
+  // The room a line has while the SEND stands beside it.
+  const send = box.querySelector('[data-send]')
+  const beside = inner - FIELD_PAD_N - (send ? send.getBoundingClientRect().width : 0) - COMPOSER_GAP_N
+  const height = measureWrappedHeight(element, style, inner - FIELD_PAD_N)
+  // A line break is a second line by definition, whatever its width says.
+  const inline =
+    text.indexOf('\n') === -1 && measureLineWidth(element, style, text) <= beside && height <= COMPOSER_LINE_H_N
+  return { height, inline }
 }
 const STATE_CONTROL_STYLE = {
   height: `${BAND_MIN_H_N + 2 * BAND_PY}px`,
@@ -2000,9 +2037,16 @@ function Bubble({ who, text }) {
 
 /** The conversation about one lane, with a box that sends into the chat, not into pi. */
 function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
-  // Only the field's height lives in state — React owns it, because a height written straight into the
-  // DOM is dropped by the next render.
-  const [fieldHeight, setFieldHeight] = useState(COMPOSER_LINE_H_N)
+  // The field's height and shape live in state — React owns them, because a height written straight
+  // into the DOM is dropped by the next render.
+  const [field, setField] = useState({ height: COMPOSER_LINE_H_N, inline: true })
+  // A ref callback settles the shape when the card opens with text already in the draft: the draft
+  // belongs to the pane and outlives a lane switch. The guard makes it a no-op once the numbers agree.
+  const settle = node => {
+    if (!node) return
+    const next = measureField(node)
+    setField(prev => (prev.height === next.height && prev.inline === next.inline ? prev : next))
+  }
   const messages = lane.thread || []
   const send = () => {
     const text = draft.trim()
@@ -2015,7 +2059,7 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
       })
       .then(() => {
         setDraft('')
-        setFieldHeight(COMPOSER_LINE_H_N)
+        setField({ height: COMPOSER_LINE_H_N, inline: true })
         onSent()
       })
   }
@@ -2041,60 +2085,89 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
       }),
       // The composer wears the app's own input field: `42px` at rest (40 of fill plus its 1px border),
       // radius `4`, the accent as its border, the panel's own surface inside, and the same `8px` of air
-      // below it that the app's composer keeps above the window edge. Where the SEND sits follows the
-      // LAST LINE: while that line leaves the button's column free it stands beside the writing, and
-      // the moment a line needs the whole width it drops under the text.
+      // below it that the app's composer keeps above the window edge. The writing and the SEND share one
+      // row while the text still ends before the button's column; the moment the text would reach the
+      // button, the writing takes the whole width and the SEND drops under it, right aligned. The test
+      // reads the UNWRAPPED line against the room beside the button, so it depends on the text alone and
+      // the box cannot flip between the two shapes on a keystroke.
       jsxs('div', {
         className: 'flex shrink-0 flex-col',
+        'data-composer': 'box',
         style: {
           position: 'relative',
           minHeight: `${COMPOSER_H_N + 2}px`,
           boxSizing: 'border-box',
           margin: '0 10px 8px',
-          padding: '4px',
+          padding: `${COMPOSER_PAD_N / 2}px`,
           borderRadius: '4px',
           border: '1px solid var(--ui-accent)',
           background: 'var(--ui-bg-editor)'
         },
         children: [
-          jsx('textarea', {
-            value: draft,
-            rows: 1,
-            placeholder: 'say something about this lane',
-            onChange: event => setDraft(event.target.value),
-            onInput: event => setFieldHeight(measureHeight(event.currentTarget)),
-            onKeyDown: event => {
-              // Enter sends, Shift+Enter is a new line.
-              if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault()
-                send()
-              }
-            },
-            // No `flex-1`: a flex-grown item ignores the height the auto-grow writes, and the field
-            // then never rises — the measurement showed 12px asked, 12px painted.
-            className: 'w-full min-w-0 resize-none border-0 bg-transparent text-[0.625rem] outline-none',
+          jsxs('div', {
             style: {
-              // Beside the button the writing keeps its column free; under the text it owns the width.
-              // The writing owns the whole width; the SEND lives on its own row below it.
-              padding: '0 6px 0 2px',
-              // The height lives in the state, not in a write into the DOM: React drops the write.
-              height: `${fieldHeight}px`,
-              color: 'var(--ui-text-primary)',
-              lineHeight: 1.2,
-              // No scroll bar of its own: the field grows and the whole block rises with it.
-              overflow: 'hidden'
-            }
-          }),
-          jsx('div', {
-            style: { display: 'flex', justifyContent: 'flex-end', marginTop: '4px' },
-            children: jsx(HoverBox, {
-              onClick: send,
-              className:
-                'flex shrink-0 items-center justify-center rounded border border-(--ui-stroke-secondary) px-2 text-[0.625rem] uppercase',
-              style: { height: `${SEND_H_N}px`, boxSizing: 'border-box' },
-              hoverFill: 'var(--ui-bg-tertiary)',
-              children: 'send'
-            })
+              display: 'flex',
+              // One row while the line fits beside the button; a column once it does not.
+              flexDirection: field.inline ? 'row' : 'column',
+              alignItems: field.inline ? 'center' : 'stretch',
+              gap: `${COMPOSER_GAP_N}px`
+            },
+            children: [
+              jsx('textarea', {
+                value: draft,
+                rows: 1,
+                ref: settle,
+                placeholder: 'say something about this lane',
+                onChange: event => setDraft(event.target.value),
+                onInput: event => setField(measureField(event.currentTarget)),
+                onKeyDown: event => {
+                  // Enter sends, Shift+Enter is a new line.
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault()
+                    send()
+                  }
+                },
+                // No `flex-1` anywhere: a flex-grown item ignores the height the auto-grow reads, and
+                // the field then never rises — the measurement showed 12px asked, 12px painted.
+                className: 'min-w-0 resize-none border-0 bg-transparent text-[0.625rem] outline-none',
+                style: {
+                  // Beside the SEND the field takes what is left; under the writing it owns the width.
+                  flex: field.inline ? '1 1 auto' : '0 0 auto',
+                  width: field.inline ? null : '100%',
+                  boxSizing: 'border-box',
+                  padding: `0 ${FIELD_PAD_R_N}px 0 ${FIELD_PAD_L_N}px`,
+                  // The height lives in the state, not in a write into the DOM: React drops the write.
+                  // Beside the button the field is one line tall and the row centres it, so the first
+                  // line stands in the middle of the field.
+                  height: `${field.inline ? COMPOSER_LINE_H_N : field.height}px`,
+                  color: 'var(--ui-text-primary)',
+                  lineHeight: 1.2,
+                  // No scroll bar of its own: the field grows and the whole block rises with it.
+                  overflow: 'hidden'
+                }
+              }),
+              jsx('div', {
+                'data-send': 'send',
+                style: {
+                  display: 'flex',
+                  flex: '0 0 auto',
+                  // The wrapper measures the button in BOTH shapes — the measurement reads its width to
+                  // find the room a line has, and a wrapper that stretched to the full column in the
+                  // stacked shape would answer its own question.
+                  width: 'fit-content',
+                  justifyContent: 'flex-end',
+                  alignSelf: field.inline ? 'center' : 'flex-end'
+                },
+                children: jsx(HoverBox, {
+                  onClick: send,
+                  className:
+                    'flex shrink-0 items-center justify-center rounded border border-(--ui-stroke-secondary) px-2 text-[0.625rem] uppercase',
+                  style: { height: `${SEND_H_N}px`, boxSizing: 'border-box' },
+                  hoverFill: 'var(--ui-bg-tertiary)',
+                  children: 'send'
+                })
+              })
+            ]
           })
         ]
       })

@@ -99,7 +99,7 @@ const ctx = { rest: async () => ({}), i18n: { register: () => {} }, register: ()
 const results = {}
 selectedLane.set('theme-picker')
 
-for (const name of ['LaneList', 'LaneRow', 'ListHeader', 'Section', 'Row', 'LaneStatus', 'TeamPane', 'SessionTitle', 'AddSessionRow', 'QuestionBlock', 'FeatureCompose', 'FeatureView', 'ProjectCompose', 'ProjectView', 'ScrollPill', 'Scroller', 'FolderPlus', 'SelectionOutline', 'visibleFrame', 'framePath', 'HeaderControl', 'HoverBox']) {
+for (const name of ['LaneList', 'LaneRow', 'ListHeader', 'Section', 'Row', 'LaneStatus', 'TeamPane', 'SessionTitle', 'AddSessionRow', 'QuestionBlock', 'FeatureCompose', 'FeatureView', 'ProjectCompose', 'ProjectView', 'ScrollPill', 'Scroller', 'FolderPlus', 'SelectionOutline', 'visibleFrame', 'framePath', 'HeaderControl', 'HoverBox', 'ThreadView', 'Bubble']) {
   const fn = eval(name)
   try {
     const out = fn({
@@ -122,6 +122,12 @@ for (const name of ['LaneList', 'LaneRow', 'ListHeader', 'Section', 'Row', 'Lane
       count: 1,
       open: true,
       onToggle: () => {},
+      // The thread's composer: a draft clears its early returns, so the whole box renders.
+      draft: 'the quick brown fox',
+      setDraft: () => {},
+      onSent: () => {},
+      who: 'lane',
+      text: 'Done. Changes verified.',
       title: 'sessions · 1',
       band: true,
       onPick: () => {}
