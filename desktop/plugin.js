@@ -96,9 +96,7 @@ const ASK_BG = 'rgba(7, 98, 180, 0.85)'
 // honey that clears the graphic floor on both, which is why it is not a brighter amber.
 const PI_COLOR = '#A97D14'
 const PI_TEXT = `color-mix(in srgb, ${PI_COLOR} 50%, var(--ui-text-primary))`
-// The bubble's hairline: 85 % transparent, his second number — 15 % of the blue, so it reads as a frame
-// only where the eye looks for one; the speaker's dot and word carry the identity.
-const BUBBLE_RING = `color-mix(in srgb, ${ASK_COLOR} 15%, transparent)`
+
 const ASK_BG_SOFT = 'rgba(7, 98, 180, 0.18)'
 // A question row keeps its blue on hover: the wash deepens and the label brightens to text-secondary,
 // the same two paints the band's control uses. Without this the wash wins the style branch and the
@@ -2089,7 +2087,9 @@ function Bubble({ who, text, agent }) {
         ]
       }),
       // A bubble is a row of the panel, not a chat cloud: the height of a band, the same 4px radius, and
-      // the panel's blue hairline around it.
+      // a 2px bar on the LEFT in the speaker's hue. The bar replaced a 1px ring he found too solid: the
+      // ring could not reach the 3:1 graphic floor on the dark panel at any alpha, the bar clears it on
+      // the light one and sits at 2.9:1 on the dark.
       jsx('div', {
         className: 'whitespace-pre-wrap break-words rounded text-[0.625rem] leading-snug',
         style: {
@@ -2097,7 +2097,7 @@ function Bubble({ who, text, agent }) {
           minHeight: `${BAND_MIN_H_N + 2 * BAND_PY}px`,
           boxSizing: 'border-box',
           padding: `${BAND_PY}px 4px`,
-          boxShadow: `inset 0 0 0 1px ${BUBBLE_RING}`
+          borderLeft: `2px solid ${dot}`
         },
         children: text
       })
