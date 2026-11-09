@@ -25,6 +25,9 @@ const BAND_H = '4px'
 const BAND_BG = 'linear-gradient(to bottom, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0))'
 // Both text blocks share one height and scroll inside it.
 const TEXT_H = '100px'
+// The TASK area stands 30 % shorter than a plain text block (`100 - 30`), his number; it keeps its own
+// scroll, so a long task is still readable without pushing the areas under it off the card.
+const TASK_H = `${100 - 30}px`
 // The thread's bubble area starts 150 px taller than a plain text block, so its header sits that much
 // higher on the card: the block is pinned to the bottom, so growing it upward is the same as lifting that
 // header. `100 + 50` was his first step and `+ 100` his second, kept as arithmetic so the numbers stay visible.
@@ -2724,7 +2727,7 @@ function LaneStatus({ ctx }) {
         : jsx('div', {
             className:
               'shrink-0 overflow-y-auto whitespace-pre-wrap px-2.5 py-0.5 text-[0.625rem] leading-snug text-(--ui-text-secondary)',
-            style: { height: TEXT_H },
+            style: { height: TASK_H },
             children: lane.task || '—'
           }),
 
