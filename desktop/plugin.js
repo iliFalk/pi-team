@@ -2537,6 +2537,9 @@ function GroupList({ title, rows, onPick }) {
 function LaneStatus({ ctx }) {
   const laneName = useValue(selectedLane)
   const [draft, setDraft] = useState('')
+  // Which of the two decisions waits for its ✕/✓: 'review', 'close', or nothing. A HOOK, so it lives at the
+  // top with the others: below the early returns it would change the hook order on the next render.
+  const [ask, setAsk] = useState(null)
   // A group row of the tree picks a whole list, not one lane.
   const groupMatch = /^(closed|handed):(.+)$/.exec(laneName)
   const groupKind = groupMatch ? groupMatch[1] : null
@@ -2595,6 +2598,42 @@ function LaneStatus({ ctx }) {
   // The state's own action, cut to the heading's line: a word you can press between `state` and the state
   // word. A handed lane keeps the same slot as a message — `in review` is not a button, so it stays mixed
   // case — and `close` keeps the full-width row it needs, because two words here would not fit in 290 px.
+  // A two-glyph decision, in place: ✕ cancels, ✓ commits — the same idiom as the update control in the
+  // projects header. A dialog would cost a round trip and cover the card he is deciding about.
+  const confirmPair = (cancel, go) =>
+    jsxs('span', {
+      className: 'flex shrink-0 items-center gap-1',
+      children: [
+        jsx(
+          HeaderControl,
+          {
+            title: 'cancel',
+            glyph: '✕',
+            size: BAND_MIN_H,
+            fontSize: '12px',
+            colour: BAD_TEXT,
+            hoverColour: BAD_TEXT,
+            border: BAD_TEXT,
+            onClick: cancel
+          },
+          'cancel'
+        ),
+        jsx(
+          HeaderControl,
+          {
+            title: 'go',
+            glyph: '✓',
+            size: BAND_MIN_H,
+            fontSize: '12px',
+            colour: RUN_TEXT,
+            hoverColour: RUN_TEXT,
+            border: RUN_TEXT,
+            onClick: go
+          },
+          'go'
+        )
+      ]
+    })
   const stateAction = !lane.shelved && ['done', 'stopped', 'failed', 'error'].includes(lane.state)
     ? lane.handed
       ? jsx('span', {
@@ -2603,22 +2642,29 @@ function LaneStatus({ ctx }) {
           style: { height: BAND_MIN_H, boxSizing: 'border-box', color: ASK_TEXT, borderColor: ASK_TEXT },
           children: 'in review'
         })
-      : jsx(HoverBox, {
-          onClick: () =>
-            ctx
-              .rest(`/lanes/${encodeURIComponent(lane.lane)}/hand`, {
-                method: 'POST',
-                body: { session_key: sessionId },
-                timeoutMs: 8000
-              })
-              .then(() => query.refetch()),
-          title: 'queue this lane for review; send on the review row asks the orchestrator',
-          className:
-            'flex shrink-0 items-center justify-center rounded border px-2 text-[0.625rem] uppercase',
-          style: { height: BAND_MIN_H, boxSizing: 'border-box', color: ASK_TEXT, borderColor: ASK_TEXT },
-          hoverFill: 'var(--ui-bg-tertiary)',
-          children: 'to review'
-        })
+      : ask === 'review'
+        ? confirmPair(
+            () => setAsk(null),
+            () => {
+              setAsk(null)
+              ctx
+                .rest(`/lanes/${encodeURIComponent(lane.lane)}/hand`, {
+                  method: 'POST',
+                  body: { session_key: sessionId },
+                  timeoutMs: 8000
+                })
+                .then(() => query.refetch())
+            }
+          )
+        : jsx(HoverBox, {
+            onClick: () => setAsk('review'),
+            title: 'queue this lane for review; a second click confirms',
+            className:
+              'flex shrink-0 items-center justify-center rounded border px-2 text-[0.625rem] uppercase',
+            style: { height: BAND_MIN_H, boxSizing: 'border-box', color: ASK_TEXT, borderColor: ASK_TEXT },
+            hoverFill: 'var(--ui-bg-tertiary)',
+            children: 'to review'
+          })
     : null
 
   return jsxs('div', {
@@ -2760,21 +2806,32 @@ function LaneStatus({ ctx }) {
         })
       }),
       lane.handed && !lane.shelved
-        ? jsx(HoverBox, {
-            onClick: () =>
-              ctx
-                .rest(`/lanes/${encodeURIComponent(lane.lane)}/say`, {
-                  method: 'POST',
-                  body: { text: 'Close this lane: show the plan first, and delete nothing without my go.' },
-                  timeoutMs: 15000
-                })
-                .then(() => query.refetch()),
-            title: 'ask the orchestrator to close this lane; it shows the plan first',
-            className: STATE_ACTION_CLASS,
-            style: STATE_CONTROL_STYLE,
-            hoverFill: 'var(--ui-bg-tertiary)',
-            children: 'close'
-          })
+        ? ask === 'close'
+          ? jsx('div', {
+              className: 'mx-2.5 my-1 flex shrink-0 items-center justify-center',
+              style: STATE_CONTROL_STYLE,
+              children: confirmPair(
+                () => setAsk(null),
+                () => {
+                  setAsk(null)
+                  ctx
+                    .rest(`/lanes/${encodeURIComponent(lane.lane)}/say`, {
+                      method: 'POST',
+                      body: { text: 'Close this lane: show the plan first, and delete nothing without my go.' },
+                      timeoutMs: 15000
+                    })
+                    .then(() => query.refetch())
+                }
+              )
+            })
+          : jsx(HoverBox, {
+              onClick: () => setAsk('close'),
+              title: 'ask the orchestrator to close this lane; a second click confirms',
+              className: STATE_ACTION_CLASS,
+              style: STATE_CONTROL_STYLE,
+              hoverFill: 'var(--ui-bg-tertiary)',
+              children: 'close'
+            })
         : null,
         ]
       }),
