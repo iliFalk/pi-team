@@ -436,6 +436,42 @@ const SEND_H_N = BAND_MIN_H_N + 2 * BAND_PY + 8
 // Room the writing keeps free on its right so a line that reaches the SEND's band stops beside it:
 // the button's width plus the gap it keeps from the edge.
 const SEND_RESERVE_N = 58
+
+/** Does the LAST line of this text leave the button's column free?
+ *  The mirror is a bare div with the element's own font metrics, wrapped at the element's FULL
+ *  content width — not at the width the current layout leaves — so the answer is the same whichever
+ *  side of the switch we are on, and the button cannot oscillate. */
+function lastLineFits(element) {
+  if (typeof document === 'undefined' || !element) return true
+  const style = window.getComputedStyle(element)
+  const full = element.clientWidth - parseFloat(style.paddingLeft) - 6
+  if (!(full > 0)) return true
+  const mirror = document.createElement('div')
+  mirror.style.cssText = [
+    'position:absolute',
+    'left:-9999px',
+    'top:0',
+    'visibility:hidden',
+    'pointer-events:none',
+    `width:${full}px`,
+    `font-family:${style.fontFamily}`,
+    `font-size:${style.fontSize}`,
+    `line-height:${style.lineHeight}`,
+    `letter-spacing:${style.letterSpacing}`,
+    'white-space:pre-wrap',
+    'overflow-wrap:break-word',
+    'word-break:break-word'
+  ].join(';')
+  mirror.textContent = element.value
+  const marker = document.createElement('span')
+  mirror.appendChild(marker)
+  document.body.appendChild(mirror)
+  const box = mirror.getBoundingClientRect()
+  const end = marker.getBoundingClientRect()
+  document.body.removeChild(mirror)
+  const width = end.left - box.left
+  return width <= full - SEND_RESERVE_N
+}
 const STATE_CONTROL_STYLE = {
   height: `${BAND_MIN_H_N + 2 * BAND_PY}px`,
   boxSizing: 'border-box'
@@ -1951,6 +1987,8 @@ function Bubble({ who, text }) {
 
 /** The conversation about one lane, with a box that sends into the chat, not into pi. */
 function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
+  // Whether the SEND has dropped under the text: decided by the last line's width, see lastLineFits.
+  const [stacked, setStacked] = useState(false)
   const messages = lane.thread || []
   const send = () => {
     const text = draft.trim()
@@ -1963,6 +2001,7 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
       })
       .then(() => {
         setDraft('')
+        setStacked(false)
         onSent()
       })
   }
@@ -1988,12 +2027,11 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
       }),
       // The composer wears the app's own input field: `42px` at rest (40 of fill plus its 1px border),
       // radius `4`, the accent as its border, the panel's own surface inside, and the same `8px` of air
-      // below it that the app's composer keeps above the window edge. The first line sits in the
-      // MIDDLE of the field, the SEND floats on the bottom-right corner, and the writing keeps a
-      // reserve on its right so the lines that reach the button's band stop beside it instead of
-      // running under it.
+      // below it that the app's composer keeps above the window edge. Where the SEND sits follows the
+      // LAST LINE: while that line leaves the button's column free it stands beside the writing, and
+      // the moment a line needs the whole width it drops under the text.
       jsxs('div', {
-        className: 'flex shrink-0 flex-col justify-center',
+        className: stacked ? 'flex shrink-0 flex-col' : 'flex shrink-0 flex-col justify-center',
         style: {
           position: 'relative',
           minHeight: `${COMPOSER_H_N + 2}px`,
@@ -2010,12 +2048,15 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
             rows: 1,
             placeholder: 'say something about this lane',
             onChange: event => setDraft(event.target.value),
-            // Height follows the content: reset it, read what the browser needs, cap the field so a
-            // pasted wall of text cannot swallow the card.
             onInput: event => {
               const element = event.currentTarget
+              // Height follows the content: reset it, read what the browser needs, cap the field so a
+              // pasted wall of text cannot swallow the card.
               element.style.height = 'auto'
               element.style.height = `${Math.min(element.scrollHeight, COMPOSER_MAX_H_N)}px`
+              // Then decide the button's place from the text itself, not from the current layout: the
+              // mirror always wraps at the FULL width, so the answer cannot flip back and forth.
+              setStacked(!lastLineFits(element))
             },
             onKeyDown: event => {
               // Enter sends, Shift+Enter is a new line.
@@ -2028,21 +2069,21 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
             // then never rises — the measurement showed 12px asked, 12px painted.
             className: 'w-full min-w-0 resize-none border-0 bg-transparent text-[0.625rem] outline-none',
             style: {
-              // The right padding is the SEND's room: a line that reaches the button's band stops
-              // beside it.
-              padding: `0 ${SEND_RESERVE_N}px 0 2px`,
+              // Beside the button the writing keeps its column free; under the text it owns the width.
+              padding: `0 ${stacked ? 6 : SEND_RESERVE_N}px 0 2px`,
               // The writing rides two pixels lower than the exact middle, which is where the eye
               // wants it against the button: a transform, so the layout does not move.
-              transform: `translateY(${COMPOSER_NUDGE})`,
+              transform: stacked ? undefined : `translateY(${COMPOSER_NUDGE})`,
               color: 'var(--ui-text-primary)',
               lineHeight: 1.2,
               overflowY: 'auto',
               maxHeight: `${COMPOSER_MAX_H_N}px`
             }
           }),
-          // The control floats inside the box, on its bottom-right corner, as the app's does.
           jsx('div', {
-            style: { position: 'absolute', right: '4px', bottom: '4px' },
+            style: stacked
+              ? { display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }
+              : { position: 'absolute', right: '4px', bottom: '4px' },
             children: jsx(HoverBox, {
               onClick: send,
               className:
