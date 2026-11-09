@@ -2021,7 +2021,9 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
               }
             },
             className:
-              'w-full min-w-0 flex-1 resize-none border-0 bg-transparent px-1 py-0 text-[0.625rem] outline-none',
+              // No `flex-1`: a flex-grown item ignores the height the auto-grow writes, and the field
+              // then never rises — the measurement showed 12px asked, 12px painted.
+              'w-full min-w-0 resize-none border-0 bg-transparent px-1 py-0 text-[0.625rem] outline-none',
             // A tight line box: the words keep their own air, so the gap above the SEND is the box's
             // padding and not a descender's worth of leading.
             style: {
