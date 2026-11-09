@@ -25,6 +25,10 @@ const BAND_H = '4px'
 const BAND_BG = 'linear-gradient(to bottom, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0))'
 // Both text blocks share one height and scroll inside it.
 const TEXT_H = '100px'
+// The thread's bubble area starts 50 px taller than a plain text block, so its header sits 50 px higher
+// on the card: the block is pinned to the bottom, so growing it upward is the same as lifting that header.
+// `100 + 50`, kept as arithmetic so the number he gave stays visible.
+const THREAD_MIN_H = `${100 + 50}px`
 // Tree geometry: a node owns its line, so a level cannot break into loose segments.
 // The line hangs under the icon, so the icon column and the line are one axis.
 const GUIDE_STEP_N = 18
@@ -2303,7 +2307,7 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
         className: 'overflow-y-auto px-2.5 py-1',
         // A fixed floor as tall as the task block, so a short thread shows its bubbles on the
         // bottom edge instead of hanging at the top, and `38vh` as the ceiling for a long one.
-        style: { minHeight: TEXT_H, maxHeight: '38vh', display: 'flex', flexDirection: 'column-reverse' },
+        style: { minHeight: THREAD_MIN_H, maxHeight: '38vh', display: 'flex', flexDirection: 'column-reverse' },
         children: [
           lane.last_text ? jsx(Bubble, { who: 'lane', text: lane.last_text }, 'now') : null,
           messages
