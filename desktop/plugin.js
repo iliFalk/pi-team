@@ -526,16 +526,10 @@ function measureField(element) {
   const inner = box.clientWidth - COMPOSER_PAD_N
   const text = `${element.value || ''}`
   // The room a line has while the SEND stands beside it.
-  // The row beside the writing holds the model chip and the button; the chip is measured the same way the
-  // button is, because the writing must stop before EITHER of them.
+  // Beside the writing there is the button and nothing else now — the model chip sits on the row UNDER the
+  // text — so the room a line has is the box minus the button and one gap.
   const send = box.querySelector('[data-send]')
-  const chip = box.querySelector('[data-model-chip]')
-  const beside =
-    inner -
-    FIELD_PAD_N -
-    (send ? send.getBoundingClientRect().width : 0) -
-    (chip ? chip.getBoundingClientRect().width : 0) -
-    2 * COMPOSER_GAP_N
+  const beside = inner - FIELD_PAD_N - (send ? send.getBoundingClientRect().width : 0) - COMPOSER_GAP_N
   const height = measureWrappedHeight(element, style, inner - FIELD_PAD_N)
   // A line break is a second line by definition, whatever its width says.
   const inline =
@@ -2273,6 +2267,20 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
       })
       .then(() => onSent())
   }
+  // The chip and the button, built once: the chip lives on the row UNDER the writing, so the shape only
+  // decides whether the button shares the writing's row or sits beside the chip.
+  const chipNode = model
+    ? jsx(ModelChip, { label: modelLabel, open: modelOpen, onClick: () => setModelOpen(!modelOpen) })
+    : null
+  const sendNode = jsx(HoverBox, {
+    'data-send': 'send',
+    onClick: () => send(),
+    className:
+      'flex shrink-0 items-center justify-center rounded border border-(--ui-stroke-secondary) px-2 text-[0.625rem] uppercase',
+    style: { height: `${SEND_H_N}px`, boxSizing: 'border-box' },
+    hoverFill: 'var(--ui-bg-tertiary)',
+    children: 'send'
+  })
   const send = () => {
     const text = draft.trim()
     if (!text) return
@@ -2379,39 +2387,22 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
                   overflow: 'hidden'
                 }
               }),
-              jsxs('div', {
-                // The last group of the row: the model chip and the button, in that order, as he drew it.
-                // It is measured through its two children, never through itself: a wrapper that stretched
-                // in the stacked shape would answer the measurement's own question.
+              field.inline ? sendNode : null
+            ]
+          }),
+          // The chip's own row, under the writing: left aligned beside the button in the stacked shape,
+          // alone under the text in the inline one.
+          field.inline
+            ? chipNode
+            : jsxs('div', {
                 style: {
                   display: 'flex',
-                  flex: '0 0 auto',
                   alignItems: 'center',
-                  gap: `${COMPOSER_GAP_N}px`,
-                  width: 'fit-content',
-                  alignSelf: field.inline ? 'center' : 'flex-end'
+                  justifyContent: 'space-between',
+                  gap: `${COMPOSER_GAP_N}px`
                 },
-                children: [
-                  model
-                    ? jsx(ModelChip, {
-                        label: modelLabel,
-                        open: modelOpen,
-                        onClick: () => setModelOpen(!modelOpen)
-                      })
-                    : null,
-                  jsx(HoverBox, {
-                    'data-send': 'send',
-                    onClick: send,
-                    className:
-                      'flex shrink-0 items-center justify-center rounded border border-(--ui-stroke-secondary) px-2 text-[0.625rem] uppercase',
-                    style: { height: `${SEND_H_N}px`, boxSizing: 'border-box' },
-                    hoverFill: 'var(--ui-bg-tertiary)',
-                    children: 'send'
-                  })
-                ]
+                children: [chipNode, sendNode]
               })
-            ]
-          })
         ]
       })
     ]
