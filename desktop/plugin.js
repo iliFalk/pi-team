@@ -427,9 +427,10 @@ const STATE_CONTROL_CLASS =
   'mx-2.5 my-1 flex shrink-0 items-center justify-center rounded border border-(--ui-stroke-secondary) text-[0.6875rem]'
 // The app's composer measures 42px outer with a 40px fill: our thread composer copies it.
 const COMPOSER_H_N = 40
-// How far the field may grow before it scrolls instead, and the taller SEND that sits on its edge.
+// How far the field may grow before it scrolls instead, and the taller SEND that sits on its edge:
+// 32px fills the field's inner 40 with an even 4px of air above it and 4px below.
 const COMPOSER_MAX_H_N = 120
-const SEND_H_N = BAND_MIN_H_N + 2 * BAND_PY + 4
+const SEND_H_N = BAND_MIN_H_N + 2 * BAND_PY + 8
 // Room the writing keeps free on its right so a line that reaches the SEND's band stops beside it:
 // the button's width plus the gap it keeps from the edge.
 const SEND_RESERVE_N = 58
