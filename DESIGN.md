@@ -100,7 +100,7 @@ Three states, each with one meaning. Nothing else in the panel is coloured.
 | question, gentle | `#0762B4` at 18%, at 28% while hovered | the label band of the feature and the project above the lane |
 | `failed`, `error`, `stopped` | fill/outline `#8A1C0E`, words `mix(#8A1C0E 50%, primary)` | the outline keeps the hex; the word, the count, the reason and the stderr block take the text tone |
 | `done` | `var(--ui-text-tertiary)` | the tick and its count only |
-| speaker (thread) | `#1A6543` you · `#0762B4` the agent · `#A97D14` pi | the `5px` dot above a message and the speaker's word beside it; the word takes the same half-hue tone as a state word. Ochre measured `4.81:1` on the dark panel and `3.38:1` on the light one — the only honey above the `3:1` graphic floor in both, which is why it is not a brighter amber |
+| speaker (thread) | `#1A6543` you · `#0762B4` the agent · `#76B900` pi (his hex, the NVIDIA green) | the `5px` dot above a message and the speaker's word beside it; the word takes the same half-hue tone as a state word. The pi green measures `7.45:1` as a dot on the dark panel but `2.19:1` on the light one — on light it identifies, it does not draw a line — while its WORD keeps `5.7:1` (light) and `10.31:1` (dark), because a word is half the hue and half the panel's text. It sits close to your own green `#1A6543`, so the name beside every dot is what actually separates the two speakers |
 
 Rules:
 

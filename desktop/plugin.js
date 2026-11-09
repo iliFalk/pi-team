@@ -95,9 +95,10 @@ const ASK_TEXT = `color-mix(in srgb, ${ASK_COLOR} 50%, var(--ui-text-primary))`
 const BAD_TEXT = `color-mix(in srgb, ${BAD_COLOR} 50%, var(--ui-text-primary))`
 // 85%: white on this fill reaches 4.6:1, the threshold for text this small.
 const ASK_BG = 'rgba(7, 98, 180, 0.85)'
-// The third speaker: pi. Ochre, measured 4.81:1 on the dark panel and 3.38:1 on the light one — the only
-// honey that clears the graphic floor on both, which is why it is not a brighter amber.
-const PI_COLOR = '#A97D14'
+// The third speaker: pi. His hex, #76B900 — the NVIDIA green. Measured as a dot: 7.45:1 on the dark panel and
+// 2.19:1 on the light one, so it is an identification mark on light, not a line; the WORD takes half the hue
+// and half the panel's text and keeps 5.7:1 there (10.31:1 on dark).
+const PI_COLOR = '#76B900'
 const PI_TEXT = `color-mix(in srgb, ${PI_COLOR} 50%, var(--ui-text-primary))`
 
 const ASK_BG_SOFT = 'rgba(7, 98, 180, 0.18)'
