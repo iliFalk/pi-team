@@ -2314,8 +2314,8 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
       })
   }
   return jsxs('div', {
-    // A column that may shrink: the bubble area is the only part of it allowed to lose height.
-    style: { display: 'flex', flexDirection: 'column', minHeight: 0, flexShrink: 1 },
+    // A column with a floor: nothing here shrinks.
+    style: { display: 'flex', flexDirection: 'column', minHeight: 0, flexShrink: 0 },
     children: [
       // A chat is anchored at the bottom: the scroll box lays its children out from the bottom up
       // (`column-reverse`), so the newest bubble sits on the composer and a short thread hugs that
@@ -2327,10 +2327,11 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
         // bottom edge instead of hanging at the top, and `38vh` as the ceiling for a long one.
         // 250 px is the PREFERRED height, not a floor the card must honour: on a short window the bubbles give
         // way first, so the composer's own bottom air and border can never be clipped by the card's edge.
+        // It keeps its 250 px and scrolls inside: the TASK window is what pays for a short card.
         style: {
           height: THREAD_MIN_H,
           minHeight: 0,
-          flex: '1 1 auto',
+          flexShrink: 0,
           maxHeight: '38vh',
           display: 'flex',
           flexDirection: 'column-reverse'
@@ -2607,9 +2608,12 @@ function LaneStatus({ ctx }) {
       // rides in the same static head, because it belongs above STATUS and must not be pushed under it.
       jsx('div', {
         className: 'border-b border-(--ui-stroke-secondary) pb-1',
-        // Normally exactly its content's height. In a card too short to hold it, it gives way — it scrolls
-        // itself instead of pushing the composer past the card's edge.
-        style: { flexShrink: 1, minHeight: 0, overflowY: 'auto' },
+        // It may give height, but only through the TASK window: every other child sits in a `flexShrink: 0`
+        // wrapper, so STATUS, SESSIONS and STATE keep their place and their size at every window height.
+        style: { display: 'flex', flexDirection: 'column', flexShrink: 1, minHeight: 0 },
+        children: [
+      jsx('div', {
+        style: { flexShrink: 0 },
         children: [
       lane.question
         ? jsx(QuestionBlock, {
@@ -2736,13 +2740,17 @@ function LaneStatus({ ctx }) {
             children: 'close'
           })
         : null,
+        ]
+      }),
       lane.shelved ? null : jsx(Section, { title: 'task', band: true }),
       lane.shelved
         ? null
         : jsx('div', {
             className:
-              'shrink-0 overflow-y-auto whitespace-pre-wrap px-2.5 py-0.5 text-[0.625rem] leading-snug text-(--ui-text-secondary)',
-            style: { height: TASK_H },
+              'overflow-y-auto whitespace-pre-wrap px-2.5 py-0.5 text-[0.625rem] leading-snug text-(--ui-text-secondary)',
+            // `TASK_H` is what it WANTS. A weight of 50 against the body's 1 makes this window give up its
+            // height FIRST, down to nothing, so the rows above it, the thread and the composer never move.
+            style: { height: TASK_H, flexShrink: 50, minHeight: 0 },
             children: lane.task || '—'
           }),
 
@@ -2827,9 +2835,8 @@ function LaneStatus({ ctx }) {
         ? null
         : jsx('div', {
             className: 'border-t border-(--ui-stroke-secondary)',
-            // It may give way when the card is short: the bubbles shrink, the composer never does, and its own
-            // 8 px of air can never be clipped by the card's edge.
-            style: { flexShrink: 1, minHeight: 0, display: 'flex', flexDirection: 'column' },
+            // It keeps its height: the composer's own 8 px of air can never be clipped by the card's edge.
+            style: { flexShrink: 0, minHeight: 0, display: 'flex', flexDirection: 'column' },
             children: [
               jsx(Section, { title: 'thread', band: true, first: true }),
               jsx(ThreadView, { ctx, lane, draft, setDraft, onSent: () => query.refetch() })
