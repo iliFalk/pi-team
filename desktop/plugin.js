@@ -1986,14 +1986,15 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
       // it grows with its text, the words wrap ABOVE the SEND control, and the SEND sits on the
       // bottom-right corner so the writing area keeps its full width as the field rises.
       jsxs('div', {
-        // Centred while the field is one line; the SEND pins itself to the bottom edge as the field
-        // grows, which is what makes the words wrap above it.
-        className: 'flex shrink-0 items-center gap-1',
+        // Two rows, like the app's own field when it carries text: the writing across the full width,
+        // then a line of controls under it with SEND on the right. The text therefore runs ABOVE the
+        // button instead of beside it, and the field only rises when the writing needs more lines.
+        className: 'flex shrink-0 flex-col',
         style: {
           minHeight: `${COMPOSER_H_N + 2}px`,
           boxSizing: 'border-box',
           margin: '0 10px 8px',
-          padding: '4px 4px',
+          padding: '2px 4px 2px',
           borderRadius: '4px',
           border: '1px solid var(--ui-accent)',
           background: 'var(--ui-bg-editor)'
@@ -2022,15 +2023,17 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
               'w-full min-w-0 flex-1 resize-none border-0 bg-transparent px-1 py-0 text-[0.625rem] leading-snug outline-none',
             style: { color: 'var(--ui-text-primary)', overflowY: 'auto', maxHeight: `${COMPOSER_MAX_H_N}px` }
           }),
-          jsx(HoverBox, {
-            onClick: send,
-            className:
-              'flex shrink-0 items-center justify-center rounded border border-(--ui-stroke-secondary) px-2 text-[0.625rem] uppercase',
-            // A little taller than the panel's standard control; it drops to the field's bottom edge
-            // once the text needs more than one line.
-            style: { height: `${SEND_H_N}px`, boxSizing: 'border-box', alignSelf: 'flex-end' },
-            hoverFill: 'var(--ui-bg-tertiary)',
-            children: 'send'
+          // The control line under the writing: SEND on the right, where the app puts its own.
+          jsx('div', {
+            className: 'flex shrink-0 items-center justify-end',
+            children: jsx(HoverBox, {
+              onClick: send,
+              className:
+                'flex shrink-0 items-center justify-center rounded border border-(--ui-stroke-secondary) px-2 text-[0.625rem] uppercase',
+              style: { height: `${SEND_H_N}px`, boxSizing: 'border-box' },
+              hoverFill: 'var(--ui-bg-tertiary)',
+              children: 'send'
+            })
           })
         ]
       })
