@@ -430,6 +430,8 @@ const COMPOSER_H_N = 40
 // How far the field may grow before it scrolls instead, and the taller SEND that sits on its edge:
 // 32px fills the field's inner 40 with an even 4px of air above it and 4px below.
 const COMPOSER_MAX_H_N = 120
+// The writing's own vertical nudge against the field's exact middle.
+const COMPOSER_NUDGE = '2px'
 const SEND_H_N = BAND_MIN_H_N + 2 * BAND_PY + 8
 // Room the writing keeps free on its right so a line that reaches the SEND's band stops beside it:
 // the button's width plus the gap it keeps from the edge.
@@ -2029,6 +2031,9 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
               // The right padding is the SEND's room: a line that reaches the button's band stops
               // beside it.
               padding: `0 ${SEND_RESERVE_N}px 0 2px`,
+              // The writing rides two pixels lower than the exact middle, which is where the eye
+              // wants it against the button: a transform, so the layout does not move.
+              transform: `translateY(${COMPOSER_NUDGE})`,
               color: 'var(--ui-text-primary)',
               lineHeight: 1.2,
               overflowY: 'auto',
