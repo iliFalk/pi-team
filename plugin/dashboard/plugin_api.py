@@ -757,6 +757,53 @@ def label_session(body: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
     return {"project": project, "feature": feature, "session": session, "label": label}
 
 
+# --------------------------------------------------------------------------- #
+# models: what a lane may run with
+# --------------------------------------------------------------------------- #
+
+# pi's own catalog holds 500-odd ids; a 300-px row cannot offer that. This is the short list the panel
+# draws, and `provider` + `model` are exactly what the runner reads back out of a lane record, so the
+# choice pins the NEXT run of that lane. The file lives in the plugin's data folder — edit the list
+# there, not here; a read creates it from these defaults the first time.
+DEFAULT_MODELS: List[Dict[str, str]] = [
+    {"provider": "nvidia", "model": "nvidia/nemotron-3.5-super-vl-120b-a12b", "label": "nemotron 3.5 super"},
+    {"provider": "nvidia", "model": "deepseek-ai/deepseek-v4.1-flash", "label": "deepseek v4.1 flash"},
+    {"provider": "nvidia", "model": "nvidia/nemotron-3-ultra-550b-a55b", "label": "nemotron 3 ultra"},
+    {"provider": "deepseek", "model": "deepseek-flash", "label": "deepseek flash"},
+    {"provider": "deepseek", "model": "deepseek-v4-pro", "label": "deepseek v4 pro"},
+    {"provider": "openrouter", "model": "anthropic/claude-sonnet-4.5", "label": "claude sonnet 4.5"},
+    {"provider": "openrouter", "model": "anthropic/claude-opus-5.5", "label": "claude opus 5.5"},
+]
+
+
+def _models_path() -> Path:
+    return _hermes_home() / "plugin-data" / "pi-team" / "models.json"
+
+
+def _models() -> List[Dict[str, str]]:
+    """The offered models, in the order the panel draws them. One home for the list, and a file the
+    person can edit without a restart: it is read on every request."""
+    path = _models_path()
+    # `Any`: the file is a list of rows, while `_read_json` is typed for objects.
+    data: Any = _read_json(path)
+    rows: List[Dict[str, str]] = []
+    if isinstance(data, list):
+        for row in data:
+            if isinstance(row, dict) and row.get("provider") and row.get("model"):
+                rows.append({
+                    "provider": str(row["provider"]),
+                    "model": str(row["model"]),
+                    "label": str(row.get("label") or row["model"]),
+                })
+    if rows:
+        return rows
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(DEFAULT_MODELS, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    tmp.replace(path)
+    return [dict(row) for row in DEFAULT_MODELS]
+
+
 def _plugin_ctx() -> Any:
     """The PluginContext kept by this plugin's entry point, when it is loaded."""
     module = sys.modules.get("pi_team_runtime")
@@ -789,6 +836,44 @@ def say_to_lane(lane: str, payload: Dict[str, Any] = Body(default={})) -> Dict[s
         except Exception:
             sent = False
     return {"ok": True, "message_sent": sent}
+
+
+@router.get("/models")
+def list_models() -> Dict[str, Any]:
+    """The short list of models a lane may run with."""
+    return {"models": _models()}
+
+
+@router.post("/lanes/{lane}/model")
+def set_lane_model(lane: str, payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Pin the provider and the model of a lane.
+
+    `pi-lane continue` reads `provider`, `model` and `thinking` back out of the lane record, so the
+    change holds for every later run of this lane and never for the one already running.
+    """
+    provider = str(payload.get("provider") or "").strip()
+    model = str(payload.get("model") or "").strip()
+    if not provider or not model:
+        raise HTTPException(status_code=422, detail="provider and model are required")
+    if (provider, model) not in {(row["provider"], row["model"]) for row in _models()}:
+        raise HTTPException(status_code=422, detail="model is not on the panel's list")
+    lane_dir = _lanes_root() / lane
+    path = lane_dir / "lane.json"
+    record = _read_json(path)
+    if record is None:
+        raise HTTPException(status_code=404, detail="unknown lane")
+    record["provider"] = provider
+    record["model"] = model
+    # The runner's own format, written the runner's own way: a temp file, then a rename.
+    tmp = lane_dir / "lane.json.tmp"
+    tmp.write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    tmp.replace(path)
+    return {
+        "lane": lane,
+        "provider": provider,
+        "model": model,
+        "thinking": record.get("thinking") or "",
+    }
 
 
 UPDATE_PROMPT = (

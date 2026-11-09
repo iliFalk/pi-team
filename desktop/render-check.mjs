@@ -70,6 +70,8 @@ const fakeLane = {
   last_tool: 'edit',
   last_tool_detail: 'app.js',
   last_error: '',
+  provider: 'nvidia',
+  model: 'nvidia/nemotron-3.5-super-vl-120b-a12b',
   turns: 3,
   usage: { input: 10, output: 20, total: 0.001 },
   feature_sessions: [{ id: 'local-abc', linked_at: 1, label: 'Демо' }],
@@ -86,6 +88,10 @@ const fakeLane = {
 const data = {
   lanes: [fakeLane],
   count: 1,
+  models: [
+    { provider: 'nvidia', model: 'nvidia/nemotron-3.5-super-vl-120b-a12b', label: 'nemotron 3.5 super' },
+    { provider: 'deepseek', model: 'deepseek-flash', label: 'deepseek flash' }
+  ],
   registry: [{ name: 'demo', repo: '/home/ilja/work/demo-app', features: [{ name: 'settings-menu', title: 'Settings menu', sessions: [] }] }]
 }
 
@@ -99,7 +105,7 @@ const ctx = { rest: async () => ({}), i18n: { register: () => {} }, register: ()
 const results = {}
 selectedLane.set('theme-picker')
 
-for (const name of ['LaneList', 'LaneRow', 'ListHeader', 'Section', 'Row', 'LaneStatus', 'TeamPane', 'SessionTitle', 'AddSessionRow', 'QuestionBlock', 'FeatureCompose', 'FeatureView', 'ProjectCompose', 'ProjectView', 'ScrollPill', 'Scroller', 'FolderPlus', 'SelectionOutline', 'visibleFrame', 'framePath', 'HeaderControl', 'HoverBox', 'ThreadView', 'Bubble']) {
+for (const name of ['LaneList', 'LaneRow', 'ListHeader', 'Section', 'Row', 'LaneStatus', 'TeamPane', 'SessionTitle', 'AddSessionRow', 'QuestionBlock', 'FeatureCompose', 'FeatureView', 'ProjectCompose', 'ProjectView', 'ScrollPill', 'Scroller', 'FolderPlus', 'SelectionOutline', 'visibleFrame', 'framePath', 'HeaderControl', 'HoverBox', 'ThreadView', 'ModelLine', 'Bubble']) {
   const fn = eval(name)
   try {
     const out = fn({

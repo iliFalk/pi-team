@@ -437,6 +437,9 @@ const SEND_H_N = BAND_MIN_H_N + 2 * BAND_PY + 8
 // Air between the writing and the SEND: the gap a line stops short of while the two share a row, and
 // the space above the SEND's row once it moves under the writing.
 const COMPOSER_GAP_N = 4
+// The lane's model stands on a row of its own above the box: the panel's standard control height, so the
+// line reads as one more row of the card and not as part of the field.
+const MODEL_ROW_H_N = BAND_MIN_H_N + 2 * BAND_PY
 // The field's own padding, 2px at the left and 6px at the right. It is part of the field's width, so a
 // line's real room is the field minus their sum.
 const FIELD_PAD_L_N = 2
@@ -2035,6 +2038,98 @@ function Bubble({ who, text }) {
   })
 }
 
+/** The lane's model, with the list that changes it. `pi-lane continue` reads `provider` and `model` back
+ *  out of the lane record, so this line decides what the NEXT run of the lane uses; a run already going
+ *  keeps the model it started with. */
+function ModelLine({ ctx, lane, onChanged }) {
+  const [open, setOpen] = useState(false)
+  const query = useQuery({ queryKey: ['pi-team', 'models'], queryFn: () => ctx.rest('/models', REST) })
+  const models = (query.data && query.data.models) || []
+  const provider = lane.provider || ''
+  const model = lane.model || ''
+  const picked = models.find(row => row.provider === provider && row.model === model)
+  const name = (picked && picked.label) || model || 'not recorded'
+  const pick = next => {
+    setOpen(false)
+    if (!next || (next.provider === provider && next.model === model)) return
+    ctx
+      .rest(`/lanes/${encodeURIComponent(lane.lane)}/model`, {
+        method: 'POST',
+        body: { provider: next.provider, model: next.model },
+        timeoutMs: 8000
+      })
+      .then(() => onChanged())
+  }
+  const rowStyle = { height: `${MODEL_ROW_H_N}px`, boxSizing: 'border-box', padding: '0 4px' }
+  return jsxs('div', {
+    style: { margin: '0 10px 4px', display: 'flex', flexDirection: 'column' },
+    children: [
+      // One row: the word, the model, the gesture. The whole row is the control, so a 290-px line needs no
+      // second box, and the model's own name is the value the card shows everywhere else.
+      jsx(HoverBox, {
+        onClick: () => setOpen(!open),
+        title: 'the model the next run of this lane uses',
+        className: 'flex shrink-0 items-center gap-2 rounded',
+        style: rowStyle,
+        hoverFill: 'var(--ui-bg-tertiary)',
+        children: [
+          jsx('span', {
+            className: 'shrink-0 text-[0.625rem] uppercase tracking-wide',
+            style: { color: 'var(--ui-text-tertiary)' },
+            children: 'model'
+          }),
+          jsx('span', {
+            className: 'min-w-0 flex-1 truncate font-mono text-[0.625rem]',
+            style: { color: 'var(--ui-text-secondary)' },
+            children: name
+          }),
+          jsx('span', {
+            className: 'shrink-0 text-[0.625rem] uppercase tracking-wide',
+            style: { color: 'var(--ui-text-tertiary)' },
+            children: open ? 'close' : 'change'
+          })
+        ]
+      }),
+      // The list opens in the flow, above the field: the card is bottom-pinned, so it pushes the thread up
+      // instead of hanging over it. The model in use takes the brightest tone; the provider names the lane.
+      open
+        ? jsx('div', {
+            style: { display: 'flex', flexDirection: 'column' },
+            children: models.map(next =>
+              jsx(
+                HoverBox,
+                {
+                  onClick: () => pick(next),
+                  className: 'flex shrink-0 items-center gap-2 rounded',
+                  style: rowStyle,
+                  hoverFill: 'var(--ui-bg-tertiary)',
+                  children: [
+                    jsx('span', {
+                      className: 'min-w-0 flex-1 truncate font-mono text-[0.625rem]',
+                      style: {
+                        color:
+                          next.provider === provider && next.model === model
+                            ? 'var(--ui-text-primary)'
+                            : 'var(--ui-text-secondary)'
+                      },
+                      children: next.label || next.model
+                    }),
+                    jsx('span', {
+                      className: 'shrink-0 text-[0.625rem] uppercase tracking-wide',
+                      style: { color: 'var(--ui-text-tertiary)' },
+                      children: next.provider
+                    })
+                  ]
+                },
+                `${next.provider}/${next.model}`
+              )
+            )
+          })
+        : null
+    ]
+  })
+}
+
 /** The conversation about one lane, with a box that sends into the chat, not into pi. */
 function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
   // The field's height and shape live in state — React owns them, because a height written straight
@@ -2083,6 +2178,9 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
             .reverse()
         ]
       }),
+      // The model of this lane on its own row above the box: the choice is written into the lane record,
+      // and the runner reads it back for every later run.
+      jsx(ModelLine, { ctx, lane, onChanged: onSent }),
       // The composer wears the app's own input field: `42px` at rest (40 of fill plus its 1px border),
       // radius `4`, the accent as its border, the panel's own surface inside, and the same `8px` of air
       // below it that the app's composer keeps above the window edge. The writing and the SEND share one
