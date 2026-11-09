@@ -2525,6 +2525,34 @@ function LaneStatus({ ctx }) {
 
   const usage = lane.usage || {}
   const status = lane.status || []
+  // The state's own action, cut to the heading's line: a word you can press between `state` and the state
+  // word. A handed lane keeps the same slot as a message — `in review` is not a button, so it stays mixed
+  // case — and `close` keeps the full-width row it needs, because two words here would not fit in 290 px.
+  const stateAction = !lane.shelved && ['done', 'stopped', 'failed', 'error'].includes(lane.state)
+    ? lane.handed
+      ? jsx('span', {
+          // The heading is uppercase; a message keeps its own case, so `normal-case` is not optional here.
+          className: 'flex shrink-0 items-center justify-center rounded border px-2 text-[0.625rem] normal-case',
+          style: { height: BAND_MIN_H, boxSizing: 'border-box', color: ASK_TEXT, borderColor: ASK_TEXT },
+          children: 'in review'
+        })
+      : jsx(HoverBox, {
+          onClick: () =>
+            ctx
+              .rest(`/lanes/${encodeURIComponent(lane.lane)}/hand`, {
+                method: 'POST',
+                body: { session_key: sessionId },
+                timeoutMs: 8000
+              })
+              .then(() => query.refetch()),
+          title: 'queue this lane for review; send on the review row asks the orchestrator',
+          className:
+            'flex shrink-0 items-center justify-center rounded border px-2 text-[0.625rem] uppercase',
+          style: { height: BAND_MIN_H, boxSizing: 'border-box', color: ASK_TEXT, borderColor: ASK_TEXT },
+          hoverFill: 'var(--ui-bg-tertiary)',
+          children: 'to review'
+        })
+    : null
 
   return jsxs('div', {
     // The card is a column: a fixed header, the areas that scroll, and the thread pinned to the
@@ -2633,39 +2661,23 @@ function LaneStatus({ ctx }) {
         onDone: () => query.refetch()
       }),
 
-      // The state word rides the heading's line, on its right — in the state's TEXT tone, not its
-      // frame tone: the frame hex is 1.9–2.9:1 on the surface.
+      // THREE things on the heading's line: the word `state`, the one action this state offers, and the
+      // state itself. He pointed both arrows at the gap between them: the button belongs there, not on a
+      // row of its own under the heading.
       jsx(Section, {
         title: 'state',
-        right: jsx('span', {
-          className: 'shrink-0 font-mono text-[0.6875rem] normal-case',
-          style: { color: stateText(lane) || 'var(--ui-text-secondary)' },
-          children: lane.state
+        right: jsxs('div', {
+          className: 'flex shrink-0 items-center gap-2',
+          children: [
+            stateAction,
+            jsx('span', {
+              className: 'shrink-0 font-mono text-[0.6875rem] normal-case',
+              style: { color: stateText(lane) || 'var(--ui-text-secondary)' },
+              children: lane.state
+            })
+          ]
         })
       }),
-      !lane.shelved && ['done', 'stopped', 'failed', 'error'].includes(lane.state)
-        ? lane.handed
-          ? jsx('span', {
-              className: STATE_CONTROL_CLASS,
-              style: { ...STATE_CONTROL_STYLE, color: ASK_TEXT, borderColor: ASK_TEXT },
-              children: 'in review'
-            })
-          : jsx(HoverBox, {
-              onClick: () =>
-                ctx
-                  .rest(`/lanes/${encodeURIComponent(lane.lane)}/hand`, {
-                    method: 'POST',
-                    body: { session_key: sessionId },
-                    timeoutMs: 8000
-                  })
-                  .then(() => query.refetch()),
-              title: 'queue this lane for review; send on the review row asks the orchestrator',
-              className: STATE_ACTION_CLASS,
-              style: STATE_CONTROL_STYLE,
-              hoverFill: 'var(--ui-bg-tertiary)',
-              children: 'to review'
-            })
-        : null,
       lane.handed && !lane.shelved
         ? jsx(HoverBox, {
             onClick: () =>
