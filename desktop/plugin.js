@@ -480,8 +480,8 @@ function measureHeight(element) {
   if (typeof document === 'undefined' || !element) return COMPOSER_LINE_H_N
   const style = window.getComputedStyle(element)
   const boxWidth = element.parentElement ? element.parentElement.clientWidth : element.clientWidth
-  // the field's inner width: minus its own 4px padding twice, then the text's 2px left and 58px right
-  const width = boxWidth - 8 - 2 - SEND_RESERVE_N
+  // the field's inner width: minus its own 4px padding twice, then the text's 2px and 6px insets
+  const width = boxWidth - 8 - 2 - 6
   if (!(width > 0)) return COMPOSER_LINE_H_N
   return Math.max(measureComposer(element, style, width).height, COMPOSER_LINE_H_N)
 }
@@ -2045,7 +2045,7 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
       // LAST LINE: while that line leaves the button's column free it stands beside the writing, and
       // the moment a line needs the whole width it drops under the text.
       jsxs('div', {
-        className: 'flex shrink-0 flex-col justify-end',
+        className: 'flex shrink-0 flex-col',
         style: {
           position: 'relative',
           minHeight: `${COMPOSER_H_N + 2}px`,
@@ -2075,8 +2075,8 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
             className: 'w-full min-w-0 resize-none border-0 bg-transparent text-[0.625rem] outline-none',
             style: {
               // Beside the button the writing keeps its column free; under the text it owns the width.
-              // The right padding is the SEND's column, always: no line ever runs under the button.
-              padding: `0 ${SEND_RESERVE_N}px 0 2px`,
+              // The writing owns the whole width; the SEND lives on its own row below it.
+              padding: '0 6px 0 2px',
               // The height lives in the state, not in a write into the DOM: React drops the write.
               height: `${fieldHeight}px`,
               color: 'var(--ui-text-primary)',
@@ -2086,7 +2086,7 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
             }
           }),
           jsx('div', {
-            style: { position: 'absolute', right: '4px', bottom: '4px' },
+            style: { display: 'flex', justifyContent: 'flex-end', marginTop: '4px' },
             children: jsx(HoverBox, {
               onClick: send,
               className:
