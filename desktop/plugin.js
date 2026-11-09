@@ -654,10 +654,12 @@ const collapsedAtom = atom({})
 const selectedBox = atom(null)
 
 
-// The right pane shows exactly one thing. Every pick clears the other four states first: a lane picked
-// while a feature card or a compose field was open used to leave that card on screen, which reads as
-// "I selected another element and the pane is still old".
+// The right pane shows exactly one thing. Every pick clears the other five states first — the settings
+// screen included: a click on a tree row must close it and open what was clicked. A pick made while a
+// feature card or a compose field was open used to leave that card on screen, which reads as "I selected
+// another element and the pane is still old".
 function showLane(name) {
+  showSettings.set(false)
   composeAtom.set(null)
   composeProject.set(false)
   selectedProject.set(null)
@@ -667,6 +669,7 @@ function showLane(name) {
 
 
 function showFeature(project, feature) {
+  showSettings.set(false)
   composeAtom.set(null)
   composeProject.set(false)
   selectedProject.set(null)
@@ -676,6 +679,7 @@ function showFeature(project, feature) {
 
 
 function showProject(name) {
+  showSettings.set(false)
   composeAtom.set(null)
   composeProject.set(false)
   selectedLane.set('')
@@ -686,6 +690,7 @@ function showProject(name) {
 
 /** Nothing is selected: the right pane says so and no figure is drawn. */
 function clearPane() {
+  showSettings.set(false)
   composeAtom.set(null)
   composeProject.set(false)
   selectedProject.set(null)
@@ -695,6 +700,7 @@ function clearPane() {
 
 
 function showComposeFeature(project) {
+  showSettings.set(false)
   composeProject.set(false)
   selectedLane.set('')
   selectedFeature.set(null)
@@ -704,6 +710,7 @@ function showComposeFeature(project) {
 
 
 function showComposeProject() {
+  showSettings.set(false)
   composeAtom.set(null)
   selectedLane.set('')
   selectedFeature.set(null)
@@ -3232,7 +3239,10 @@ function SettingsView({ ctx, data, onChanged }) {
     ]
   })
   const nameRow = adding
-    ? jsx('div', { style: { display: 'flex', alignItems: 'center', gap: '4px' }, children: field('NAME_API_KEY', { value: name, set: setName }, false) })
+    ? jsx('div', {
+        style: { display: 'flex', alignItems: 'center', gap: '4px' },
+        children: field('provider, for example anthropic', { value: name, set: setName }, false)
+      })
     : null
   return jsx(CardShell, {
     title: jsxs('div', {
@@ -3284,7 +3294,8 @@ function SettingsView({ ctx, data, onChanged }) {
                     jsx('span', {
                       className: 'min-w-0 flex-1 truncate font-mono text-[0.625rem]',
                       style: { color: row.set ? 'var(--ui-text-secondary)' : 'var(--ui-text-tertiary)' },
-                      children: row.name
+                      // The row names the provider, not the variable: no underscores on this screen.
+                      children: row.label || row.name
                     }),
                     jsx('span', { ...word, children: row.set ? 'set' : 'not set' })
                   ]

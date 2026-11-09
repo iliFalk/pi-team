@@ -847,11 +847,10 @@ def _catalog() -> Dict[str, Any]:
 # already on this machine. Any other *_API_KEY found in the file is listed after, so a key the user added
 # stays visible; a key that is not on the list is added through the same route.
 SETTINGS_KEYS = [
-    "NVIDIA_API_KEY",
-    "DEEPSEEK_API_KEY",
     "OPENROUTER_API_KEY",
-    "MINIMAX_API_KEY",
     "OPENCODE_GO_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "NVIDIA_API_KEY",
 ]
 KEY_NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]{2,48}$")
 
@@ -881,8 +880,18 @@ def _settings_write(values: Dict[str, Any]) -> Dict[str, Any]:
     return merged
 
 
+def _key_label(name: str) -> str:
+    """What the row says: the provider in plain words, never the variable name.
+
+    `OPENROUTER_API_KEY` reads `openrouter` and `OPENCODE_GO_API_KEY` reads `opencode go` — he asked for
+    the underscores to go, and a row that names a provider is shorter than the name of a shell variable.
+    """
+    text = name[: -len("_API_KEY")] if name.endswith("_API_KEY") else name
+    return text.replace("_", " ").lower().strip() or name
+
+
 def _key_rows() -> List[Dict[str, Any]]:
-    """The five providers the panel always offers, then every key added through it. Nothing else:
+    """The four providers the panel always offers, then every key added through it. Nothing else:
     a *_API_KEY that happens to sit in the file (a scraped key for some other tool) is not the panel's.
 
     The value itself stays in the file; a row carries only its name and whether it has one.
@@ -892,7 +901,7 @@ def _key_rows() -> List[Dict[str, Any]]:
     for name in _settings()["extra_keys"]:
         if name not in names:
             names.append(name)
-    return [{"name": name, "set": bool(keys.get(name))} for name in names]
+    return [{"name": name, "label": _key_label(name), "set": bool(keys.get(name))} for name in names]
 
 
 def _env_write(name: str, value: str) -> None:
@@ -932,7 +941,10 @@ def get_settings() -> Dict[str, Any]:
 @router.post("/settings/key")
 def set_key(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
     """Write one API key into $HERMES_HOME/.env; an empty value clears it."""
-    name = str(payload.get("name") or "").strip().upper()
+    raw = str(payload.get("name") or "").strip().upper()
+    # A provider, not a variable: `anthropic` becomes `ANTHROPIC_API_KEY` and the row shows `anthropic`.
+    raw = raw.replace(" ", "_").replace("-", "_")
+    name = raw if not raw or raw.endswith("_API_KEY") else f"{raw}_API_KEY"
     value = str(payload.get("value") or "").strip()
     if not name or not KEY_NAME_RE.match(name):
         raise HTTPException(status_code=422, detail="a key name is CAPITALS_WITH_UNDERSCORES")
