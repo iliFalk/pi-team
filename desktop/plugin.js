@@ -1000,12 +1000,12 @@ function pillTarget(side) {
     CSS cannot hide it here — the app styles ::-webkit-scrollbar, and a styled scrollbar ignores
     scrollbar-width. Fourteen pixels of negative margin put the bar outside the visible edge.
  */
-function Scroller({ side, grow, className, style, children }) {
+function Scroller({ side, grow, className, style, children, flex }) {
   return jsx('div', {
     style: {
       overflow: 'hidden',
       minHeight: 0,
-      ...(grow ? { flex: '1 1 auto' } : { height: '100%' })
+      ...(flex ? { flex } : grow ? { flex: '1 1 auto' } : { height: '100%' })
     },
     children: jsx('div', {
       className: `pi-team-scroll h-full ${className || ''}`,
@@ -2314,8 +2314,8 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
       })
   }
   return jsxs('div', {
-    // A column with a floor: nothing here shrinks.
-    style: { display: 'flex', flexDirection: 'column', minHeight: 0, flexShrink: 0 },
+    // A column that takes what it is given: the bubble area grows, the composer keeps its size.
+    style: { display: 'flex', flexDirection: 'column', minHeight: 0, flex: '1 1 auto' },
     children: [
       // A chat is anchored at the bottom: the scroll box lays its children out from the bottom up
       // (`column-reverse`), so the newest bubble sits on the composer and a short thread hugs that
@@ -2327,12 +2327,12 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
         // bottom edge instead of hanging at the top, and `38vh` as the ceiling for a long one.
         // 250 px is the PREFERRED height, not a floor the card must honour: on a short window the bubbles give
         // way first, so the composer's own bottom air and border can never be clipped by the card's edge.
-        // It keeps its 250 px and scrolls inside: the TASK window is what pays for a short card.
+        // 250 px is the floor it asks for; above that it takes every spare pixel of the card (no `38vh`
+        // ceiling any more, his call) and scrolls inside, so no empty strip is left between TASK and THREAD.
         style: {
           height: THREAD_MIN_H,
           minHeight: 0,
-          flexShrink: 0,
-          maxHeight: '38vh',
+          flex: '1 1 auto',
           display: 'flex',
           flexDirection: 'column-reverse'
         },
@@ -2759,6 +2759,9 @@ function LaneStatus({ ctx }) {
       jsxs(Scroller, {
         side: 'pane',
         grow: true,
+        // It does NOT grow: an empty diff must not hold a strip of air between TASK and THREAD. Leftover
+        // height belongs to the thread, which is the one thing on this card that can read it.
+        flex: '0 1 auto',
         className: 'flex flex-col pb-2 text-xs',
         children: [
       lane.archived
@@ -2835,8 +2838,9 @@ function LaneStatus({ ctx }) {
         ? null
         : jsx('div', {
             className: 'border-t border-(--ui-stroke-secondary)',
-            // It keeps its height: the composer's own 8 px of air can never be clipped by the card's edge.
-            style: { flexShrink: 0, minHeight: 0, display: 'flex', flexDirection: 'column' },
+            // It takes the card's leftover height: the bubbles are what benefits, and the composer stays on
+            // the bottom edge because it is `shrink-0` inside this column.
+            style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column' },
             children: [
               jsx(Section, { title: 'thread', band: true, first: true }),
               jsx(ThreadView, { ctx, lane, draft, setDraft, onSent: () => query.refetch() })
