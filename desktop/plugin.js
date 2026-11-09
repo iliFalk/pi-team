@@ -2054,30 +2054,18 @@ function Bubble({ who, text, agent }) {
   const name = who === 'jarvis' ? `${agent || 'agent'}`.toLowerCase() : who === 'lane' ? 'pi' : 'user'
   const dot = who === 'jarvis' ? ASK_COLOR : who === 'lane' ? PI_COLOR : RUN_COLOR
   const tone = who === 'jarvis' ? ASK_TEXT : who === 'lane' ? PI_TEXT : RUN_TEXT
-  const body =
-    who === 'jarvis'
-      ? { color: 'var(--ui-text-secondary)' }
-      : who === 'user'
-        ? { background: 'var(--chrome-action-hover)', color: 'var(--ui-text-primary)' }
-        : { color: 'var(--ui-text-tertiary)', fontFamily: 'ui-monospace, monospace' }
   return jsxs('div', {
     className: 'mb-1',
     'data-bubble': who,
     children: [
-      // The author rides ABOVE the bubble: a dot in the speaker's own hue and the name in the state-word
+      // The author rides ABOVE the message: a dot in the speaker's own hue and the name in the state-word
       // tone (half the hue, half the panel's text) so it stays readable in either theme.
       jsxs('div', {
         style: { display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '2px' },
         children: [
           jsx('span', {
             'data-dot': who,
-            style: {
-              width: '5px',
-              height: '5px',
-              flex: 'none',
-              borderRadius: '999px',
-              background: dot
-            }
+            style: { width: '5px', height: '5px', flex: 'none', borderRadius: '999px', background: dot }
           }),
           jsx('span', {
             className: 'text-[0.625rem]',
@@ -2086,23 +2074,22 @@ function Bubble({ who, text, agent }) {
           })
         ]
       }),
-      // A bubble is a row of the panel, not a chat cloud: the height of a band, the same 4px radius, and a
-      // 1px ring in the SPEAKER'S own hue at 85 % — his number. On the light panel he runs: green 4.62:1,
-      // blue 4.21:1, ochre 2.75:1; on the dark one 2.17 / 2.44 / 3.83. Only the ochre stays under 3:1.
+      // NO frame and NO fill: he asked for text only. The dot and the word above carry who spoke; the band's
+      // height and 4px of side padding keep the messages apart without drawing anything.
       jsx('div', {
-        className: 'whitespace-pre-wrap break-words rounded text-[0.625rem] leading-snug',
+        className: 'whitespace-pre-wrap break-words text-[0.625rem] leading-snug',
         style: {
-          ...body,
+          color: 'var(--ui-text-primary)',
           minHeight: `${BAND_MIN_H_N + 2 * BAND_PY}px`,
           boxSizing: 'border-box',
-          padding: `${BAND_PY}px 4px`,
-          boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${dot} 85%, transparent)`
+          padding: `${BAND_PY}px 4px`
         },
         children: text
       })
     ]
   })
 }
+
 
 /** The model, as a chip INSIDE the composer: the field's row carries the writing, the model and the
  *  button, the way he drew it. A click opens the chooser above the box. */
