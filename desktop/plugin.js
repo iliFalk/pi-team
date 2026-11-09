@@ -437,15 +437,13 @@ const SEND_H_N = BAND_MIN_H_N + 2 * BAND_PY + 8
 // the button's width plus the gap it keeps from the edge.
 const SEND_RESERVE_N = 58
 
-/** Does the LAST line of this text leave the button's column free?
- *  The mirror is a bare div with the element's own font metrics, wrapped at the element's FULL
- *  content width — not at the width the current layout leaves — so the answer is the same whichever
- *  side of the switch we are on, and the button cannot oscillate. */
-function lastLineFits(element) {
-  if (typeof document === 'undefined' || !element) return true
-  const style = window.getComputedStyle(element)
-  const full = element.clientWidth - parseFloat(style.paddingLeft) - 6
-  if (!(full > 0)) return true
+/** Measure a text wrapped at a given width with the element's own font metrics.
+ *  Returns the last line's width and the height it needs. The mirror wraps at the width it is GIVEN,
+ *  never at the element's current padding: a measurement that depends on the very layout it decides
+ *  flips back and forth on every keystroke. */
+function measureComposer(element, style, width) {
+  const fallback = { last: 0, height: COMPOSER_H_N }
+  if (typeof document === 'undefined' || !element || !(width > 0)) return fallback
   const mirror = document.createElement('div')
   mirror.style.cssText = [
     'position:absolute',
@@ -453,7 +451,8 @@ function lastLineFits(element) {
     'top:0',
     'visibility:hidden',
     'pointer-events:none',
-    `width:${full}px`,
+    'box-sizing:content-box',
+    `width:${width}px`,
     `font-family:${style.fontFamily}`,
     `font-size:${style.fontSize}`,
     `line-height:${style.lineHeight}`,
@@ -468,9 +467,28 @@ function lastLineFits(element) {
   document.body.appendChild(mirror)
   const box = mirror.getBoundingClientRect()
   const end = marker.getBoundingClientRect()
+  const height = mirror.scrollHeight
   document.body.removeChild(mirror)
-  const width = end.left - box.left
-  return width <= full - SEND_RESERVE_N
+  return { last: Math.max(0, end.left - box.left), height }
+}
+
+/** The composer's layout for one text: where the SEND goes and how tall the field must be.
+ *  The DECISION is measured at the field's full width, the same in both modes, so the answer cannot
+ *  depend on the mode it decides. The HEIGHT is then measured at the width that mode really gives
+ *  the text, because the writing wraps differently on each side of the switch. */
+function measureField(element) {
+  const fallback = { stacked: false, height: COMPOSER_H_N }
+  if (typeof document === 'undefined' || !element) return fallback
+  const style = window.getComputedStyle(element)
+  const boxWidth = element.parentElement ? element.parentElement.clientWidth : element.clientWidth
+  // the field's inner width: minus its own 4px padding twice, then the text's 2px and 6px insets
+  const full = boxWidth - 8 - 8
+  if (!(full > 0)) return fallback
+  const atFull = measureComposer(element, style, full)
+  const beside = atFull.last <= full - SEND_RESERVE_N
+  const used = beside ? measureComposer(element, style, Math.max(40, full - (SEND_RESERVE_N - 6))) : atFull
+  const height = Math.min(Math.max(used.height, COMPOSER_H_N), COMPOSER_MAX_H_N)
+  return { stacked: !beside, height }
 }
 const STATE_CONTROL_STYLE = {
   height: `${BAND_MIN_H_N + 2 * BAND_PY}px`,
@@ -1987,8 +2005,10 @@ function Bubble({ who, text }) {
 
 /** The conversation about one lane, with a box that sends into the chat, not into pi. */
 function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
-  // Whether the SEND has dropped under the text: decided by the last line's width, see lastLineFits.
-  const [stacked, setStacked] = useState(false)
+  // The composer's layout, decided from its text and owned by React: a `stacked` flag (the SEND under
+  // the writing) and the height the text needs. Written straight into the DOM, both were undone by
+  // the next render — that overwrote the inline height and made the field jump.
+  const [field, setField] = useState({ stacked: false, height: COMPOSER_H_N })
   const messages = lane.thread || []
   const send = () => {
     const text = draft.trim()
@@ -2001,7 +2021,7 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
       })
       .then(() => {
         setDraft('')
-        setStacked(false)
+        setField({ stacked: false, height: COMPOSER_H_N })
         onSent()
       })
   }
@@ -2031,7 +2051,7 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
       // LAST LINE: while that line leaves the button's column free it stands beside the writing, and
       // the moment a line needs the whole width it drops under the text.
       jsxs('div', {
-        className: stacked ? 'flex shrink-0 flex-col' : 'flex shrink-0 flex-col justify-center',
+        className: field.stacked ? 'flex shrink-0 flex-col' : 'flex shrink-0 flex-col justify-center',
         style: {
           position: 'relative',
           minHeight: `${COMPOSER_H_N + 2}px`,
@@ -2048,16 +2068,7 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
             rows: 1,
             placeholder: 'say something about this lane',
             onChange: event => setDraft(event.target.value),
-            onInput: event => {
-              const element = event.currentTarget
-              // Height follows the content: reset it, read what the browser needs, cap the field so a
-              // pasted wall of text cannot swallow the card.
-              element.style.height = 'auto'
-              element.style.height = `${Math.min(element.scrollHeight, COMPOSER_MAX_H_N)}px`
-              // Then decide the button's place from the text itself, not from the current layout: the
-              // mirror always wraps at the FULL width, so the answer cannot flip back and forth.
-              setStacked(!lastLineFits(element))
-            },
+            onInput: event => setField(measureField(event.currentTarget)),
             onKeyDown: event => {
               // Enter sends, Shift+Enter is a new line.
               if (event.key === 'Enter' && !event.shiftKey) {
@@ -2070,10 +2081,12 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
             className: 'w-full min-w-0 resize-none border-0 bg-transparent text-[0.625rem] outline-none',
             style: {
               // Beside the button the writing keeps its column free; under the text it owns the width.
-              padding: `0 ${stacked ? 6 : SEND_RESERVE_N}px 0 2px`,
+              padding: `0 ${field.stacked ? 6 : SEND_RESERVE_N}px 0 2px`,
               // The writing rides two pixels lower than the exact middle, which is where the eye
               // wants it against the button: a transform, so the layout does not move.
-              transform: stacked ? undefined : `translateY(${COMPOSER_NUDGE})`,
+              transform: field.stacked ? undefined : `translateY(${COMPOSER_NUDGE})`,
+              // The height lives in the state, not in a write into the DOM: React drops the write.
+              height: `${field.height}px`,
               color: 'var(--ui-text-primary)',
               lineHeight: 1.2,
               overflowY: 'auto',
@@ -2081,7 +2094,7 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
             }
           }),
           jsx('div', {
-            style: stacked
+            style: field.stacked
               ? { display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }
               : { position: 'absolute', right: '4px', bottom: '4px' },
             children: jsx(HoverBox, {
