@@ -459,8 +459,18 @@ def _lane_entry(lane_dir: Path) -> Optional[Dict[str, Any]]:
     if state == "running" and not _pid_alive(record.get("pid")):
         state = "stopped"
 
+    # A check stands only for the worktree it was made on: compare the recorded sha with the current HEAD, so
+    # a commit that landed after `pi-lane check` puts the lane back to `in review`.
+    head = ""
+    if worktree and Path(worktree).is_dir():
+        rc, out = _run_git(worktree, "rev-parse", "HEAD")
+        head = out.strip() if rc == 0 else ""
+    checked = bool(record.get("checked_at")) and bool(head) and str(record.get("checked_sha") or "") == head
+
     entry: Dict[str, Any] = {
         "agent": _agent_name(),
+        "checked": checked,
+        "checked_at": record.get("checked_at") or 0,
         "lane": record.get("lane") or lane_dir.name,
         "task": record.get("task") or "",
         "project": record.get("project") or (Path(str(record.get("repo") or "")).name or "—"),

@@ -2642,15 +2642,8 @@ function LaneStatus({ ctx }) {
         )
       ]
     })
-  const stateAction = !lane.shelved && ['done', 'stopped', 'failed', 'error'].includes(lane.state)
-    ? lane.handed
-      ? jsx('span', {
-          // The heading is uppercase; a message keeps its own case, so `normal-case` is not optional here.
-          className: 'flex shrink-0 items-center justify-center rounded border px-2 text-[0.625rem] normal-case',
-          style: { height: BAND_MIN_H, boxSizing: 'border-box', color: ASK_TEXT, borderColor: ASK_TEXT },
-          children: 'in review'
-        })
-      : ask === 'review'
+  const stateAction = !lane.shelved && !lane.handed && ['done', 'stopped', 'failed', 'error'].includes(lane.state)
+    ? ask === 'review'
         ? confirmPair(
             () => setAsk(null),
             () => {
@@ -2806,14 +2799,24 @@ function LaneStatus({ ctx }) {
           children: [
             jsx('span', {
               className: 'shrink-0 font-mono text-[0.6875rem] normal-case',
-              style: { color: stateText(lane) || 'var(--ui-text-secondary)' },
-              children: lane.state
+              // The shelf speaks first: a lane in review says `in review`, a checked one says `reviewed`, and
+              // only an unshelved lane shows the run's own state.
+              style: {
+                color: lane.shelved
+                  ? stateText(lane) || 'var(--ui-text-secondary)'
+                  : lane.checked
+                    ? RUN_TEXT
+                    : lane.handed
+                      ? ASK_TEXT
+                      : stateText(lane) || 'var(--ui-text-secondary)'
+              },
+              children: lane.shelved ? lane.state : lane.checked ? 'reviewed' : lane.handed ? 'in review' : lane.state
             }),
             stateAction
           ]
         })
       }),
-      lane.handed && !lane.shelved
+      lane.checked && !lane.shelved
         ? ask === 'close'
           ? jsx('div', {
               className: 'mx-2.5 my-1 flex shrink-0 items-center justify-center',

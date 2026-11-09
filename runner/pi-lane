@@ -372,6 +372,35 @@ def close_lanes(argv: list) -> int:
     return 1 if failed else 0
 
 
+def check_lane(argv: list) -> int:
+    """Record that the orchestrator read this lane's work: `checked_at` and the worktree's HEAD.
+
+    The panel shows a lane as `reviewed` — and offers its CLOSE control — only while that sha is still the
+    worktree's HEAD, so a check can never stand for work that landed after it.
+    """
+    parser = argparse.ArgumentParser(prog="pi-lane check")
+    parser.add_argument("lane")
+    args = parser.parse_args(argv)
+    lane_dir = hermes_home() / "lanes" / args.lane
+    record = read_json(lane_dir / "lane.json")
+    if record is None:
+        print(f"no such lane: {args.lane}", file=sys.stderr)
+        return 1
+    worktree = str(record.get("worktree") or "")
+    if not worktree or not Path(worktree).is_dir():
+        print(f"{args.lane}: no worktree to check", file=sys.stderr)
+        return 1
+    rc, sha, err = _git(worktree, "rev-parse", "HEAD")
+    if rc != 0:
+        print(f"{args.lane}: git says: {err}", file=sys.stderr)
+        return 1
+    record["checked_at"] = int(time.time())
+    record["checked_sha"] = sha
+    write_record(lane_dir, record)
+    print(f"{args.lane}: checked at {sha[:7]}")
+    return 0
+
+
 def say_in_thread(argv: list) -> int:
     """Append an orchestrator reply into a lane's thread. Nothing is sent to pi."""
     parser = argparse.ArgumentParser(prog="pi-lane say")
@@ -562,6 +591,8 @@ def continue_lane(argv: list) -> int:
 def main() -> int:
     if len(sys.argv) > 1 and sys.argv[1] == "close":
         return close_lanes(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "check":
+        return check_lane(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "say":
         return say_in_thread(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "continue":
