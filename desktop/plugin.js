@@ -425,6 +425,8 @@ const headerBandStyle = { ...bandStyle, minHeight: BAND_MIN_H, boxSizing: 'conte
 // multiplies: a const that reads them earlier dies on the temporal dead zone.
 const STATE_CONTROL_CLASS =
   'mx-2.5 my-1 flex shrink-0 items-center justify-center rounded border border-(--ui-stroke-secondary) text-[0.6875rem]'
+// The app's composer measures 42px outer with a 40px fill: our thread composer copies it.
+const COMPOSER_H_N = 40
 const STATE_CONTROL_STYLE = {
   height: `${BAND_MIN_H_N + 2 * BAND_PY}px`,
   boxSizing: 'border-box'
@@ -1975,8 +1977,20 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
             .reverse()
         ]
       }),
+      // The composer wears the app's own input field: `42px` outer (40 of fill plus its 1px border),
+      // radius `8`, the accent as its border, a 4% surface as its fill, and the same `8px` of air
+      // below it that the app's composer keeps above the window edge.
       jsxs('div', {
-        className: 'flex shrink-0 items-center gap-1 px-2.5 py-1',
+        className: 'flex shrink-0 items-center gap-1',
+        style: {
+          height: `${COMPOSER_H_N + 2}px`,
+          boxSizing: 'border-box',
+          margin: '0 10px 8px',
+          padding: '0 4px',
+          borderRadius: '8px',
+          border: '1px solid var(--ui-accent)',
+          background: 'var(--ui-bg-quaternary)'
+        },
         children: [
           jsx(Input, {
             value: draft,
