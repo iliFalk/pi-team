@@ -1772,6 +1772,18 @@ function LaneList({ ctx }) {
   })
 }
 
+// `+n` takes the running green, `−n` the failure red: the two halves of a diff are the one place in STATUS
+// where a number carries a meaning of its own, so they are the two state colours and nothing else is coloured.
+function DiffPair({ insertions, deletions }) {
+  return jsxs('span', {
+    children: [
+      jsx('span', { style: { color: RUN_TEXT }, children: `+${insertions}` }),
+      ' ',
+      jsx('span', { style: { color: BAD_TEXT }, children: `−${deletions}` })
+    ]
+  })
+}
+
 function Row({ label, value, color }) {
   return jsxs('div', {
     // 15px, not 18: the row is a fixed height with the padding inside it (`boxSizing: border-box`), so ten
@@ -2471,7 +2483,12 @@ function Receipt({ merge }) {
       jsx(Row, { label: 'commit', value: `${merge.short} · ${merge.date}`, color: RUN_TEXT }),
       jsx(Row, {
         label: 'diff',
-        value: `${merge.files} files  +${merge.insertions} −${merge.deletions}`
+        value: jsxs('span', {
+          children: [
+            `${merge.files} files  `,
+            jsx(DiffPair, { insertions: merge.insertions, deletions: merge.deletions })
+          ]
+        })
       })
     ]
   })
@@ -2647,13 +2664,20 @@ function LaneStatus({ ctx }) {
         ? null
         : jsx(Row, {
             label: 'changes',
-            value: `${lane.files} files  +${lane.insertions} −${lane.deletions}`
+            value: jsxs('span', {
+              children: [
+                `${lane.files} files  `,
+                jsx(DiffPair, { insertions: lane.insertions, deletions: lane.deletions })
+              ]
+            })
           }),
       lane.turns ? jsx(Row, { label: 'turns', value: String(lane.turns) }) : null,
       usage.output
         ? jsx(Row, {
             label: 'tokens',
-            value: `in ${usage.input} · out ${usage.output} · $${Number(usage.total || 0).toFixed(4)}`
+            // Out first, with an up arrow; in with a down arrow. A pair of arrows says which number leaves and
+            // which arrives faster than the words `in` and `out` did in a 10-px row.
+            value: `↑ ${usage.output}   ↓ ${usage.input}   $${Number(usage.total || 0).toFixed(4)}`
           })
         : null,
       // No `branch` (it is `lane/<the header>`) and no `tool` (he removed it): both rows said what the card
