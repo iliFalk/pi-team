@@ -2114,9 +2114,10 @@ function LaneStatus({ ctx }) {
   const usage = lane.usage || {}
   const status = lane.status || []
 
-  return jsxs(Scroller, {
-    side: 'pane',
-    className: 'flex flex-col pb-2 text-xs',
+  return jsxs('div', {
+    // The card is a column: a fixed header, the areas that scroll, and the thread pinned to the
+    // bottom edge so its composer sits where the app's own composer sits.
+    className: 'flex h-full min-h-0 flex-col',
     children: [
       jsx('div', {
         className:
@@ -2124,6 +2125,11 @@ function LaneStatus({ ctx }) {
         style: { height: HEADER_H },
         children: lane.lane
       }),
+      jsxs(Scroller, {
+        side: 'pane',
+        grow: true,
+        className: 'flex flex-col pb-2 text-xs',
+        children: [
       lane.question
         ? jsx(QuestionBlock, {
             ctx,
@@ -2277,10 +2283,7 @@ function LaneStatus({ ctx }) {
 
       lane.archived
         ? jsx(Row, { label: 'record', value: 'closed · folder removed, receipt kept' })
-        : jsx(Section, { title: 'thread', band: true }),
-      lane.archived
-        ? null
-        : jsx(ThreadView, { ctx, lane, draft, setDraft, onSent: () => query.refetch() }),
+        : null,
 
       // The receipt: what this run changed, file by file, biggest first.
       !lane.shelved && (lane.diff_files || []).length
@@ -2344,6 +2347,19 @@ function LaneStatus({ ctx }) {
           node.id
         )
       )
+        ]
+      }),
+      // The thread is not part of the scroll: it is the card's bottom, its bubbles grow upward and
+      // its composer stays on the edge — level with the app's own input field.
+      lane.shelved
+        ? null
+        : jsx('div', {
+            className: 'shrink-0 border-t border-(--ui-stroke-secondary)',
+            children: [
+              jsx(Section, { title: 'thread', band: true, first: true }),
+              jsx(ThreadView, { ctx, lane, draft, setDraft, onSent: () => query.refetch() })
+            ]
+          })
     ]
   })
 }
