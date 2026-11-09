@@ -1994,7 +1994,8 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
           minHeight: `${COMPOSER_H_N + 2}px`,
           boxSizing: 'border-box',
           margin: '0 10px 8px',
-          padding: '2px 4px 2px',
+          // One inset on every side: the SEND keeps the same air above, below and to its right.
+          padding: '4px',
           borderRadius: '4px',
           border: '1px solid var(--ui-accent)',
           background: 'var(--ui-bg-editor)'
@@ -2020,12 +2021,21 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
               }
             },
             className:
-              'w-full min-w-0 flex-1 resize-none border-0 bg-transparent px-1 py-0 text-[0.625rem] leading-snug outline-none',
-            style: { color: 'var(--ui-text-primary)', overflowY: 'auto', maxHeight: `${COMPOSER_MAX_H_N}px` }
+              'w-full min-w-0 flex-1 resize-none border-0 bg-transparent px-1 py-0 text-[0.625rem] outline-none',
+            // A tight line box: the words keep their own air, so the gap above the SEND is the box's
+            // padding and not a descender's worth of leading.
+            style: {
+              color: 'var(--ui-text-primary)',
+              lineHeight: 1.2,
+              overflowY: 'auto',
+              maxHeight: `${COMPOSER_MAX_H_N}px`
+            }
           }),
           // The control line under the writing: SEND on the right, where the app puts its own.
           jsx('div', {
             className: 'flex shrink-0 items-center justify-end',
+            // The same air the box keeps on its sides, so the SEND sits in an even inset.
+            style: { marginTop: '4px' },
             children: jsx(HoverBox, {
               onClick: send,
               className:
