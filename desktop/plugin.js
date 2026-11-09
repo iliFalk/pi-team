@@ -430,8 +430,6 @@ const COMPOSER_H_N = 40
 // The taller SEND that sits on the field's edge: 32px fills the field's inner 40 with an even 4px of
 // air above it and 4px below. The field itself has no ceiling — it grows with its text and the thread
 // block above it rises, so nothing ever needs a scroll bar.
-// The writing's own vertical nudge against the field's exact middle.
-const COMPOSER_NUDGE = '2px'
 // One line of the composer's own text: the floor for the field's height. The BOX keeps its 42px
 // through `minHeight`, so an empty field stays one line tall instead of one line plus padding.
 const COMPOSER_LINE_H_N = 12
@@ -475,23 +473,17 @@ function measureComposer(element, style, width) {
   return { last: Math.max(0, end.left - box.left), height }
 }
 
-/** The composer's layout for one text: where the SEND goes and how tall the field must be.
- *  The DECISION is measured at the field's full width, the same in both modes, so the answer cannot
- *  depend on the mode it decides. The HEIGHT is then measured at the width that mode really gives
- *  the text, because the writing wraps differently on each side of the switch. */
-function measureField(element) {
-  const fallback = { stacked: false, height: COMPOSER_LINE_H_N }
-  if (typeof document === 'undefined' || !element) return fallback
+/** How tall the field must be for its text. Nothing here decides where the SEND goes: the writing is
+ *  bottom-aligned, its last line always stands beside the button and every earlier line sits above —
+ *  so the layout has one shape and can never jump between two. */
+function measureHeight(element) {
+  if (typeof document === 'undefined' || !element) return COMPOSER_LINE_H_N
   const style = window.getComputedStyle(element)
   const boxWidth = element.parentElement ? element.parentElement.clientWidth : element.clientWidth
-  // the field's inner width: minus its own 4px padding twice, then the text's 2px and 6px insets
-  const full = boxWidth - 8 - 8
-  if (!(full > 0)) return fallback
-  const atFull = measureComposer(element, style, full)
-  const beside = atFull.last <= full - SEND_RESERVE_N
-  const used = beside ? measureComposer(element, style, Math.max(40, full - (SEND_RESERVE_N - 6))) : atFull
-  const height = Math.max(used.height, COMPOSER_LINE_H_N)
-  return { stacked: !beside, height }
+  // the field's inner width: minus its own 4px padding twice, then the text's 2px left and 58px right
+  const width = boxWidth - 8 - 2 - SEND_RESERVE_N
+  if (!(width > 0)) return COMPOSER_LINE_H_N
+  return Math.max(measureComposer(element, style, width).height, COMPOSER_LINE_H_N)
 }
 const STATE_CONTROL_STYLE = {
   height: `${BAND_MIN_H_N + 2 * BAND_PY}px`,
@@ -2008,10 +2000,9 @@ function Bubble({ who, text }) {
 
 /** The conversation about one lane, with a box that sends into the chat, not into pi. */
 function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
-  // The composer's layout, decided from its text and owned by React: a `stacked` flag (the SEND under
-  // the writing) and the height the text needs. Written straight into the DOM, both were undone by
-  // the next render — that overwrote the inline height and made the field jump.
-  const [field, setField] = useState({ stacked: false, height: COMPOSER_LINE_H_N })
+  // Only the field's height lives in state — React owns it, because a height written straight into the
+  // DOM is dropped by the next render.
+  const [fieldHeight, setFieldHeight] = useState(COMPOSER_LINE_H_N)
   const messages = lane.thread || []
   const send = () => {
     const text = draft.trim()
@@ -2024,7 +2015,7 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
       })
       .then(() => {
         setDraft('')
-        setField({ stacked: false, height: COMPOSER_LINE_H_N })
+        setFieldHeight(COMPOSER_LINE_H_N)
         onSent()
       })
   }
@@ -2054,7 +2045,7 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
       // LAST LINE: while that line leaves the button's column free it stands beside the writing, and
       // the moment a line needs the whole width it drops under the text.
       jsxs('div', {
-        className: field.stacked ? 'flex shrink-0 flex-col' : 'flex shrink-0 flex-col justify-center',
+        className: 'flex shrink-0 flex-col justify-end',
         style: {
           position: 'relative',
           minHeight: `${COMPOSER_H_N + 2}px`,
@@ -2071,7 +2062,7 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
             rows: 1,
             placeholder: 'say something about this lane',
             onChange: event => setDraft(event.target.value),
-            onInput: event => setField(measureField(event.currentTarget)),
+            onInput: event => setFieldHeight(measureHeight(event.currentTarget)),
             onKeyDown: event => {
               // Enter sends, Shift+Enter is a new line.
               if (event.key === 'Enter' && !event.shiftKey) {
@@ -2084,12 +2075,10 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
             className: 'w-full min-w-0 resize-none border-0 bg-transparent text-[0.625rem] outline-none',
             style: {
               // Beside the button the writing keeps its column free; under the text it owns the width.
-              padding: `0 ${field.stacked ? 6 : SEND_RESERVE_N}px 0 2px`,
-              // The writing rides two pixels lower than the exact middle, which is where the eye
-              // wants it against the button: a transform, so the layout does not move.
-              transform: field.stacked ? undefined : `translateY(${COMPOSER_NUDGE})`,
+              // The right padding is the SEND's column, always: no line ever runs under the button.
+              padding: `0 ${SEND_RESERVE_N}px 0 2px`,
               // The height lives in the state, not in a write into the DOM: React drops the write.
-              height: `${field.height}px`,
+              height: `${fieldHeight}px`,
               color: 'var(--ui-text-primary)',
               lineHeight: 1.2,
               // No scroll bar of its own: the field grows and the whole block rises with it.
@@ -2097,9 +2086,7 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
             }
           }),
           jsx('div', {
-            style: field.stacked
-              ? { display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }
-              : { position: 'absolute', right: '4px', bottom: '4px' },
+            style: { position: 'absolute', right: '4px', bottom: '4px' },
             children: jsx(HoverBox, {
               onClick: send,
               className:
