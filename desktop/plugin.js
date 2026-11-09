@@ -2591,10 +2591,11 @@ function LaneStatus({ ctx }) {
         style: { height: HEADER_H },
         children: lane.lane
       }),
-      jsxs(Scroller, {
-        side: 'pane',
-        grow: true,
-        className: 'flex flex-col pb-2 text-xs',
+      // The STATUS area never moves and is never scrolled: it sits ABOVE the scroll container and outside
+      // it, so a long TASK block or a long thread can push nothing out of the card's top. The question block
+      // rides in the same static head, because it belongs above STATUS and must not be pushed under it.
+      jsx('div', {
+        className: 'shrink-0 border-b border-(--ui-stroke-secondary) pb-1',
         children: [
       lane.question
         ? jsx(QuestionBlock, {
@@ -2655,6 +2656,13 @@ function LaneStatus({ ctx }) {
             ]
           })
         : null,
+        ]
+      }),
+      jsxs(Scroller, {
+        side: 'pane',
+        grow: true,
+        className: 'flex flex-col pb-2 text-xs',
+        children: [
       lane.shelved ? null : jsx(Section, { title: `sessions · ${(lane.feature_sessions || []).length}` }),
       lane.shelved ? null : (lane.feature_sessions || []).map(entry =>
         jsx(
