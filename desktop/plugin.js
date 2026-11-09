@@ -435,6 +435,9 @@ const bandStyle = {
 // floor, so nothing but the floor can set the height. Content-box is explicit: the app may set
 // border-box globally, which would charge the padding against this number instead of adding it.
 const BAND_MIN_H_N = 16
+// The ✕/✓ pair that confirms a decision: the panel's own control height, so it reads as a button and not as
+// a glyph in a 10-px row.
+const CONFIRM_BOX = `${BAND_MIN_H_N + 2 * BAND_PY}px`
 const BAND_MIN_H = `${BAND_MIN_H_N}px`
 const headerBandStyle = { ...bandStyle, minHeight: BAND_MIN_H, boxSizing: 'content-box' }
 // A control in the STATE area: the hover band's height, the card's own width, the word centred — the
@@ -1106,7 +1109,7 @@ function HoverBox({ tag, title, onClick, className, style, hoverFill, hoverColou
 
 /** One control inside a header band: a word, or a square glyph box. The fill the app really has is
  *  `--ui-bg-tertiary`, and the word brightens to `--ui-text-secondary`. */
-function HeaderControl({ title, onClick, label, glyph, size, fontSize, colour, hoverColour, border }) {
+function HeaderControl({ title, onClick, label, glyph, size, fontSize, colour, hoverColour, border, height }) {
   return jsx(HoverBox, {
     title,
     onClick,
@@ -1116,7 +1119,8 @@ function HeaderControl({ title, onClick, label, glyph, size, fontSize, colour, h
     style: {
       // The box sits half a pixel above the text's axis.
       transform: 'translateY(-0.5px)',
-      height: BAND_MIN_H,
+      // A header control is 16 px tall; the confirm pair asks for a bigger one (`CONFIRM_BOX`).
+      height: height || BAND_MIN_H,
       ...(size ? { width: size } : { padding: '0 5px' }),
       fontSize: fontSize || '10.5px',
       lineHeight: 1,
@@ -2609,8 +2613,11 @@ function LaneStatus({ ctx }) {
           {
             title: 'cancel',
             glyph: '✕',
-            size: BAND_MIN_H,
-            fontSize: '12px',
+            // Bigger than the 16-px header control: these two decide a merge, and he wants them as easy to
+            // hit as the card's own buttons. 24 px is the panel's control height.
+            size: CONFIRM_BOX,
+            height: CONFIRM_BOX,
+            fontSize: '14px',
             colour: BAD_TEXT,
             hoverColour: BAD_TEXT,
             border: BAD_TEXT,
@@ -2623,8 +2630,9 @@ function LaneStatus({ ctx }) {
           {
             title: 'go',
             glyph: '✓',
-            size: BAND_MIN_H,
-            fontSize: '12px',
+            size: CONFIRM_BOX,
+            height: CONFIRM_BOX,
+            fontSize: '14px',
             colour: RUN_TEXT,
             hoverColour: RUN_TEXT,
             border: RUN_TEXT,
