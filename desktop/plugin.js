@@ -1052,13 +1052,15 @@ const HOVER_FADE = 'background-color 120ms linear, color 120ms linear, border-co
 /** Hover as state, not a class. The app's build carries no `--ui-fill-*` token and generated no
  *  `hover:text-(--ui-accent)` utility, so both classes painted nothing and left dead controls.
  *  An inline value always applies. The tag belongs to the caller, so a real <button> stays one. */
-function HoverBox({ tag, title, onClick, className, style, hoverFill, hoverColour, children }) {
+function HoverBox({ tag, title, onClick, className, style, hoverFill, hoverColour, children, ...rest }) {
+  // Any other prop passes through untouched: the panel's probes and measurements anchor on data-* names.
   const [over, setOver] = useState(false)
   const base = style || {}
   const paints = {}
   if (hoverFill) paints.background = over ? hoverFill : base.background || 'transparent'
   if (hoverColour) paints.color = over ? hoverColour : base.color
   return jsx(tag === 'button' ? 'button' : 'span', {
+    ...rest,
     ...(tag === 'button' ? { type: 'button' } : { role: 'button', tabIndex: 0 }),
     title: title || '',
     onClick: event => {
@@ -2038,95 +2040,193 @@ function Bubble({ who, text }) {
   })
 }
 
-/** The lane's model, with the list that changes it. `pi-lane continue` reads `provider` and `model` back
- *  out of the lane record, so this line decides what the NEXT run of the lane uses; a run already going
- *  keeps the model it started with. */
+/** The lane's model, at the card's bottom edge, with the search that changes it. `pi-lane continue` reads
+ *  `provider` and `model` back out of the lane record, so a choice binds the NEXT run of this lane and
+ *  never the one already going. The offer is the providers' own catalogues, which the backend fetches. */
 function ModelLine({ ctx, lane, onChanged }) {
   const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  // The model picked in the list, until `set` writes it: the list is a chooser, the button is the gesture.
+  const [chosen, setChosen] = useState(null)
   const query = useQuery({ queryKey: ['pi-team', 'models'], queryFn: () => ctx.rest('/models', REST) })
-  const models = (query.data && query.data.models) || []
+  const catalog = (query.data && query.data.models) || []
+  const providers = (query.data && query.data.providers) || []
   const provider = lane.provider || ''
   const model = lane.model || ''
-  const picked = models.find(row => row.provider === provider && row.model === model)
-  const name = (picked && picked.label) || model || 'not recorded'
-  const pick = next => {
+  const down = providers.filter(row => !row.ok)
+  const needle = search.trim().toLowerCase()
+  // One needle over id AND display name: the provider's own catalogues name the model only in `name`.
+  const shown = needle
+    ? catalog.filter(row => `${row.provider}/${row.model} ${row.name || ''}`.toLowerCase().includes(needle))
+    : catalog
+  const target = chosen || (model ? { provider, model } : null)
+  const toggle = () => {
+    setOpen(!open)
+    setSearch('')
+    setChosen(null)
+  }
+  const apply = () => {
+    if (!target || !target.model) return
+    const same = target.provider === provider && target.model === model
     setOpen(false)
-    if (!next || (next.provider === provider && next.model === model)) return
+    setSearch('')
+    setChosen(null)
+    if (same) return
     ctx
       .rest(`/lanes/${encodeURIComponent(lane.lane)}/model`, {
         method: 'POST',
-        body: { provider: next.provider, model: next.model },
+        body: { provider: target.provider, model: target.model },
         timeoutMs: 8000
       })
       .then(() => onChanged())
   }
+  const label = { color: 'var(--ui-text-tertiary)' }
   const rowStyle = { height: `${MODEL_ROW_H_N}px`, boxSizing: 'border-box', padding: '0 4px' }
+  const line = {
+    className: 'shrink-0 text-[0.625rem] uppercase tracking-wide',
+    style: label
+  }
   return jsxs('div', {
-    // The card's last row: the 8px of air the composer keeps above the window edge now sits under the
-    // model, not under the field.
+    // The card's last row: the 8px of air the composer keeps above the window edge sits under the model.
     style: { margin: '0 10px 8px', display: 'flex', flexDirection: 'column', gap: '4px' },
     children: [
-      // The list opens ABOVE the row it belongs to — between the field and the footer — because a menu
-      // that hangs below its trigger would leave the card. It opens in the flow, so the card, which is
-      // bottom-pinned, pushes the thread up instead of the list hanging over it. The model in use takes
-      // the brightest tone; the provider names the lane.
+      // The chooser opens ABOVE the row it belongs to — between the field and the footer — because a menu
+      // that hangs below its trigger would leave the card. The card is bottom-pinned, so it pushes the
+      // thread up instead of the list hanging over anything.
       open
-        ? jsx('div', {
-            style: { display: 'flex', flexDirection: 'column' },
-            children: models.map(next =>
-              jsx(
-                HoverBox,
-                {
-                  onClick: () => pick(next),
-                  className: 'flex shrink-0 items-center gap-2 rounded',
-                  style: rowStyle,
-                  hoverFill: 'var(--ui-bg-tertiary)',
-                  children: [
-                    jsx('span', {
-                      className: 'min-w-0 flex-1 truncate font-mono text-[0.625rem]',
-                      style: {
-                        color:
-                          next.provider === provider && next.model === model
-                            ? 'var(--ui-text-primary)'
-                            : 'var(--ui-text-secondary)'
-                      },
-                      children: next.label || next.model
-                    }),
-                    jsx('span', {
-                      className: 'shrink-0 text-[0.625rem] uppercase tracking-wide',
-                      style: { color: 'var(--ui-text-tertiary)' },
-                      children: next.provider
-                    })
-                  ]
-                },
-                `${next.provider}/${next.model}`
-              )
-            )
+        ? jsxs('div', {
+            style: { display: 'flex', flexDirection: 'column', gap: '2px' },
+            children: [
+              jsxs('div', {
+                style: { display: 'flex', alignItems: 'center', gap: '4px' },
+                children: [
+                  jsx('input', {
+                    'data-model-search': 'search',
+                    value: search,
+                    autoFocus: true,
+                    placeholder: 'search id or name',
+                    onChange: event => setSearch(event.target.value),
+                    onKeyDown: event => {
+                      // Enter takes the first result: a search is a pick with one keystroke more.
+                      if (event.key === 'Enter' && shown.length) {
+                        event.preventDefault()
+                        setChosen(shown[0])
+                      }
+                    },
+                    className: 'min-w-0 flex-1 rounded border bg-transparent text-[0.625rem] outline-none',
+                    style: {
+                      height: `${MODEL_ROW_H_N}px`,
+                      boxSizing: 'border-box',
+                      padding: '0 6px',
+                      borderColor: 'var(--ui-stroke-secondary)',
+                      color: 'var(--ui-text-primary)'
+                    }
+                  }),
+                  jsx(HoverBox, {
+                    'data-model-set': 'set',
+                    onClick: apply,
+                    title: 'write this model into the lane record',
+                    className:
+                      'flex shrink-0 items-center justify-center rounded border px-2 text-[0.625rem] uppercase',
+                    style: {
+                      height: `${MODEL_ROW_H_N}px`,
+                      boxSizing: 'border-box',
+                      borderColor: 'var(--ui-stroke-secondary)',
+                      color: target ? 'var(--ui-text-secondary)' : 'var(--ui-text-quaternary)'
+                    },
+                    hoverFill: 'var(--ui-bg-tertiary)',
+                    children: 'set'
+                  })
+                ]
+              }),
+              // Seven rows of results, the rest by scrolling: the whole catalog is 550 ids.
+              jsxs('div', {
+                'data-model-results': 'results',
+                className: 'overflow-y-auto',
+                style: { maxHeight: `${MODEL_ROW_H_N * 7}px`, display: 'flex', flexDirection: 'column' },
+                children: [
+                  shown.length
+                    ? shown.map(row =>
+                        jsx(
+                          HoverBox,
+                          {
+                            'data-model-option': `${row.provider}/${row.model}`,
+                            onClick: () => setChosen(row),
+                            title: row.name || row.model,
+                            className: 'flex shrink-0 items-center gap-2 rounded',
+                            style: rowStyle,
+                            hoverFill: 'var(--ui-bg-tertiary)',
+                            children: [
+                              jsx('span', {
+                                className: 'min-w-0 flex-1 truncate font-mono text-[0.625rem]',
+                                style: {
+                                  color:
+                                    row.provider === (target && target.provider) &&
+                                    row.model === (target && target.model)
+                                      ? 'var(--ui-text-primary)'
+                                      : 'var(--ui-text-secondary)'
+                                },
+                                children: row.model
+                              }),
+                              jsx('span', {
+                                className: 'shrink-0 text-[0.625rem]',
+                                style: label,
+                                children: row.provider
+                              })
+                            ]
+                          },
+                          `${row.provider}/${row.model}`
+                        )
+                      )
+                    : jsx('div', {
+                        className: 'px-1 py-1 text-[0.625rem]',
+                        style: label,
+                        children: catalog.length ? 'no match' : 'the catalog is empty'
+                      })
+                ]
+              }),
+              // A provider that could not answer names itself, so a short list is never a mystery.
+              down.length
+                ? jsx('div', {
+                    style: { display: 'flex', flexDirection: 'column' },
+                    children: down.map(row =>
+                      jsx(
+                        'div',
+                        {
+                          className: 'px-1 text-[0.625rem]',
+                          style: label,
+                          children: `${row.provider}: ${row.error || 'failed'}`
+                        },
+                        `down-${row.provider}`
+                      )
+                    )
+                  })
+                : null
+            ]
           })
         : null,
-      // The row itself: the word, the model, the gesture. The whole row is the control, so a 290-px line
-      // needs no second box, and the model's own name is the value the card shows everywhere else.
+      // The footer: what the lane runs with, in the id the provider publishes, and the word that opens the
+      // chooser. Two lines, because a full id does not fit beside a label in 290 px.
       jsx(HoverBox, {
-        onClick: () => setOpen(!open),
+        onClick: toggle,
         title: 'the model the next run of this lane uses',
-        className: 'flex shrink-0 items-center gap-2 rounded',
-        style: rowStyle,
+        className: 'flex shrink-0 flex-col rounded',
+        style: { padding: '3px 4px', boxSizing: 'border-box', gap: '2px' },
         hoverFill: 'var(--ui-bg-tertiary)',
         children: [
-          jsx('span', {
-            className: 'shrink-0 text-[0.625rem] uppercase tracking-wide',
-            style: { color: 'var(--ui-text-tertiary)' },
-            children: 'model'
+          jsxs('div', {
+            style: { display: 'flex', alignItems: 'baseline', gap: '8px' },
+            children: [
+              jsx('span', { ...line, children: 'pi-model' }),
+              jsx('span', { ...line, children: provider }),
+              jsx('span', { className: 'min-w-0 flex-1' }),
+              jsx('span', { ...line, children: open ? 'close' : 'change' })
+            ]
           }),
           jsx('span', {
-            className: 'min-w-0 flex-1 truncate font-mono text-[0.625rem]',
-            style: { color: 'var(--ui-text-secondary)' },
-            children: name
-          }),
-          jsx('span', {
-            className: 'shrink-0 text-[0.625rem] uppercase tracking-wide',
-            style: { color: 'var(--ui-text-tertiary)' },
-            children: open ? 'close' : 'change'
+            className: 'truncate font-mono text-[0.625rem]',
+            style: { color: 'var(--ui-text-secondary)', lineHeight: '1.2' },
+            children: model || 'no model recorded'
           })
         ]
       })

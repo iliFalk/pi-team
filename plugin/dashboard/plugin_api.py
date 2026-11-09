@@ -20,6 +20,7 @@ import shlex
 import subprocess
 import sys
 import time
+import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -761,47 +762,81 @@ def label_session(body: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
 # models: what a lane may run with
 # --------------------------------------------------------------------------- #
 
-# pi's own catalog holds 500-odd ids; a 300-px row cannot offer that. This is the short list the panel
-# draws, and `provider` + `model` are exactly what the runner reads back out of a lane record, so the
-# choice pins the NEXT run of that lane. The file lives in the plugin's data folder — edit the list
-# there, not here; a read creates it from these defaults the first time.
-DEFAULT_MODELS: List[Dict[str, str]] = [
-    {"provider": "nvidia", "model": "nvidia/nemotron-3.5-super-vl-120b-a12b", "label": "nemotron 3.5 super"},
-    {"provider": "nvidia", "model": "deepseek-ai/deepseek-v4.1-flash", "label": "deepseek v4.1 flash"},
-    {"provider": "nvidia", "model": "nvidia/nemotron-3-ultra-550b-a55b", "label": "nemotron 3 ultra"},
-    {"provider": "deepseek", "model": "deepseek-flash", "label": "deepseek flash"},
-    {"provider": "deepseek", "model": "deepseek-v4-pro", "label": "deepseek v4 pro"},
-    {"provider": "openrouter", "model": "anthropic/claude-sonnet-4.5", "label": "claude sonnet 4.5"},
-    {"provider": "openrouter", "model": "anthropic/claude-opus-5.5", "label": "claude opus 5.5"},
+# The offer comes from the providers themselves, not from a list kept here: each one publishes its ids on
+# a models endpoint, and a key is what makes it reachable. The key is read the way the runner reads it —
+# out of $HERMES_HOME/.env — because the service does not inherit that file.
+MODEL_SOURCES: List[Dict[str, str]] = [
+    {"provider": "nvidia", "url": "https://integrate.api.nvidia.com/v1/models", "key": "NVIDIA_API_KEY"},
+    {"provider": "deepseek", "url": "https://api.deepseek.com/models", "key": "DEEPSEEK_API_KEY"},
+    {"provider": "openrouter", "url": "https://openrouter.ai/api/v1/models", "key": "OPENROUTER_API_KEY"},
 ]
+# One catalogue for the whole service, refreshed every ten minutes: ~550 ids over three requests.
+MODEL_TTL = 600
+_MODEL_CACHE: Dict[str, Any] = {"at": 0.0, "payload": None}
 
 
-def _models_path() -> Path:
-    return _hermes_home() / "plugin-data" / "pi-team" / "models.json"
+def _env_file() -> Dict[str, str]:
+    """The keys from $HERMES_HOME/.env, overlaid by the process environment."""
+    values: Dict[str, str] = {}
+    try:
+        text = (_hermes_home() / ".env").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        text = ""
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, value = line.split("=", 1)
+        values[name.strip()] = value.strip().strip('"').strip("'")
+    values.update({name: value for name, value in os.environ.items() if value})
+    return values
 
 
-def _models() -> List[Dict[str, str]]:
-    """The offered models, in the order the panel draws them. One home for the list, and a file the
-    person can edit without a restart: it is read on every request."""
-    path = _models_path()
-    # `Any`: the file is a list of rows, while `_read_json` is typed for objects.
-    data: Any = _read_json(path)
-    rows: List[Dict[str, str]] = []
-    if isinstance(data, list):
-        for row in data:
-            if isinstance(row, dict) and row.get("provider") and row.get("model"):
-                rows.append({
-                    "provider": str(row["provider"]),
-                    "model": str(row["model"]),
-                    "label": str(row.get("label") or row["model"]),
+def _fetch_models(source: Dict[str, str], key: str) -> List[Dict[str, str]]:
+    """One provider's own ids, straight from its models endpoint."""
+    request = urllib.request.Request(source["url"], headers={"Authorization": f"Bearer {key}"})
+    with urllib.request.urlopen(request, timeout=20) as response:
+        body: Any = json.loads(response.read().decode("utf-8", "replace"))
+    rows = body.get("data") if isinstance(body, dict) else None
+    models: List[Dict[str, str]] = []
+    if isinstance(rows, list):
+        for row in rows:
+            if isinstance(row, dict) and row.get("id"):
+                models.append({
+                    "provider": source["provider"],
+                    "model": str(row["id"]),
+                    "name": str(row.get("name") or ""),
                 })
-    if rows:
-        return rows
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(DEFAULT_MODELS, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
-    tmp.replace(path)
-    return [dict(row) for row in DEFAULT_MODELS]
+    models.sort(key=lambda entry: entry["model"].lower())
+    return models
+
+
+def _catalog() -> Dict[str, Any]:
+    """Every model the configured providers publish, with one status row per provider."""
+    now = time.time()
+    cached = _MODEL_CACHE.get("payload")
+    if cached and now - float(_MODEL_CACHE.get("at") or 0) < MODEL_TTL:
+        return cached
+    keys = _env_file()
+    models: List[Dict[str, str]] = []
+    providers: List[Dict[str, Any]] = []
+    for source in MODEL_SOURCES:
+        key = keys.get(source["key"]) or ""
+        if not key:
+            # A missing key is a state of its own: the panel names the provider instead of hiding it.
+            providers.append({"provider": source["provider"], "ok": False, "error": "no key"})
+            continue
+        try:
+            rows = _fetch_models(source, key)
+        except Exception as error:  # one provider down must not empty the list
+            providers.append({"provider": source["provider"], "ok": False, "error": str(error)[:120]})
+            continue
+        providers.append({"provider": source["provider"], "ok": True, "error": "", "count": len(rows)})
+        models.extend(rows)
+    payload = {"providers": providers, "models": models, "at": int(now)}
+    _MODEL_CACHE["at"] = now
+    _MODEL_CACHE["payload"] = payload
+    return payload
 
 
 def _plugin_ctx() -> Any:
@@ -840,8 +875,8 @@ def say_to_lane(lane: str, payload: Dict[str, Any] = Body(default={})) -> Dict[s
 
 @router.get("/models")
 def list_models() -> Dict[str, Any]:
-    """The short list of models a lane may run with."""
-    return {"models": _models()}
+    """Every model the providers publish, with the status of each provider."""
+    return _catalog()
 
 
 @router.post("/lanes/{lane}/model")
@@ -855,13 +890,14 @@ def set_lane_model(lane: str, payload: Dict[str, Any] = Body(default={})) -> Dic
     model = str(payload.get("model") or "").strip()
     if not provider or not model:
         raise HTTPException(status_code=422, detail="provider and model are required")
-    if (provider, model) not in {(row["provider"], row["model"]) for row in _models()}:
-        raise HTTPException(status_code=422, detail="model is not on the panel's list")
     lane_dir = _lanes_root() / lane
     path = lane_dir / "lane.json"
     record = _read_json(path)
     if record is None:
         raise HTTPException(status_code=404, detail="unknown lane")
+    offered = {row["model"] for row in _catalog()["models"] if row["provider"] == provider}
+    if model not in offered:
+        raise HTTPException(status_code=422, detail=f"{provider} does not offer {model}")
     record["provider"] = provider
     record["model"] = model
     # The runner's own format, written the runner's own way: a temp file, then a rename.
