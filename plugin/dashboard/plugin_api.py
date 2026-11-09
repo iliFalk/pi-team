@@ -839,6 +839,111 @@ def _catalog() -> Dict[str, Any]:
     return payload
 
 
+# --------------------------------------------------------------------------- #
+# settings: the panel's own appearance, and the keys the model list needs
+# --------------------------------------------------------------------------- #
+
+# The keys the panel offers, in the order it draws them: the three model providers first, then the ones
+# already on this machine. Any other *_API_KEY found in the file is listed after, so a key the user added
+# stays visible; a key that is not on the list is added through the same route.
+SETTINGS_KEYS = [
+    "NVIDIA_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "OPENROUTER_API_KEY",
+    "MINIMAX_API_KEY",
+    "OPENCODE_GO_API_KEY",
+]
+KEY_NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]{2,48}$")
+PANEL_MODES = ("dark", "light")
+
+
+def _settings_path() -> Path:
+    return _hermes_home() / "plugin-data" / "pi-team" / "settings.json"
+
+
+def _settings() -> Dict[str, Any]:
+    """The panel's own record. One file, read on every request: it changes nothing else."""
+    data = _read_json(_settings_path()) or {}
+    mode = str(data.get("mode") or "dark")
+    return {"mode": mode if mode in PANEL_MODES else "dark"}
+
+
+def _settings_write(values: Dict[str, Any]) -> Dict[str, Any]:
+    path = _settings_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    merged = {**_settings(), **values}
+    tmp = path.parent / (path.name + ".tmp")
+    tmp.write_text(json.dumps(merged, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    tmp.replace(path)
+    return merged
+
+
+def _key_rows() -> List[Dict[str, Any]]:
+    """Every key the panel can hold, with whether it has a value. The value itself stays in the file."""
+    keys = _env_file()
+    names = list(SETTINGS_KEYS)
+    for name in sorted(keys):
+        if name.endswith("_API_KEY") and name not in names:
+            names.append(name)
+    return [{"name": name, "set": bool(keys.get(name))} for name in names]
+
+
+def _env_write(name: str, value: str) -> None:
+    """One line of $HERMES_HOME/.env, replaced in place. An empty value removes the key.
+
+    The value is written and never echoed: no route returns it, and nothing logs the body.
+    """
+    path = _hermes_home() / ".env"
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        text = ""
+    lines = text.splitlines()
+    index = next((i for i, row in enumerate(lines) if row.strip().startswith(f"{name}=")), None)
+    if value:
+        if index is None:
+            lines.append(f"{name}={value}")
+        else:
+            lines[index] = f"{name}={value}"
+    elif index is not None:
+        lines.pop(index)
+    tmp = path.parent / (path.name + ".tmp")
+    tmp.write_text("\n".join(lines).rstrip("\n") + "\n", encoding="utf-8")
+    tmp.replace(path)
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
+
+
+@router.get("/settings")
+def get_settings() -> Dict[str, Any]:
+    """The panel's mode and the API keys it can hold."""
+    return {**_settings(), "keys": _key_rows()}
+
+
+@router.post("/settings")
+def set_settings(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """The panel's own palette. The app's theme is never touched."""
+    mode = str(payload.get("mode") or "").strip()
+    if mode not in PANEL_MODES:
+        raise HTTPException(status_code=422, detail=f"mode must be one of {', '.join(PANEL_MODES)}")
+    return _settings_write({"mode": mode})
+
+
+@router.post("/settings/key")
+def set_key(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Write one API key into $HERMES_HOME/.env; an empty value clears it."""
+    name = str(payload.get("name") or "").strip().upper()
+    value = str(payload.get("value") or "").strip()
+    if not name or not KEY_NAME_RE.match(name):
+        raise HTTPException(status_code=422, detail="a key name is CAPITALS_WITH_UNDERSCORES")
+    _env_write(name, value)
+    # A new key must reach the model list at once, not after the catalogue's ten minutes.
+    _MODEL_CACHE["payload"] = None
+    return {"name": name, "set": bool(value)}
+
+
 def _plugin_ctx() -> Any:
     """The PluginContext kept by this plugin's entry point, when it is loaded."""
     module = sys.modules.get("pi_team_runtime")

@@ -38,7 +38,7 @@ const host = {
 const Input = () => null
 const Button = () => null
 const ConfirmDialog = () => null
-const icons = { Pencil: () => null, ExternalLink: () => null }
+const icons = { Pencil: () => null, ExternalLink: () => null, Settings: () => null }
 `
 
 let body = src
@@ -88,6 +88,9 @@ const fakeLane = {
 const data = {
   lanes: [fakeLane],
   count: 1,
+  // the settings payload the panel's gear opens: a mode and one key per row, never a value
+  mode: 'dark',
+  keys: [{ name: 'NVIDIA_API_KEY', set: true }, { name: 'OPENROUTER_API_KEY', set: false }],
   models: [
     { provider: 'nvidia', model: 'nvidia/nemotron-3.5-super-vl-120b-a12b', label: 'nemotron 3.5 super' },
     { provider: 'deepseek', model: 'deepseek-flash', label: 'deepseek flash' }
@@ -105,7 +108,7 @@ const ctx = { rest: async () => ({}), i18n: { register: () => {} }, register: ()
 const results = {}
 selectedLane.set('theme-picker')
 
-for (const name of ['LaneList', 'LaneRow', 'ListHeader', 'Section', 'Row', 'LaneStatus', 'TeamPane', 'SessionTitle', 'AddSessionRow', 'QuestionBlock', 'FeatureCompose', 'FeatureView', 'ProjectCompose', 'ProjectView', 'ScrollPill', 'Scroller', 'FolderPlus', 'SelectionOutline', 'visibleFrame', 'framePath', 'HeaderControl', 'HoverBox', 'ThreadView', 'ModelLine', 'Bubble']) {
+for (const name of ['LaneList', 'LaneRow', 'ListHeader', 'Section', 'Row', 'LaneStatus', 'TeamPane', 'SessionTitle', 'AddSessionRow', 'QuestionBlock', 'FeatureCompose', 'FeatureView', 'ProjectCompose', 'ProjectView', 'ScrollPill', 'Scroller', 'FolderPlus', 'SelectionOutline', 'visibleFrame', 'framePath', 'HeaderControl', 'HoverBox', 'ThreadView', 'ModelLine', 'SettingsView', 'Bubble']) {
   const fn = eval(name)
   try {
     const out = fn({
