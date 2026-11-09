@@ -2656,13 +2656,6 @@ function LaneStatus({ ctx }) {
             ]
           })
         : null,
-        ]
-      }),
-      jsxs(Scroller, {
-        side: 'pane',
-        grow: true,
-        className: 'flex flex-col pb-2 text-xs',
-        children: [
       lane.shelved ? null : jsx(Section, { title: `sessions · ${(lane.feature_sessions || []).length}` }),
       lane.shelved ? null : (lane.feature_sessions || []).map(entry =>
         jsx(
@@ -2729,6 +2722,13 @@ function LaneStatus({ ctx }) {
             children: 'close'
           })
         : null,
+        ]
+      }),
+      jsxs(Scroller, {
+        side: 'pane',
+        grow: true,
+        className: 'flex flex-col pb-2 text-xs',
+        children: [
       lane.shelved ? null : jsx(Section, { title: 'task', band: true }),
       lane.shelved
         ? null
