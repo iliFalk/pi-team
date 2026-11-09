@@ -1301,9 +1301,13 @@ def hand_lane(lane: str, payload: Dict[str, Any] = Body(default={})) -> Dict[str
     (lane_dir / "lane.json").write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     who = f'{record.get("project") or "?"}/{record.get("group") or "?"}'
+    # The panel asks for the check, not for the merge: `pi-lane close` deletes the worktree and the branch,
+    # so the orchestrator reports first and waits for Ilja's go. The old text ended with "Merge it and close
+    # it", an order this route cannot give.
     text = (
         f'Handed over: lane {lane} ({who}) is finished and waiting for a check. '
-        f'Merge it and close it with pi-lane close {lane}.'
+        f'Read the diff, run the gates and report; then show the plan with `pi-lane close {lane}` '
+        f'and wait for my go.'
     )
     sent = False
     ctx = _plugin_ctx()
