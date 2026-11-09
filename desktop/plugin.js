@@ -2722,13 +2722,6 @@ function LaneStatus({ ctx }) {
             children: 'close'
           })
         : null,
-        ]
-      }),
-      jsxs(Scroller, {
-        side: 'pane',
-        grow: true,
-        className: 'flex flex-col pb-2 text-xs',
-        children: [
       lane.shelved ? null : jsx(Section, { title: 'task', band: true }),
       lane.shelved
         ? null
@@ -2739,6 +2732,13 @@ function LaneStatus({ ctx }) {
             children: lane.task || '—'
           }),
 
+        ]
+      }),
+      jsxs(Scroller, {
+        side: 'pane',
+        grow: true,
+        className: 'flex flex-col pb-2 text-xs',
+        children: [
       lane.archived
         ? jsx(Row, { label: 'record', value: 'closed · folder removed, receipt kept' })
         : null,
