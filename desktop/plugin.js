@@ -1788,21 +1788,29 @@ function DiffPair({ insertions, deletions }) {
   })
 }
 
-function Row({ label, value, color }) {
+function Row({ label, value, color, wrap }) {
   return jsxs('div', {
     // 15px, not 18: the row is a fixed height with the padding inside it (`boxSizing: border-box`), so ten
     // rows of STATUS cost ~30 px less than they did. Inline, because an arbitrary `py-[1.5px]` is not a
-    // utility the app's build is known to carry.
-    className: 'flex items-center justify-between gap-2',
+    // utility the app's build is known to carry. A `wrap` row keeps that floor and grows instead.
+    className: wrap ? 'flex items-start justify-between gap-2' : 'flex items-center justify-between gap-2',
     style: {
-      height: `${ROW_H_N}px`,
+      minHeight: `${ROW_H_N}px`,
+      ...(wrap ? null : { height: `${ROW_H_N}px` }),
       boxSizing: 'border-box',
-      padding: '0 10px'
+      padding: wrap ? '1px 10px' : '0 10px'
     },
     children: [
-      jsx('span', { className: 'shrink-0 text-[0.625rem] text-(--ui-text-tertiary)', children: label }),
       jsx('span', {
-        className: 'truncate text-right font-mono text-[0.625rem]',
+        className: 'shrink-0 text-[0.625rem] text-(--ui-text-tertiary)',
+        style: wrap ? { paddingTop: '1px' } : null,
+        children: label
+      }),
+      jsx('span', {
+        // A `record` line is a sentence, not a value: cut it with an ellipsis and he cannot read what it says.
+        className: wrap
+          ? 'min-w-0 whitespace-pre-wrap break-words text-right font-mono text-[0.625rem]'
+          : 'truncate text-right font-mono text-[0.625rem]',
         // The value in the panel's own text tone: it is what he reads, and secondary sat a step under the label.
         style: { color: color || 'var(--ui-text-primary)' },
         children: value
@@ -2833,7 +2841,7 @@ function LaneStatus({ ctx }) {
       // Three areas, always in this order: STATUS first, then SESSIONS, then STATE.
       // STATUS opens the head, so it always carries no top rule — the question block moved below it.
       jsx(Section, { title: 'status', first: true }),
-      lane.shelved ? jsx(Row, { label: 'closed', value: lane.shelved_reason }) : null,
+      lane.shelved ? jsx(Row, { label: 'closed', value: lane.shelved_reason, wrap: true }) : null,
       lane.merge ? jsx(Receipt, { merge: lane.merge }) : null,
 
       // With a receipt the same numbers already stand on its `diff` row: one row, not two rows saying "1 files".
@@ -3013,7 +3021,7 @@ function LaneStatus({ ctx }) {
         className: 'flex flex-col text-xs',
         children: [
       lane.archived
-        ? jsx(Row, { label: 'record', value: 'closed · folder removed, receipt kept' })
+        ? jsx(Row, { label: 'record', value: 'closed · folder removed, receipt kept', wrap: true })
         : null,
 
       // The receipt: what this run changed, file by file, biggest first.
