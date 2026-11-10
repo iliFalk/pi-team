@@ -2055,22 +2055,28 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
   const [noteFor, setNoteFor] = useState(null)
   const [noteText, setNoteText] = useState('')
   const [own, setOwn] = useState('')
+  // A click PICKS an answer; nothing leaves the card until `answer` is pressed. Choosing and answering are two
+  // decisions, and a mis-click on a list of four was sending the wrong one.
+  const [picked, setPicked] = useState(null)
   const other = options.find(option => /^other/i.test(option))
 
   const sendWithNote = (option, text) => {
-    const trimmed = text.trim()
-    const worded = trimmed ? `on "${option}": ${trimmed}` : ''
-    // The answer first: pi is blocked on it. The note rides behind, so the orchestrator reads both.
-    ask({ value: option }).then(() => (worded ? note(worded) : null))
+    const trimmed = (text || '').trim()
+    ask({ value: option }).then(() => (trimmed ? note(`on "${option}": ${trimmed}`) : null))
+    setPicked(null)
+    setNoteFor(null)
+    setNoteText('')
   }
   const sendOwn = () => {
     const text = own.trim()
     if (!text) return
-    // A select dialog accepts an option string and nothing else: with an `Other…` on the list the text rides
-    // beside it, without one it can only reach the orchestrator.
     if (other) sendWithNote(other, text)
     else note(text)
     setOwn('')
+  }
+  const answer = () => {
+    if (picked === null) return
+    sendWithNote(options[picked], noteFor === picked ? noteText : '')
   }
 
   const inputStyle = {
@@ -2081,20 +2087,20 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
     color: 'var(--ui-text-primary)'
   }
   const inputClass = 'min-w-0 flex-1 rounded border bg-transparent text-[0.625rem] outline-none'
-  const sendWord = onClick =>
+  const wordBox = (label, onClick, colour, borderColour) =>
     jsx(HoverBox, {
       onClick,
-      title: 'send',
+      title: label,
       className:
         'flex shrink-0 items-center justify-center rounded border px-2 text-[0.625rem] uppercase tracking-wide',
       style: {
         height: `${SEND_H_N - 8}px`,
         boxSizing: 'border-box',
-        borderColor: 'var(--ui-stroke-secondary)',
-        color: 'var(--ui-text-secondary)'
+        borderColor: borderColour || 'var(--ui-stroke-secondary)',
+        color: colour
       },
       hoverFill: 'var(--ui-bg-tertiary)',
-      children: 'send'
+      children: label
     })
 
   return jsxs('div', {
@@ -2119,7 +2125,8 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
               jsxs('div', {
                 className: 'flex items-stretch gap-1',
                 children: [
-                  // The answer row: LEFT aligned — a list of choices reads as a list, not as three buttons.
+                  // The answer row: LEFT aligned, and a click only PICKS it — the picked row takes the question
+                  // tone on its border, and `answer` sends it.
                   jsx(HoverBox, {
                     tag: 'button',
                     className:
@@ -2128,17 +2135,15 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
                       minHeight: `${SEND_H_N - 8}px`,
                       boxSizing: 'border-box',
                       padding: '2px 6px',
-                      // Inline, not the class: an answer reads from the left edge like every other row.
                       textAlign: 'left',
                       justifyContent: 'flex-start',
-                      borderColor: 'var(--ui-stroke-secondary)',
-                      color: 'var(--ui-text-primary)'
+                      borderColor: picked === index ? ASK_TEXT : 'var(--ui-stroke-secondary)',
+                      color: picked === index ? 'var(--ui-text-primary)' : 'var(--ui-text-secondary)'
                     },
                     hoverFill: 'var(--ui-bg-tertiary)',
-                    onClick: () => ask({ value: option }),
+                    onClick: () => setPicked(index),
                     children: option
                   }),
-                  // The way to say more about THIS answer without leaving the card.
                   jsx(HoverBox, {
                     onClick: () => {
                       setNoteFor(noteFor === index ? null : index)
@@ -2170,19 +2175,18 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
                         onChange: event => setNoteText(event.target.value),
                         onKeyDown: event => {
                           if (event.key === 'Enter') {
+                            // The note belongs to this answer: picking it is the only sensible reading.
+                            setPicked(index)
                             setNoteFor(null)
-                            sendWithNote(option, noteText)
-                            setNoteText('')
                           }
                         },
                         className: inputClass,
                         style: inputStyle
                       }),
-                      sendWord(() => {
+                      wordBox('save', () => {
+                        setPicked(index)
                         setNoteFor(null)
-                        sendWithNote(option, noteText)
-                        setNoteText('')
-                      })
+                      }, 'var(--ui-text-secondary)')
                     ]
                   })
                 : null
@@ -2191,7 +2195,6 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
           option
         )
       ),
-      // The user's own variant, at the bottom: it becomes the `Other…` answer when pi offers one.
       jsxs('div', {
         className: 'mx-2.5 my-1 flex items-center gap-1',
         children: [
@@ -2205,17 +2208,21 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
             className: inputClass,
             style: inputStyle
           }),
-          sendWord(sendOwn)
+          wordBox('send', sendOwn, 'var(--ui-text-secondary)')
         ]
       }),
-      jsx(HoverBox, {
-        tag: 'button',
-        className:
-          'mx-2.5 my-1 flex shrink-0 items-center justify-start rounded px-2 text-[0.625rem] uppercase tracking-wide',
-        style: { minHeight: `${SEND_H_N - 8}px`, boxSizing: 'border-box', color: 'var(--ui-text-tertiary)' },
-        hoverColour: 'var(--ui-text-primary)',
-        onClick: () => ask({ cancelled: true }),
-        children: 'dismiss'
+      // The decision line: DISMISS on the left, `answer` on the right — the picked option leaves here.
+      jsxs('div', {
+        className: 'mx-2.5 my-1 flex items-center justify-between gap-1',
+        children: [
+          wordBox('dismiss', () => ask({ cancelled: true }), 'var(--ui-text-tertiary)'),
+          wordBox(
+            'answer',
+            answer,
+            picked === null ? 'var(--ui-text-quaternary)' : RUN_TEXT,
+            picked === null ? 'var(--ui-stroke-secondary)' : RUN_TEXT
+          )
+        ]
       })
     ]
   })
