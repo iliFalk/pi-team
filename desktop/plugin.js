@@ -2797,7 +2797,9 @@ function LaneStatus({ ctx }) {
             title: 'queue this lane for review; a second click confirms',
             className:
               'flex shrink-0 items-center justify-center rounded border px-2 text-[0.625rem] uppercase',
-            style: { height: BAND_MIN_H, boxSizing: 'border-box', color: ASK_TEXT, borderColor: ASK_TEXT },
+            // The same height as the ✕/✓ pair it becomes: the row reserves 24 px, and a 16-px word in it
+            // looked like a smaller, second-class control.
+            style: { height: CONFIRM_BOX, boxSizing: 'border-box', color: ASK_TEXT, borderColor: ASK_TEXT },
             hoverFill: 'var(--ui-bg-tertiary)',
             children: 'to review'
           })
