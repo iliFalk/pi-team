@@ -102,6 +102,10 @@ const ASK_BG = 'rgba(7, 98, 180, 0.85)'
 // and half the panel's text and keeps 5.7:1 there (10.31:1 on dark).
 const PI_COLOR = '#76B900'
 const PI_TEXT = `color-mix(in srgb, ${PI_COLOR} 50%, var(--ui-text-primary))`
+// The third hue of the thread: HIS messages take the honey. It is the ochre that was pi's before pi went
+// #76B900, and it is the only warm tone in the panel — your own words should not read as a state.
+const USER_COLOR = '#A97D14'
+const USER_TEXT = `color-mix(in srgb, ${USER_COLOR} 50%, var(--ui-text-primary))`
 
 const ASK_BG_SOFT = 'rgba(7, 98, 180, 0.18)'
 // A question row keeps its blue on hover: the wash deepens and the label brightens to text-secondary,
@@ -2233,8 +2237,8 @@ function Bubble({ who, text, agent }) {
   // Three speakers, three hues: he reads whose words these are before he reads the words. The name over a
   // blue dot is the AGENT'S OWN NAME from the machine (`Jarvis` here), not a constant in this file.
   const name = who === 'jarvis' ? `${agent || 'agent'}`.toLowerCase() : who === 'lane' ? 'pi' : 'user'
-  const dot = who === 'jarvis' ? ASK_COLOR : who === 'lane' ? PI_COLOR : RUN_COLOR
-  const tone = who === 'jarvis' ? ASK_TEXT : who === 'lane' ? PI_TEXT : RUN_TEXT
+  const dot = who === 'jarvis' ? ASK_COLOR : who === 'lane' ? PI_COLOR : USER_COLOR
+  const tone = who === 'jarvis' ? ASK_TEXT : who === 'lane' ? PI_TEXT : USER_TEXT
   return jsxs('div', {
     className: 'mb-1',
     'data-bubble': who,
