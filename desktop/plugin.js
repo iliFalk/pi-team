@@ -2858,9 +2858,9 @@ function LaneStatus({ ctx }) {
         className: 'pb-1',
         // No bottom rule: the thread block below already draws one, and two adjacent rules read as a narrow
         // empty strip when the body between them has no height.
-        // It may give height, but only through the TASK window: every other child sits in a `flexShrink: 0`
-        // wrapper, so STATUS, SESSIONS and STATE keep their place and their size at every window height.
-        style: { display: 'flex', flexDirection: 'column', flexShrink: 1, minHeight: 0 },
+        // LOCKED, like the TASK and DIFF windows below it: the head never gives height. A short card takes its
+        // space from the THREAD, which is the only part of the card that can grow and shrink.
+        style: { display: 'flex', flexDirection: 'column', flexShrink: 0 },
         children: [
       jsx('div', {
         style: { flexShrink: 0 },
@@ -3029,9 +3029,9 @@ function LaneStatus({ ctx }) {
         : jsx('div', {
             className:
               'overflow-y-auto whitespace-pre-wrap px-2.5 py-0.5 text-[0.625rem] leading-snug text-(--ui-text-secondary)',
-            // `TASK_H` is what it WANTS. A weight of 50 against the body's 1 makes this window give up its
-            // height FIRST, down to nothing, so the rows above it, the thread and the composer never move.
-            style: { height: TASK_H, flexShrink: 50, minHeight: 0 },
+            // LOCKED: the window keeps `TASK_H` whatever happens around it, and only its CONTENT scrolls. A
+            // short card takes its space from the thread, never from here.
+            style: { height: TASK_H, flexShrink: 0 },
             children: lane.task || '—'
           }),
 
@@ -3040,9 +3040,9 @@ function LaneStatus({ ctx }) {
       jsxs(Scroller, {
         side: 'pane',
         grow: true,
-        // It does NOT grow: an empty diff must not hold a strip of air between TASK and THREAD. Leftover
-        // height belongs to the thread, which is the one thing on this card that can read it.
-        flex: '0 1 auto',
+        // It neither grows nor shrinks: the TASK and DIFF windows inside are locked, so the body is their
+        // height exactly. Extra or missing space is the thread's business, not this one's.
+        flex: '0 0 auto',
         // No bottom padding either: the sections carry their own air, and `pb-2` alone held an 8-px strip
         // between TASK and THREAD when there was no diff to show.
         className: 'flex flex-col text-xs',
@@ -3062,6 +3062,7 @@ function LaneStatus({ ctx }) {
               // twenty-file run cannot push the thread off the card and the two windows read as one pair.
               jsxs('div', {
                 className: 'flex flex-col overflow-y-auto',
+                // LOCKED too: `TASK_H`, own scroll, nothing moves it.
                 style: { height: TASK_H, flexShrink: 0 },
                 children: [
               (lane.diff_files || []).slice(0, 12).map(file =>
