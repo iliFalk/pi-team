@@ -2923,7 +2923,9 @@ function LaneStatus({ ctx }) {
         title: 'state',
         right: jsxs('div', {
           className: 'flex shrink-0 items-center gap-2',
-          // He swapped them: the state word first, the action after it.
+          // A FIXED 24 px line, whatever stands on it: the word, a 16-px button, or the 24-px ✕/✓ pair. The
+          // row reserves that height in every state, so the STATE area cannot grow when the pair appears.
+          style: { height: CONFIRM_BOX },
           children: [
             jsx('span', {
               className: 'shrink-0 font-mono text-[0.6875rem] normal-case',
