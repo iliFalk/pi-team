@@ -38,10 +38,10 @@ ls ~/.hermes/scripts/pi-lane # the runner
 
 The runner refuses a bad lane name, a non-repository path and a missing `pi`.
 
-**The runner loads the provider key itself.** Hermes keeps keys in `~/.hermes/.env` and does not export
-them to an agent shell, so `pi` started by hand often sees no provider. The runner reads
-`NVIDIA_API_KEY` (and the DeepSeek, OpenRouter, OpenCode, Anthropic keys) from that file and exports
-them before the run.
+**The runner loads the provider key itself.** Hermes never exports a provider key to an agent shell, so
+`pi` started by hand often sees none. The runner asks Hermes's secret scope first and, with a plain
+`python3`, reads `NVIDIA_API_KEY` (and the DeepSeek, OpenRouter, OpenCode, Anthropic keys) from the
+profile file and exports them before the run. It never prints a value.
 
 Defaults: provider `nvidia`, model `nvidia/nemotron-3.5-super-vl-120b-a12b`, thinking `medium`.
 Override with `--provider`, `--model`, `--thinking`.
@@ -89,7 +89,7 @@ yields an empty worktree and a panel that looks broken. Give the fixture one vis
 a task names a file, and check the diff after the first lane lands.
 
 **The coding block travels with the project.** `pi-project agents [<project>…] [--check]` writes the
-block from this skill's `templates/ponytail-block.md` into `<repo>/AGENTS.md`, or refreshes the copy already
+block from this skill's `templates/ponytail-block.md` into the repository's `AGENTS.md`, or refreshes the copy already
 there. The block spans from `<!-- ponytail v1` to `<!-- /ponytail -->`; anything after the end marker is
 the project's own rules and survives. A copy written before the end marker existed ends at its last level
 row and is updated on the legacy rule. `--check` prints `current`, `outdated`, `missing`, `identical` or
@@ -117,7 +117,7 @@ blank draft on click.
 
 | File | Read by a lane | Note |
 |---|---|---|
-| `<repo>/AGENTS.md`, and the same file upward | yes | loads without `--approve`; the project file wins |
+| the repository's `AGENTS.md`, and the same file upward | yes | loads without `--approve`; the project file wins |
 | `~/.pi/agent/AGENTS.md` | yes | global rules for every lane |
 | `~/.hermes/AGENTS.md` | no | Hermes rules; `pi` never reads them |
 
@@ -635,33 +635,18 @@ round trip and breaks the row). `✓` posts `/update/request`, whose only job is
 the request in plain words: pull the repo, put each file where it belongs, restart the backend, ship the
 panel to every client. The orchestrator then does it. That indirection is the point — the backend knows
 this one host's repo path, install paths and service name, while the agent can look at the machine it is
-on, so the button works for anyone who installs the plugin. Do not move the work back into the route;
-`POST /update` survives as a manual path (`TestClient`, one `steps` row per stage) and the button no
-longer calls it.
-
-- **A machine joins the list only after its SSH answers.** Add the entry, then prove it: `ssh <host>
-  'sha256sum <path>'` must print the hash the route will write. Until that works the button reports the
-  host's error and copies nothing there — a refused port or an unapproved Tailscale check is the whole
-  failure, not the plugin.
-- Test a new client end to end through the route, not by eye: call `POST /update` with FastAPI
-  `TestClient`, then read `steps` — one row per stage (`git`, `local`, each host) with `ok` and `detail`,
-  and compare `sha256sum` on the client against the repo. That output is the report Ilja can check.
-
-- The route takes **git's** copy. Commit and push a local edit first, or the button silently reverts it.
+on. The plugin has **no update route of its own**: a catalog install is pinned to one commit, and a
+plugin that replaces its own files breaks that pin. Pull by hand, copy, restart.
+- **A written file is not a shipped file.** `sha256sum` both sides and put the expected value in the
+  reply — the repo, `$HERMES_HOME/desktop-plugins/pi-team/plugin.js` on the window machine, and the copy
+  the backend imports.
 - **An unreachable client makes his screenshots describe the PREVIOUS build.** Keep committing while `ssh
   <host>` times out, but say in every reply which sha the repo holds and which one the client holds, and read
   a correction that repeats an already-fixed defect as a delivery question first: the window is drawing the
-  copy it has, so re-fixing it moves the code away from what he described. The copies that matter are the repo,
-  `$HERMES_HOME/desktop-plugins/pi-team/plugin.js` on the machine that shows the window, and the local agent
-  copy — `sha256sum` on each, expected value in the reply.
-- **The route carries the desktop half only.** `plugin/` (the lane API) reaches a gateway by
-  `cp -r plugin/* ~/.hermes/plugins/pi-team/` plus the serve restart; the button never touches it.
-- **The repo is private**, so `raw.githubusercontent.com` answers 404 to a plain `curl`. A new machine
-  gets the files with `gh repo clone iliFalk/pi-team` or through the button, never by a raw URL.
-- `ssh` rides Tailscale check mode: an unapproved host answers with an approval URL, and the notify shows
-  that line. `local` in `host` writes in place and needs no ssh.
-- The pane cannot run git or write files — the SDK exposes no fs and no exec — so an update is always a
-  backend route, never plugin code.
+  copy it has, so re-fixing it moves the code away from what he described.
+- **The desktop half and the backend half ship separately.** `dashboard/` and `plugin.yaml` reach a
+  gateway by a copy into `~/.hermes/plugins/pi-team/` plus the serve restart; `desktop/plugin.js` reaches
+  the app's plugin folder. One install of the catalog entry does both.
 
 ## Lane status (what the `pi-team` panels read)
 
@@ -732,7 +717,7 @@ systemctl --user stop pi-demo-<lane>                       # the demo's own end,
 - `stopped` reads as a fault in the panel's colours, and the backend re-serves any record whose pid died as
   `stopped`, so re-arm the pid before demonstrating a running row: two dead demo lanes otherwise paint red
   and he reports a fault that is only the fixture.
-- Tear the demo down (`state: done`, or `rm -rf ~/.hermes/lanes/<lane>`) so it never reads as real work.
+- Tear the demo down (`state: done`, or `pi-lane close <lane> --no-merge --yes`) so it never reads as real work.
 
 ## Review and closed
 
@@ -839,7 +824,7 @@ mv ~/src/thinkrail/packages/spec-graph/node_modules/package \
   hermes-serve`) — a direct `curl` on the route answers `401` before routing and proves nothing.
 - **Test a backend route without touching live lanes.** Load `plugin_api.py` by path
   (`importlib.util.spec_from_file_location`), then `FastAPI().include_router(mod.router)` and drive it with
-  `TestClient`. `pireg` needs the real `HERMES_HOME` at import, so point `os.environ['HERMES_HOME']` at a
+  `TestClient`. `pireg` needs the real `HERMES_HOME` at import, so point that environment variable at a
   `mkdtemp` AFTER the import — the module resolves its home per call — and write one `lanes/<probe>/lane.json`
   there. Assert the whole contract in that run: `200` with the record rewritten, the fields the runner reads
   back still present (`provider`, `model`, `thinking`), `422` for a value off the list, `404` for an unknown
@@ -891,7 +876,7 @@ mv ~/src/thinkrail/packages/spec-graph/node_modules/package \
   leaves `~/.hermes/lanes/<lane>`, a worktree and a branch behind, and the panel draws it as real work; a
   hand-written `sessions` entry in the registry then looks like a link Ilja added himself. After every
   probe: `git -C <repo> worktree remove --force .worktrees/<lane>`, `git -C <repo> worktree prune`,
-  `rm -rf ~/.hermes/lanes/<lane>`, drop the session from `projects.json`, and confirm the lane count is
+  `pi-lane close <lane> --no-merge --yes`, drop the session from `projects.json`, and confirm the lane count is
   zero before calling the panel ready.
 - **The panel holds no privilege.** It only reads files and git; every action goes through the runner.
 - **"failed to render" is a ReferenceError in `plugin.js`, not a data fault.** One `jsx()` prop naming a

@@ -3536,84 +3536,16 @@ function FeatureView({ ctx, project, feature, onDone }) {
   })
 }
 
-/** The panel's own settings: its light palette and the API keys the model list needs. A panel cannot
- *  read or write a file, so both sit behind the backend — one settings record, and `$HERMES_HOME/.env`
- *  for the keys. A saved key is never sent back: the row says `set` and nothing more. */
-function SettingsView({ ctx, data, onChanged }) {
-  const [editing, setEditing] = useState(null)
-  const [adding, setAdding] = useState(false)
-  const [name, setName] = useState('')
-  const [value, setValue] = useState('')
+/** The panel's settings: the provider keys the model list needs, and nothing to edit.
+ *  Hermes owns every key, so the panel reports whether this profile holds one and says where to add
+ *  it — no input field, no write route, and no key ever passes through this plugin. */
+function SettingsView({ data }) {
   const keys = (data && data.keys) || []
-  const post = (path, body) => ctx.rest(path, { method: 'POST', body, timeoutMs: 8000 }).then(() => onChanged())
-  const save = () => {
-    const keyName = editing || name.trim().toUpperCase()
-    if (!keyName) return
-    post('/settings/key', { name: keyName, value: value.trim() }).then(() => {
-      setEditing(null)
-      setAdding(false)
-      setName('')
-      setValue('')
-    })
-  }
   const rowStyle = { height: `${MODEL_ROW_H_N}px`, boxSizing: 'border-box', padding: '0 4px' }
-  const inputClass = 'min-w-0 flex-1 rounded border bg-transparent text-[0.625rem] outline-none'
-  const inputStyle = {
-    height: `${MODEL_ROW_H_N}px`,
-    boxSizing: 'border-box',
-    padding: '0 6px',
-    borderColor: 'var(--ui-stroke-secondary)',
-    color: 'var(--ui-text-primary)'
-  }
   const word = {
     className: 'shrink-0 text-[0.625rem] uppercase tracking-wide',
     style: { color: 'var(--ui-text-tertiary)' }
   }
-  const field = (placeholder, bound, secret) =>
-    jsx('input', {
-      value: bound.value,
-      autoFocus: true,
-      type: secret ? 'password' : 'text',
-      placeholder,
-      onChange: event => bound.set(event.target.value),
-      onKeyDown: event => {
-        if (event.key === 'Enter') save()
-        if (event.key === 'Escape') {
-          setEditing(null)
-          setAdding(false)
-          setName('')
-          setValue('')
-        }
-      },
-      className: inputClass,
-      style: inputStyle
-    })
-  const saveRow = jsx('div', {
-    style: { display: 'flex', alignItems: 'center', gap: '4px' },
-    children: [
-      // The value field is always the value: the name stands on its own row when a new key is added.
-      field('paste the key; empty clears it', { value, set: setValue }, true),
-      jsx(HoverBox, {
-        onClick: save,
-        title: 'write this key into ~/.hermes/.env',
-        className: 'flex shrink-0 items-center justify-center rounded border px-2 text-[0.625rem] uppercase',
-        style: {
-          height: `${MODEL_ROW_H_N}px`,
-          boxSizing: 'border-box',
-          borderColor: 'var(--ui-stroke-secondary)',
-          color: 'var(--ui-text-secondary)'
-        },
-        hoverFill: 'var(--ui-bg-tertiary)',
-        children: 'save'
-      })
-    ]
-  })
-  const nameRow = adding
-    ? jsx('div', {
-        style: { display: 'flex', alignItems: 'center', gap: '4px' },
-        children: field('provider, for example anthropic', { value: name, set: setName }, false)
-      })
-    : null
   return jsx(CardShell, {
     title: jsxs('div', {
       className: 'flex w-full items-center justify-between',
@@ -3636,65 +3568,94 @@ function SettingsView({ ctx, data, onChanged }) {
       jsx('div', {
         className: 'text-[0.625rem] leading-relaxed',
         style: { color: 'var(--ui-text-tertiary)' },
-        children: 'A key is written into ~/.hermes/.env and never read back. Empty clears it. The model list follows on its next fetch.'
+        children:
+          'Hermes holds the keys for this profile. Add one in Settings → Providers, then reopen this screen: the model list follows its next fetch.'
       }),
-      ...keys.flatMap((row, index) => {
-        const isEditing = editing === row.name
-        return isEditing
-          ? [jsx('div', { style: { display: 'flex', flexDirection: 'column', gap: '2px' }, children: saveRow }, `edit-${row.name}`)]
-          : [
-              jsx(
-                HoverBox,
-                {
-                  onClick: () => {
-                    setEditing(row.name)
-                    setAdding(false)
-                    setName('')
-                    setValue('')
-                  },
-                  title: `set ${row.name}`,
-                  className: 'flex shrink-0 items-center gap-2 rounded',
-                  // One plain rule between rows: the settings screen carries no shadow and no band.
-                  style: {
-                    ...rowStyle,
-                    borderBottom: index === keys.length - 1 ? 'none' : '1px solid var(--ui-stroke-secondary)'
-                  },
-                  hoverFill: 'var(--ui-bg-tertiary)',
-                  children: [
-                    jsx('span', {
-                      className: 'min-w-0 flex-1 truncate font-mono text-[0.625rem]',
-                      style: { color: row.set ? 'var(--ui-text-secondary)' : 'var(--ui-text-tertiary)' },
-                      // The row names the provider, not the variable: no underscores on this screen.
-                      children: row.label || row.name
-                    }),
-                    jsx('span', { ...word, children: row.set ? 'set' : 'not set' })
-                  ]
-                },
-                `key-${row.name}`
-              )
-            ]
-      }),
-      adding
-        ? jsx('div', { style: { display: 'flex', flexDirection: 'column', gap: '2px' }, children: [nameRow, saveRow] })
-        : jsx(HoverBox, {
-            onClick: () => {
-              setAdding(true)
-              setEditing(null)
-              setName('')
-              setValue('')
-            },
-            title: 'add a key that is not on the list',
-            className: 'flex shrink-0 items-center justify-center rounded border text-[0.625rem] uppercase',
+      ...keys.flatMap((row, index) => [
+        jsx(
+          'div',
+          {
+            title: row.set ? `${row.name} is set` : `${row.name} is not set`,
+            className: 'flex shrink-0 items-center gap-2',
+            // One plain rule between rows: the settings screen carries no shadow and no band.
             style: {
-              height: `${MODEL_ROW_H_N}px`,
-              boxSizing: 'border-box',
-              marginTop: '4px',
-              borderColor: 'var(--ui-stroke-secondary)',
-              color: 'var(--ui-text-tertiary)'
+              ...rowStyle,
+              borderBottom: index === keys.length - 1 ? 'none' : '1px solid var(--ui-stroke-secondary)'
             },
-            hoverFill: 'var(--ui-bg-tertiary)',
-            children: 'add key'
-          })
+            children: [
+              jsx('span', {
+                className: 'min-w-0 flex-1 truncate font-mono text-[0.625rem]',
+                style: { color: row.set ? 'var(--ui-text-secondary)' : 'var(--ui-text-tertiary)' },
+                // The row names the provider, not the variable: no underscores on this screen.
+                children: row.label || row.name
+              }),
+              jsx('span', { ...word, children: row.set ? 'set' : 'not set' })
+            ]
+          },
+          `key-${row.name}`
+        )
+      ])
+    ]
+  })
+}
+
+/** The first run. A fresh install has no lanes and no projects, so the panel says what to do next
+ *  instead of showing an empty tree: four steps in the order a person meets them, and the one button
+ *  that starts the third. `pi-team-demo` seeds three lanes when a viewer wants the card at once. */
+function Onboarding({ onAddProject }) {
+  const step = { className: 'shrink-0 font-mono text-[0.625rem]', style: { color: 'var(--ui-text-tertiary)', width: '14px' } }
+  const name = { className: 'shrink-0 text-[0.625rem] uppercase tracking-wide', style: { color: 'var(--ui-text-secondary)', width: '58px' } }
+  const text = { className: 'min-w-0 flex-1 text-[0.625rem] leading-relaxed' }
+  const rows = [
+    ['1', 'pi', 'npm install -g --ignore-scripts @earendil-works/pi-coding-agent'],
+    ['2', 'runner', 'cp runner/pi-lane ~/.hermes/scripts/pi-lane && chmod +x ~/.hermes/scripts/pi-lane'],
+    ['3', 'key', 'Add a provider key in Hermes Settings → Providers. Lanes take the model from that list.'],
+    ['4', 'project', 'Add a repository this machine can read: the project the lanes will work in.'],
+    ['5', 'lane', 'Ask the agent for a lane in it. The pi-coach procedure arrived with this panel.']
+  ]
+  return jsx(CardShell, {
+    title: jsx('span', { children: 'start here' }),
+    children: [
+      jsx(Section, { title: 'first run', first: true }),
+      jsx('div', {
+        className: 'text-[0.625rem] leading-relaxed',
+        style: { color: 'var(--ui-text-tertiary)' },
+        children: 'No lane yet. A lane is one worktree and one headless pi run, shown here from its first file change to its review.'
+      }),
+      ...rows.map(([number, label, body], index) =>
+        jsx(
+          'div',
+          {
+            className: 'flex shrink-0 items-start gap-2 py-0.5',
+            style: { borderBottom: index === rows.length - 1 ? 'none' : '1px solid var(--ui-stroke-secondary)' },
+            children: [
+              jsx('span', { ...step, children: number }),
+              jsx('span', { ...name, children: label }),
+              jsx('span', { ...text, style: { color: 'var(--ui-text-secondary)' }, children: body })
+            ]
+          },
+          `step-${number}`
+        )
+      ),
+      jsx(HoverBox, {
+        onClick: onAddProject,
+        title: 'add a project by its repository',
+        className: 'flex shrink-0 items-center justify-center rounded border text-[0.625rem] uppercase',
+        style: {
+          height: `${BAND_MIN_H}px`,
+          boxSizing: 'border-box',
+          marginTop: '4px',
+          borderColor: 'var(--ui-stroke-secondary)',
+          color: 'var(--ui-text-secondary)'
+        },
+        hoverFill: 'var(--ui-bg-tertiary)',
+        children: 'add project'
+      }),
+      jsx('div', {
+        className: 'text-[0.625rem] leading-relaxed',
+        style: { color: 'var(--ui-text-tertiary)' },
+        children: 'To see the panel with data first, run `pi-team-demo` from the plugin’s runner folder: it seeds three lanes in a scratch project and removes them with `pi-team-demo --remove`.'
+      })
     ]
   })
 }
@@ -3707,6 +3668,16 @@ function TeamPane({ ctx }) {
     queryKey: ['pi-team', 'settings'],
     queryFn: () => ctx.rest('/settings', REST)
   })
+  // A fresh install has no lanes and no projects: the right column opens on the first-run card instead
+  // of on "pick a lane". The tree reads the same query key, so both halves share one cache entry.
+  const lanesQuery = useQuery({
+    queryKey: ['pi-team', 'lanes'],
+    queryFn: () => ctx.rest('/lanes', REST),
+    refetchInterval: POLL_MS
+  })
+  const nothingYet =
+    !((lanesQuery.data && lanesQuery.data.lanes) || []).length &&
+    !((lanesQuery.data && lanesQuery.data.registry) || []).length
   const compose = useValue(composeAtom)
   const feature = useValue(selectedFeature)
   const project = useValue(selectedProject)
@@ -3742,11 +3713,7 @@ function TeamPane({ ctx }) {
         style: { flex: '1 1 50%', width: '50%', minWidth: 0 },
         onMouseEnter: () => noteHover('pane'),
         children: settingsOpen
-          ? jsx(SettingsView, {
-              ctx,
-              data: settingsQuery.data,
-              onChanged: () => settingsQuery.refetch()
-            })
+          ? jsx(SettingsView, { data: settingsQuery.data })
           : newProject
           ? jsx(ProjectCompose, {
               ctx,
@@ -3773,7 +3740,9 @@ function TeamPane({ ctx }) {
                 feature: feature.feature,
                 onDone: () => selectedFeature.set(null)
               })
-            : jsx(LaneStatus, { ctx })
+            : nothingYet
+              ? jsx(Onboarding, { onAddProject: () => composeProject.set(true) })
+              : jsx(LaneStatus, { ctx })
       }),
       jsx(SelectionOutline, {}),
       jsx('div', {

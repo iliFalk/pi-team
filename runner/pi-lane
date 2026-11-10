@@ -56,7 +56,23 @@ def fail(message: str) -> NoReturn:
 
 
 def load_env_keys() -> None:
-    """Hermes keeps provider keys in ~/.hermes/.env and never exports them."""
+    """Put the provider keys into this process, for the pi run it starts.
+
+    Hermes's own secret scope comes first: run the runner with Hermes's interpreter and the keys
+    arrive profile-scoped, exactly as Hermes reads them. A plain `python3` has no such scope, so the
+    fallback parses the profile's `.env` — the one file the keys live in when no scope is installed.
+    """
+    try:
+        from agent.secret_scope import get_secret
+
+        for name in ENV_KEYS:
+            value = (get_secret(name) or "").strip()
+            if value and not os.environ.get(name):
+                os.environ[name] = value
+        if any(os.environ.get(name) for name in ENV_KEYS):
+            return
+    except Exception:
+        pass
     env_file = hermes_home() / ".env"
     if not env_file.is_file():
         return
@@ -66,8 +82,8 @@ def load_env_keys() -> None:
         return
     for line in lines:
         name, sep, value = line.partition("=")
-        if sep and name in ENV_KEYS and not os.environ.get(name):
-            os.environ[name] = value.strip()
+        if sep and name.strip() in ENV_KEYS and not os.environ.get(name.strip()):
+            os.environ[name.strip()] = value.strip()
 
 
 def write_record(lane_dir: Path, record: dict) -> None:

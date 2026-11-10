@@ -1,0 +1,305 @@
+#!/usr/bin/env python3
+"""pi-team-demo — seed a scratch project and three lanes, or take them away again.
+
+    pi-team-demo              seed ~/work/pi-team-demo plus three lane records
+    pi-team-demo --remove     remove exactly what this script wrote
+
+Nothing here runs pi: the records are fixed, so a fresh install has something to draw before the
+first real lane. `--remove` takes the lanes, their worktrees and branches, the demo project's
+registry entry, and the demo repository itself. Only the three lane names below and a repository
+carrying this script's own marker are ever touched.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+PROJECT = "demo"
+FEATURE = {"settings-menu": "Settings menu", "theme-row": "Theme row"}
+# (lane, feature, state, note). The order is the order the panel draws them in.
+LANES = (
+    ("settings-menu", "settings-menu", "waiting", "Add a theme row to the settings menu."),
+    ("theme-row", "theme-row", "done", "Move the theme row above the language row."),
+    ("search-box", "settings-menu", "done", "Add a search box above the settings list."),
+)
+MARKER = ".pi-team-demo"
+INDEX = """<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>demo</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main id="app">
+      <h1>Settings</h1>
+      <ul id="rows">
+        <li class="row">Language</li>
+        <li class="row">Notifications</li>
+      </ul>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
+"""
+APP = """const rows = document.querySelector('#rows')
+
+function addRow(label) {
+  const row = document.createElement('li')
+  row.className = 'row'
+  row.textContent = label
+  rows.appendChild(row)
+  return row
+}
+
+addRow('Privacy')
+"""
+STYLE = """body {
+  font: 14px/1.5 system-ui, sans-serif;
+  margin: 2rem;
+}
+
+.row {
+  padding: 6px 0;
+}
+"""
+
+
+def hermes_home() -> Path:
+    return Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes")
+
+
+def lanes_root() -> Path:
+    return hermes_home() / "lanes"
+
+
+def registry_path() -> Path:
+    return hermes_home() / "plugin-data" / "pi-team" / "projects.json"
+
+
+def git(repo: Path, *args: str) -> str:
+    done = subprocess.run(
+        ["git", "-C", str(repo), *args], capture_output=True, text=True, check=False
+    )
+    if done.returncode != 0:
+        raise SystemExit(f"pi-team-demo: git {' '.join(args)} failed: {done.stderr.strip()}")
+    return done.stdout
+
+
+def write(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def make_repo(repo: Path) -> None:
+    """A small static page: one file per feature, so a diff is visible and means something."""
+    if (repo / MARKER).is_file():
+        return
+    if repo.exists() and any(repo.iterdir()):
+        raise SystemExit(f"pi-team-demo: {repo} exists and is not this fixture; pick another --repo")
+    repo.mkdir(parents=True, exist_ok=True)
+    (repo / MARKER).write_text("pi-team-demo fixture\n", encoding="utf-8")
+    write(repo / "index.html", INDEX)
+    write(repo / "app.js", APP)
+    write(repo / "styles.css", STYLE)
+    write(repo / ".gitignore", ".worktrees/\n")
+    if not (repo / ".git").is_dir():
+        git(repo, "init", "-q", "-b", "main")
+        git(repo, "config", "user.email", "pi-team-demo@localhost")
+        git(repo, "config", "user.name", "pi-team demo")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "demo: a settings list with three rows")
+
+
+def make_worktree(repo: Path, lane: str) -> Path:
+    worktree = repo / ".worktrees" / lane
+    if worktree.is_dir():
+        return worktree
+    git(repo, "worktree", "add", "-q", "-b", f"lane/{lane}", str(worktree), "main")
+    return worktree
+
+
+def events(lane: str, said: str, turns: int) -> str:
+    """The shape the backend parses: one message_end per assistant turn."""
+    rows = []
+    for turn in range(1, turns + 1):
+        rows.append(
+            {
+                "type": "message_end",
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": said if turn == turns else f"Reading the files ({turn})."},
+                        {"type": "tool_use", "name": "edit", "input": {"path": "app.js"}},
+                    ],
+                    "usage": {
+                        "input": 4000 + 900 * turn,
+                        "output": 220 + 60 * turn,
+                        "cacheRead": 1200,
+                        "cost": {"total": 0.004 * turn},
+                    },
+                },
+            }
+        )
+    return "".join(json.dumps(row) + "\n" for row in rows)
+
+
+def write_lane(repo: Path, lane: str, feature: str, state: str, task: str) -> None:
+    lane_dir = lanes_root() / lane
+    lane_dir.mkdir(parents=True, exist_ok=True)
+    worktree = make_worktree(repo, lane)
+    started = int(time.time()) - 3600
+
+    if lane == "settings-menu":
+        write(
+            worktree / "index.html",
+            INDEX.replace(
+                '<li class="row">Notifications</li>',
+                '<li class="row">Notifications</li>\n        <li class="row">Theme</li>',
+            ),
+        )
+        record_state, finished, exit_code, said = "waiting", None, None, "Two rows left to wire. The theme row needs a colour name."
+        write(
+            lane_dir / "question.json",
+            json.dumps(
+                {
+                    "id": "q-1",
+                    "method": "select",
+                    "title": "Which theme should the row offer?",
+                    "message": "The menu has no theme list yet.",
+                    "options": ["dark", "light", "system"],
+                    "asked_at": started + 600,
+                }
+            ),
+        )
+    elif lane == "search-box":
+        write(
+            worktree / "index.html",
+            INDEX.replace(
+                "<ul id=\"rows\">",
+                "<input id=\"search\" placeholder=\"Search\" />\n      <ul id=\"rows\">",
+            ),
+        )
+        git(worktree, "add", "-A")
+        git(worktree, "commit", "-q", "-m", "settings: a search box above the list")
+        # One edit left uncommitted: the card counts what the lane changed against its own HEAD.
+        write(worktree / "app.js", APP + "\nrows.insertAdjacentHTML('beforebegin', '<p>0 matches</p>')\n")
+        record_state, finished, exit_code, said = "done", started + 900, 0, "Done. The search box filters the list as you type."
+    else:  # theme-row
+        write(
+            worktree / "app.js",
+            APP + "\nrows.prepend(addRow('Theme'))\n",
+        )
+        git(worktree, "add", "-A")
+        git(worktree, "commit", "-q", "-m", "settings: the theme row first")
+        write(worktree / "styles.css", STYLE + "\n.row:first-child {\n  font-weight: 600;\n}\n")
+        record_state, finished, exit_code, said = "done", started + 700, 0, "Done. Theme is the first row now."
+
+    head = git(worktree, "rev-parse", "HEAD").strip()
+    record = {
+        "lane": lane,
+        "project": PROJECT,
+        "group": feature,
+        "task": task,
+        "repo": str(repo),
+        "worktree": str(worktree),
+        "branch": f"lane/{lane}",
+        "state": state if state != "waiting" else record_state,
+        "started": started,
+        "finished": finished,
+        "exit": exit_code,
+        "pid": None,
+        "provider": "nvidia",
+        "model": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+        "thinking": "medium",
+        "session": f"demo-{lane}",
+        "fixture": MARKER.strip("."),
+    }
+    if lane == "theme-row":
+        record["handed_at"] = started + 800
+    if lane == "search-box":
+        record["checked_at"] = started + 1000
+        record["checked_sha"] = head
+    write(lane_dir / "lane.json", json.dumps(record, indent=2) + "\n")
+    write(lane_dir / "events.jsonl", events(lane, said, turns=2 if lane == "settings-menu" else 3))
+    write(
+        lane_dir / "thread.jsonl",
+        json.dumps({"who": "user", "at": started + 60, "text": task}, ensure_ascii=False) + "\n",
+    )
+
+
+def register(repo: Path) -> None:
+    path = registry_path()
+    data = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    projects = data.setdefault("projects", {})
+    entry = projects.setdefault(PROJECT, {})
+    entry.update({"repo": str(repo), "remote": "", "state": "", "created": int(time.time())})
+    features = entry.setdefault("features", {})
+    for name, title in FEATURE.items():
+        features.setdefault(name, {"title": title, "sessions": []})
+    write(path, json.dumps(data, indent=1, ensure_ascii=False) + "\n")
+
+
+def unregister(repo: Path) -> None:
+    path = registry_path()
+    if not path.is_file():
+        return
+    data = json.loads(path.read_text(encoding="utf-8"))
+    projects = data.get("projects") or {}
+    entry = projects.get(PROJECT) or {}
+    if entry.get("repo") != str(repo):
+        return
+    projects.pop(PROJECT, None)
+    write(path, json.dumps(data, indent=1, ensure_ascii=False) + "\n")
+
+
+def remove(repo: Path) -> int:
+    removed = 0
+    for lane, *_ in LANES:
+        lane_dir = lanes_root() / lane
+        record = {}
+        try:
+            record = json.loads((lane_dir / "lane.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            pass
+        if record.get("fixture") != MARKER.strip("."):
+            continue
+        worktree = repo / ".worktrees" / lane
+        if worktree.is_dir():
+            subprocess.run(["git", "-C", str(repo), "worktree", "remove", "--force", str(worktree)], check=False)
+        subprocess.run(["git", "-C", str(repo), "branch", "-D", f"lane/{lane}"], capture_output=True, check=False)
+        shutil.rmtree(lane_dir, ignore_errors=True)
+        removed += 1
+    subprocess.run(["git", "-C", str(repo), "worktree", "prune"], check=False)
+    unregister(repo)
+    if (repo / MARKER).is_file():
+        shutil.rmtree(repo, ignore_errors=True)
+    print(f"pi-team-demo: removed {removed} lane(s), the {PROJECT!r} project and {repo}")
+    return 0
+
+
+def main(argv: list[str]) -> int:
+    repo = Path.home() / "work" / "pi-team-demo"
+    if "--repo" in argv:
+        repo = Path(argv[argv.index("--repo") + 1]).expanduser()
+    if "--remove" in argv:
+        return remove(repo)
+
+    make_repo(repo)
+    for lane, feature, state, task in LANES:
+        write_lane(repo, lane, feature, state, task)
+    register(repo)
+    print(f"pi-team-demo: {len(LANES)} lanes in {repo}")
+    print(f"  records: {lanes_root()}")
+    print("  remove them with: pi-team-demo --remove")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

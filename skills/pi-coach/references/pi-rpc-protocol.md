@@ -54,8 +54,8 @@ what is already buffered, close stdin, then `terminate()` and take the return co
 
 - Read stdout with `select` and a short timeout, not blocking `readline` — the host must stay responsive
 to answer files while the agent is quiet.
-- Provider keys are not in the shell. A host loads `NVIDIA_API_KEY` and the other keys from
-  `~/.hermes/.env` itself, and never prints a value.
+- Provider keys are not in the shell. A host asks Hermes's secret scope first and falls back to the
+  profile's key file, and never prints a value.
 - A project-local `.pi/mcp.json` or `.pi/prompts/` is ignored without `--approve`; a dead MCP server logs a
   warning on start and does not block the lane.
 - `scripts/probe-rpc-question.py` starts a host against a throwaway repo and proves the dialog path on

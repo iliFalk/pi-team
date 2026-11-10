@@ -1,5 +1,0 @@
-name: pi-team
-version: 0.1.0
-kind: backend
-description: "pi lanes for the desktop: lane list and per-lane status (branch, changes, plan, specs)."
-author: "Jarvis"

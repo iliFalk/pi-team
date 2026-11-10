@@ -12,7 +12,7 @@ the last assistant text, usage and the git changes.
 
 from __future__ import annotations
 
-import hashlib
+import hashlib  # noqa: F401  (kept for the digest a caller may print; see `lane_detail`)
 import json
 import os
 import re
@@ -34,6 +34,13 @@ _SCRIPTS = Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes") / "scr
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 import pireg  # noqa: E402
+
+# The plugin's own state module, beside plugin.yaml: the entry point puts the plugin context there
+# and this router reads it. One shared module, so neither half reaches into the other's internals.
+_PLUGIN_ROOT = Path(__file__).resolve().parent.parent
+if str(_PLUGIN_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PLUGIN_ROOT))
+import pi_team_state  # noqa: E402
 
 TAIL_BYTES = 1024 * 1024
 MAX_LANES = 64
@@ -788,8 +795,8 @@ def label_session(body: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
 # --------------------------------------------------------------------------- #
 
 # The offer comes from the providers themselves, not from a list kept here: each one publishes its ids on
-# a models endpoint, and a key is what makes it reachable. The key is read the way the runner reads it —
-# out of $HERMES_HOME/.env — because the service does not inherit that file.
+# a models endpoint, and a key is what makes it reachable. The key comes from Hermes's own secret scope —
+# the same profile-scoped route the rest of Hermes reads — so this plugin never opens a key file itself.
 MODEL_SOURCES: List[Dict[str, str]] = [
     {"provider": "nvidia", "url": "https://integrate.api.nvidia.com/v1/models", "key": "NVIDIA_API_KEY"},
     {"provider": "deepseek", "url": "https://api.deepseek.com/models", "key": "DEEPSEEK_API_KEY"},
@@ -800,21 +807,19 @@ MODEL_TTL = 600
 _MODEL_CACHE: Dict[str, Any] = {"at": 0.0, "payload": None}
 
 
-def _env_file() -> Dict[str, str]:
-    """The keys from $HERMES_HOME/.env, overlaid by the process environment."""
-    values: Dict[str, str] = {}
+def _secret(name: str) -> str:
+    """One key of this profile, as Hermes holds it.
+
+    The scope is the sanctioned route: it already composes the profile's ``.env`` with the
+    environment and honours the active profile under multiplexing. A missing scope or a missing
+    key is a state of its own — the panel names the provider instead of hiding it.
+    """
     try:
-        text = (_hermes_home() / ".env").read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        text = ""
-    for line in text.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        name, value = line.split("=", 1)
-        values[name.strip()] = value.strip().strip('"').strip("'")
-    values.update({name: value for name, value in os.environ.items() if value})
-    return values
+        from agent.secret_scope import get_secret
+
+        return (get_secret(name) or "").strip()
+    except Exception:
+        return ""
 
 
 def _fetch_models(source: Dict[str, str], key: str) -> List[Dict[str, str]]:
@@ -842,11 +847,10 @@ def _catalog() -> Dict[str, Any]:
     cached = _MODEL_CACHE.get("payload")
     if cached and now - float(_MODEL_CACHE.get("at") or 0) < MODEL_TTL:
         return cached
-    keys = _env_file()
     models: List[Dict[str, str]] = []
     providers: List[Dict[str, Any]] = []
     for source in MODEL_SOURCES:
-        key = keys.get(source["key"]) or ""
+        key = _secret(source["key"])
         if not key:
             # A missing key is a state of its own: the panel names the provider instead of hiding it.
             providers.append({"provider": source["provider"], "ok": False, "error": "no key"})
@@ -868,41 +872,14 @@ def _catalog() -> Dict[str, Any]:
 # settings: the panel's own appearance, and the keys the model list needs
 # --------------------------------------------------------------------------- #
 
-# The keys the panel offers, in the order it draws them: the three model providers first, then the ones
-# already on this machine. Any other *_API_KEY found in the file is listed after, so a key the user added
-# stays visible; a key that is not on the list is added through the same route.
+# The provider keys the panel reports on, in the order it draws them. It shows the state of each one and
+# nothing else: Hermes owns the keys, and no route here writes one.
 SETTINGS_KEYS = [
     "OPENROUTER_API_KEY",
     "OPENCODE_GO_API_KEY",
     "DEEPSEEK_API_KEY",
     "NVIDIA_API_KEY",
 ]
-KEY_NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]{2,48}$")
-
-
-def _settings_path() -> Path:
-    return _hermes_home() / "plugin-data" / "pi-team" / "settings.json"
-
-
-def _settings() -> Dict[str, Any]:
-    """The panel's own record: the keys it offers beyond the fixed five. Read on every request."""
-    data = _read_json(_settings_path()) or {}
-    extra: List[str] = []
-    for name in data.get("extra_keys") or []:
-        text = str(name).strip().upper()
-        if text and text not in extra:
-            extra.append(text)
-    return {"extra_keys": extra}
-
-
-def _settings_write(values: Dict[str, Any]) -> Dict[str, Any]:
-    path = _settings_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    merged = {**_settings(), **values}
-    tmp = path.parent / (path.name + ".tmp")
-    tmp.write_text(json.dumps(merged, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
-    tmp.replace(path)
-    return merged
 
 
 def _key_label(name: str) -> str:
@@ -916,77 +893,26 @@ def _key_label(name: str) -> str:
 
 
 def _key_rows() -> List[Dict[str, Any]]:
-    """The four providers the panel always offers, then every key added through it. Nothing else:
-    a *_API_KEY that happens to sit in the file (a scraped key for some other tool) is not the panel's.
+    """One row per provider the panel names, and whether this profile holds its key.
 
-    The value itself stays in the file; a row carries only its name and whether it has one.
+    A row carries the name, a readable label and that flag — never the value, and never a key the
+    panel invented.
     """
-    keys = _env_file()
-    names = list(SETTINGS_KEYS)
-    for name in _settings()["extra_keys"]:
-        if name not in names:
-            names.append(name)
-    return [{"name": name, "label": _key_label(name), "set": bool(keys.get(name))} for name in names]
-
-
-def _env_write(name: str, value: str) -> None:
-    """One line of $HERMES_HOME/.env, replaced in place. An empty value removes the key.
-
-    The value is written and never echoed: no route returns it, and nothing logs the body.
-    """
-    path = _hermes_home() / ".env"
-    try:
-        text = path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        text = ""
-    lines = text.splitlines()
-    index = next((i for i, row in enumerate(lines) if row.strip().startswith(f"{name}=")), None)
-    if value:
-        if index is None:
-            lines.append(f"{name}={value}")
-        else:
-            lines[index] = f"{name}={value}"
-    elif index is not None:
-        lines.pop(index)
-    tmp = path.parent / (path.name + ".tmp")
-    tmp.write_text("\n".join(lines).rstrip("\n") + "\n", encoding="utf-8")
-    tmp.replace(path)
-    try:
-        path.chmod(0o600)
-    except OSError:
-        pass
+    return [
+        {"name": name, "label": _key_label(name), "set": bool(_secret(name))}
+        for name in SETTINGS_KEYS
+    ]
 
 
 @router.get("/settings")
 def get_settings() -> Dict[str, Any]:
-    """The panel's mode and the API keys it can hold."""
-    return {**_settings(), "keys": _key_rows()}
-
-
-@router.post("/settings/key")
-def set_key(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
-    """Write one API key into $HERMES_HOME/.env; an empty value clears it."""
-    raw = str(payload.get("name") or "").strip().upper()
-    # A provider, not a variable: `anthropic` becomes `ANTHROPIC_API_KEY` and the row shows `anthropic`.
-    raw = raw.replace(" ", "_").replace("-", "_")
-    name = raw if not raw or raw.endswith("_API_KEY") else f"{raw}_API_KEY"
-    value = str(payload.get("value") or "").strip()
-    if not name or not KEY_NAME_RE.match(name):
-        raise HTTPException(status_code=422, detail="a key name is CAPITALS_WITH_UNDERSCORES")
-    _env_write(name, value)
-    if name not in SETTINGS_KEYS:
-        extra = _settings()["extra_keys"]
-        if name not in extra:
-            _settings_write({"extra_keys": extra + [name]})
-    # A new key must reach the model list at once, not after the catalogue's ten minutes.
-    _MODEL_CACHE["payload"] = None
-    return {"name": name, "set": bool(value)}
+    """Which provider keys this profile holds. No value ever leaves Hermes."""
+    return {"keys": _key_rows()}
 
 
 def _plugin_ctx() -> Any:
-    """The PluginContext kept by this plugin's entry point, when it is loaded."""
-    module = sys.modules.get("pi_team_runtime")
-    return getattr(module, "ctx", None) if module else None
+    """The plugin context the entry point kept, when the plugin is loaded."""
+    return getattr(pi_team_state, "ctx", None)
 
 
 @router.post("/lanes/{lane}/say")
@@ -1339,75 +1265,6 @@ def answer_lane(lane: str, body: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
         json.dumps(payload, ensure_ascii=False) + "\n", encoding="utf-8"
     )
     return {"lane": lane, "answered": True, **payload}
-
-
-# --------------------------------------------------------------------------- #
-# update: pull the plugin repo, then push the panel file to every client
-# --------------------------------------------------------------------------- #
-
-def _update_clients() -> List[Dict[str, Any]]:
-    """Hosts that show a window. `{"host": "ili@casalt", "path": "/home/ili/..."}`.
-
-    An entry with `host` empty, `local` or this machine's name writes the file in
-    place; anything else reaches the host over ssh and writes it on stdin.
-    """
-    data = _read_json(_hermes_home() / "plugin-data" / "pi-team" / "clients.json") or {}
-    clients = data.get("clients")
-    return [item for item in clients if isinstance(item, dict)] if isinstance(clients, list) else []
-
-
-def _write_client(entry: Dict[str, Any], payload: bytes) -> Dict[str, Any]:
-    host = str(entry.get("host") or "local")
-    target = str(entry.get("path") or "")
-    if not target:
-        return {"host": host, "ok": False, "detail": "no path in clients.json"}
-    parent = str(Path(target).parent)
-    script = (
-        f"mkdir -p {shlex.quote(parent)} && cat > {shlex.quote(target)}.tmp && "
-        f"chmod 644 {shlex.quote(target)}.tmp && mv {shlex.quote(target)}.tmp {shlex.quote(target)}"
-    )
-    if host in ("local", "localhost") or host == os.uname().nodename:
-        done = subprocess.run(["bash", "-c", script], input=payload, capture_output=True, timeout=30)
-    else:
-        done = subprocess.run(
-            ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=6", host, script],
-            input=payload,
-            capture_output=True,
-            timeout=40,
-        )
-    detail = (done.stderr or done.stdout).decode("utf-8", "replace").strip()[:300]
-    return {"host": host, "ok": done.returncode == 0, "detail": detail or "written"}
-
-
-@router.post("/update")
-def update_plugin() -> Dict[str, Any]:
-    """Pull the repo holding this plugin and hand the new panel file to every client."""
-    repo = Path(os.environ.get("PI_TEAM_REPO") or (Path.home() / "work" / "pi-team"))
-    if not (repo / ".git").is_dir():
-        raise HTTPException(status_code=409, detail=f"no git repository at {repo}")
-    source = repo / "desktop" / "plugin.js"
-    if not source.is_file():
-        raise HTTPException(status_code=409, detail=f"{source} missing")
-
-    steps: List[Dict[str, Any]] = []
-    pull = subprocess.run(
-        ["git", "-C", str(repo), "pull", "--ff-only"], capture_output=True, timeout=120
-    )
-    steps.append(
-        {
-            "host": "git",
-            "ok": pull.returncode == 0,
-            "detail": (pull.stdout + pull.stderr).decode("utf-8", "replace").strip()[-300:] or "up to date",
-        }
-    )
-
-    payload = source.read_bytes()
-    digest = hashlib.sha256(payload).hexdigest()[:16]
-    steps.append(_write_client({"path": str(_hermes_home() / "desktop-plugins" / "pi-team" / "plugin.js")}, payload))
-    for entry in _update_clients():
-        steps.append(_write_client(entry, payload))
-
-    return {"sha256": digest, "steps": steps, "ok": all(step["ok"] for step in steps)}
 
 
 @router.get("/lanes/{lane}")

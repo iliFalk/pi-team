@@ -3,10 +3,14 @@
 ## What this repository holds
 
 - `desktop/plugin.js` — the two panes. Plain ESM, loaded by the Hermes desktop app, no build step.
+- `dashboard/plugin_api.py` — the lane API, mounted at `/api/plugins/pi-team/` by the plugin host.
+- `__init__.py` and `pi_team_state.py` — the entry point, which publishes the skill and hands the plugin
+  context to the API, and the one module both halves share.
 - `skills/pi-coach/` — the procedure for the agent that opens and verifies lanes.
+- `runner/` — `pi-lane`, `pi-feature`, `pireg.py`, and the `pi-team-demo` fixture.
 
-The backend stays on the gateway machine: `~/.hermes/plugins/pi-team/`. This repository does not ship
-it, because the desktop half is what a second machine needs.
+The backend runs on the gateway machine, in `~/.hermes/plugins/pi-team/`. One catalog install carries both
+halves: the app loads `desktop/plugin.js`, the gateway imports `dashboard/`.
 
 ## Architecture
 
@@ -46,10 +50,29 @@ them; the panel draws empty nodes.
 
 | Route | Method | Effect |
 |---|---|---|
-| `/lanes` | GET | every lane plus the registry |
-| `/lanes/<lane>` | GET | one lane with per-file status, plan and feature sessions |
+| `/lanes` | GET | every lane, plus the project registry |
+| `/lanes/<lane>` | GET | one lane with per-file status and the last text |
 | `/link` | POST | `{project, feature, session}` — attach a session to a feature |
 | `/unlink` | POST | the same body — drop the link |
+| `/label` | POST | name a linked session inside the panel; the real session keeps its title |
+| `/settings` | GET | which provider keys this profile holds — a flag, never a value |
+| `/models` | GET | the providers' own model ids, one status row per provider |
+| `/lanes/<lane>/model` | POST | pin the provider and the model of a lane |
+| `/lanes/<lane>/say` | POST | put a message about a lane into the chat |
+| `/lanes/<lane>/answer` | POST | answer the question a lane waits on: write `answer.json` |
+| `/lanes/<lane>/hand` | POST | file a finished lane on the review shelf |
+| `/review/send` | POST | put the whole review queue into the chat as one list |
+| `/projects/check` | POST | check a repository before anything is promised |
+| `/projects/prepare` | POST | a project asked for by its URL: it appears at once, the agent clones |
+| `/projects/cancel` | POST | drop a project placeholder that was never cloned |
+| `/features/prepare` | POST | a feature asked for in one line: it appears at once |
+| `/features/cancel` | POST | drop a placeholder that never became a feature |
+| `/update/request` | POST | ask the agent to update the plugin; the route only injects the message |
+
+There is **no route that writes the plugin's own files**. A catalog install is pinned to one commit, and a
+plugin that pulls and replaces itself would move an installed copy to a commit nobody reviewed. The panel's
+`✓` on the update control calls `/update/request`, which puts the request into the chat; the agent does the
+copy.
 
 The backend module is imported once, at `hermes-serve` start. An edit reaches the live route only after
 `systemctl --user restart hermes-serve`.
@@ -75,13 +98,13 @@ The panes read their data from `plugin_api.py`, so both halves ship here and the
 cp desktop/plugin.js ~/.hermes/desktop-plugins/pi-team/plugin.js
 
 # agent half: what the gateway imports, then restart the backend that mounts it
-cp -r plugin/* ~/.hermes/plugins/pi-team/
+cp -r plugin.yaml __init__.py pi_team_state.py dashboard skills runner ~/.hermes/plugins/pi-team/
 systemctl --user restart hermes-serve
 ```
 
 The desktop file hot-reloads; the Python file does not — a changed route, field or fix is served only after
-that restart. `plugin/plugin.yaml` stays inside the folder: a manifest at the repo root would make an
-Install-from-Git claim the agent half too and duplicate a gateway copy that is already there.
+that restart. `plugin.yaml` sits at the repository root, so one catalog install gives the app the panel and
+the gateway the API: the pinned commit is the same tree for both halves.
 
 ## The coding block
 
