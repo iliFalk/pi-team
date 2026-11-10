@@ -4,7 +4,8 @@ Version 1.0 is built, checked and delivered. The next step is not code: the plug
 
 ## Where things stand
 
-Branch `main`, HEAD `270664b`, `origin/main` matches.
+Branch `main`, `origin/main` matches. The panel, the backend and the runner below are what is deployed; the
+skill in the repository is synced with the live one (`270664b`).
 
 | File | sha256 | Installed at |
 |---|---|---|
