@@ -2044,8 +2044,8 @@ function SessionTitle({ ctx, entry, project, feature, onRemove, onChanged }) {
 
 
 function QuestionBlock({ ctx, lane, question, onDone }) {
-  // Answers go to pi; words go to ME. The protocol takes one of the option strings as the answer and nothing
-  // else, so anything he adds travels as a thread note beside the answer (see `sendWithNote`).
+  // Answers go to pi; words go to ME. pi takes one of the option strings as the answer and nothing else, so
+  // the words he adds are shown INSIDE the option and travel as a thread note beside the answer.
   const ask = body =>
     ctx
       .rest(`/lanes/${encodeURIComponent(lane)}/answer`, { method: 'POST', body, timeoutMs: 8000 })
@@ -2056,20 +2056,31 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
       .then(() => onDone && onDone())
 
   const options = (question.options || []).filter(Boolean)
-  const [noteFor, setNoteFor] = useState(null)
-  const [noteText, setNoteText] = useState('')
+  const [editing, setEditing] = useState(null)
+  const [words, setWords] = useState('')
   const [own, setOwn] = useState('')
   // A click PICKS an answer; nothing leaves the card until `answer` is pressed. Choosing and answering are two
   // decisions, and a mis-click on a list of four was sending the wrong one.
   const [picked, setPicked] = useState(null)
+  // The words he appended to an option, by index. They show in the row and go to the orchestrator with the
+  // answer; pi still receives the bare option string.
+  const [notes, setNotes] = useState({})
   const other = options.find(option => /^other/i.test(option))
 
+  const addWords = index => {
+    const text = words.trim()
+    if (text) {
+      setNotes(prev => ({ ...prev, [index]: `${prev[index] ? `${prev[index]} ` : ''}${text}` }))
+    }
+    setEditing(null)
+    setWords('')
+  }
   const sendWithNote = (option, text) => {
     const trimmed = (text || '').trim()
     ask({ value: option }).then(() => (trimmed ? note(`on "${option}": ${trimmed}`) : null))
     setPicked(null)
-    setNoteFor(null)
-    setNoteText('')
+    setEditing(null)
+    setWords('')
   }
   const sendOwn = () => {
     const text = own.trim()
@@ -2080,7 +2091,8 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
   }
   const answer = () => {
     if (picked === null) return
-    sendWithNote(options[picked], noteFor === picked ? noteText : '')
+    sendWithNote(options[picked], notes[picked] || '')
+    setNotes({})
   }
 
   const inputStyle = {
@@ -2129,8 +2141,8 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
               jsxs('div', {
                 className: 'flex items-stretch gap-1',
                 children: [
-                  // The answer row: LEFT aligned, and a click only PICKS it — the picked row takes the question
-                  // tone on its border, and `answer` sends it.
+                  // The answer row: LEFT aligned, and a click only PICKS it. Words he added to this option sit
+                  // in the row after the option's own text, so the answer shows what he will send.
                   jsx(HoverBox, {
                     tag: 'button',
                     className:
@@ -2146,14 +2158,25 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
                     },
                     hoverFill: 'var(--ui-bg-tertiary)',
                     onClick: () => setPicked(index),
-                    children: option
+                    children: notes[index]
+                      ? jsxs('span', {
+                          className: 'min-w-0 truncate',
+                          children: [
+                            option,
+                            jsx('span', {
+                              style: { color: 'var(--ui-text-tertiary)' },
+                              children: ` — ${notes[index]}`
+                            })
+                          ]
+                        })
+                      : option
                   }),
                   jsx(HoverBox, {
                     onClick: () => {
-                      setNoteFor(noteFor === index ? null : index)
-                      setNoteText('')
+                      setEditing(editing === index ? null : index)
+                      setWords('')
                     },
-                    title: 'add a word to this answer',
+                    title: 'add words to this answer',
                     className: 'flex shrink-0 items-center justify-center rounded border',
                     style: {
                       width: `${SEND_H_N - 8}px`,
@@ -2164,33 +2187,26 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
                     },
                     hoverFill: 'var(--ui-bg-tertiary)',
                     hoverColour: 'var(--ui-text-primary)',
-                    children: noteFor === index ? '−' : '+'
+                    children: editing === index ? '−' : '+'
                   })
                 ]
               }),
-              noteFor === index
+              editing === index
                 ? jsxs('div', {
                     className: 'flex items-center gap-1',
                     children: [
                       jsx('input', {
-                        value: noteText,
+                        value: words,
                         autoFocus: true,
-                        placeholder: 'a word to add to this answer',
-                        onChange: event => setNoteText(event.target.value),
+                        placeholder: 'words to add to this answer',
+                        onChange: event => setWords(event.target.value),
                         onKeyDown: event => {
-                          if (event.key === 'Enter') {
-                            // The note belongs to this answer: picking it is the only sensible reading.
-                            setPicked(index)
-                            setNoteFor(null)
-                          }
+                          if (event.key === 'Enter') addWords(index)
                         },
                         className: inputClass,
                         style: inputStyle
                       }),
-                      wordBox('save', () => {
-                        setPicked(index)
-                        setNoteFor(null)
-                      }, 'var(--ui-text-secondary)')
+                      wordBox('add', () => addWords(index), 'var(--ui-text-secondary)')
                     ]
                   })
                 : null
