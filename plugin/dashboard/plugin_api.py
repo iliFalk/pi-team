@@ -1300,7 +1300,7 @@ def send_review(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
 
 @router.post("/lanes/{lane}/hand")
 def hand_lane(lane: str, payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
-    """Take a finished lane off the agent's hands: mark it handed and say so in the chat."""
+    """File a finished lane on the `review` shelf. It does not speak: the queue's `SEND` does."""
     lane_dir = _lanes_root() / lane
     record = _read_json(lane_dir / "lane.json")
     if record is None:
@@ -1310,23 +1310,10 @@ def hand_lane(lane: str, payload: Dict[str, Any] = Body(default={})) -> Dict[str
     record["handed_at"] = int(time.time())
     (lane_dir / "lane.json").write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
-    who = f'{record.get("project") or "?"}/{record.get("group") or "?"}'
-    # The panel asks for the check, not for the merge: `pi-lane close` deletes the worktree and the branch,
-    # so the orchestrator reports first and waits for Ilja's go. The old text ended with "Merge it and close
-    # it", an order this route cannot give.
-    text = (
-        f'Handed over: lane {lane} ({who}) is finished and waiting for a check. '
-        f'Read the diff, run the gates and report; then show the plan with `pi-lane close {lane}` '
-        f'and wait for my go.'
-    )
-    sent = False
-    ctx = _plugin_ctx()
-    if ctx is not None:
-        try:
-            sent = bool(ctx.inject_message(text, session_key=payload.get("session_key") or None))
-        except Exception:
-            sent = False
-    return {"ok": True, "handed_at": record["handed_at"], "message_sent": sent}
+    # SILENT on purpose: this button files the lane on the `review` shelf and says nothing. The check starts
+    # from the `SEND` on the review row (`/review/send`), which posts the whole queue in one message — with
+    # both speaking, every click produced two requests for the same check.
+    return {"ok": True, "handed_at": record["handed_at"]}
 
 
 @router.post("/lanes/{lane}/answer")
