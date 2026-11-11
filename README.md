@@ -7,6 +7,9 @@ where every lane is — running, waiting on a question, done, in review — with
 diff it made, the plan it follows, and a thread you can answer in. Nothing hides in a chat log: a lane that
 waits for you says so on the card.
 
+The lane model follows [ThinkRail](https://github.com/JetBrains/thinkrail) (JetBrains): one task, one
+worktree, specs that stay alive. pi-team takes that board out of the IDE and runs it inside Hermes.
+
 | | |
 |---|---|
 | **Instead of** | asking the agent "what is running?" and reading a wall of text |
