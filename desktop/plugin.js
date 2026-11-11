@@ -825,13 +825,19 @@ function measureArrow() {
   const p = plus.getBoundingClientRect()
   const e = end.getBoundingClientRect()
   const from = { x: e.left - outer.left + 6, y: e.top - outer.top + e.height / 2 }
-  const to = { x: p.left - outer.left + p.width / 2, y: p.bottom - outer.top + 6 }
+  // The tip stops just inside the ring, and the last stretch runs upward: an arrow that arrives
+  // sideways reads as a hook, and a pointer must come up into the button it points at.
+  const to = { x: p.left - outer.left + p.width / 2, y: p.bottom - outer.top - 3 }
   if (!(from.x > to.x)) return null
-  const bendX = to.x + 26
-  const body = `M ${from.x.toFixed(1)} ${from.y.toFixed(1)} C ${bendX.toFixed(1)} ${from.y.toFixed(1)}, ` +
-    `${bendX.toFixed(1)} ${to.y.toFixed(1)}, ${(to.x + 12).toFixed(1)} ${to.y.toFixed(1)}`
-  const head = `M ${(to.x + 2).toFixed(1)} ${(to.y - 11).toFixed(1)} L ${to.x.toFixed(1)} ${to.y.toFixed(1)} ` +
-    `L ${(to.x + 14).toFixed(1)} ${(to.y + 6).toFixed(1)}`
+  const body =
+    `M ${from.x.toFixed(1)} ${from.y.toFixed(1)} ` +
+    `C ${(from.x - 52).toFixed(1)} ${from.y.toFixed(1)}, ` +
+    `${(to.x + 10).toFixed(1)} ${(to.y + 58).toFixed(1)}, ` +
+    `${to.x.toFixed(1)} ${(to.y + 12).toFixed(1)}`
+  const head =
+    `M ${(to.x - 9).toFixed(1)} ${(to.y + 14).toFixed(1)} ` +
+    `L ${to.x.toFixed(1)} ${to.y.toFixed(1)} ` +
+    `L ${(to.x + 9).toFixed(1)} ${(to.y + 14).toFixed(1)}`
   return { body, head, key: `${from.x}|${from.y}|${to.x}|${to.y}` }
 }
 
@@ -3810,6 +3816,8 @@ function TeamPane({ ctx }) {
               strokeWidth: 2.5,
               strokeLinecap: 'round',
               strokeLinejoin: 'round',
+              // 60 %: a hint that points, not a diagram that shouts.
+              opacity: 0.6,
               children: [
                 jsx('path', { d: arrowPath.body }),
                 jsx('path', { d: arrowPath.head })
