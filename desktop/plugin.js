@@ -1660,9 +1660,18 @@ function LaneList({ ctx }) {
         ]
   )
 
-  const emptyHint = jsx('div', {
-    className: 'px-2.5 py-2 text-[0.625rem] leading-relaxed text-(--ui-text-tertiary)',
-    children: 'No lane yet.'
+  // No project yet: the one thing to press is the + in the header above, so the hint points at it
+  // instead of describing an empty list.
+  const emptyHint = jsxs('div', {
+    className: 'flex flex-col gap-1 px-2.5 py-2 text-[0.625rem] leading-relaxed text-(--ui-text-tertiary)',
+    children: [
+      jsxs('div', {
+        className: 'flex items-center justify-end gap-1 text-[0.6875rem]',
+        style: { color: 'var(--ui-text-secondary)' },
+        children: [jsx('span', { children: 'add the first project' }), jsx('span', { children: '↗' })]
+      }),
+      jsx('div', { children: 'Press + above and paste a repository URL. The project appears here at once, and the right column tells you what to do next.' })
+    ]
   })
 
   return jsxs('div', {
@@ -1765,7 +1774,7 @@ function LaneList({ ctx }) {
           paddingTop: '10px',
           paddingBottom: '10px'
         },
-        children: lanes.length === 0 ? emptyHint : projectTree
+        children: projects.length === 0 ? emptyHint : projectTree
       }),
       query.error
         ? jsx('div', {
@@ -3712,26 +3721,20 @@ function TeamPane({ ctx }) {
           '.pi-team-scroll::-webkit-scrollbar{width:0;height:0;display:none}' +
           '.pi-team-scroll{scrollbar-width:none}'
       }),
-      // A fresh install has no tree to show, so the onboarding card takes the whole pane: at half
-      // width the commands wrap into four lines and the add button drops below the fold.
-      nothingYet
-        ? null
-        : jsx('div', {
-            // 50 / 50, and inline: an arbitrary width class is not in the app's stylesheet.
-            className: 'flex shrink-0 flex-col',
-            'data-pi-side': 'tree',
-            // Clip at the seam: the scroll area runs fourteen pixels wide to lose its native bar,
-            // and without this a row's highlight paints over the divider.
-            style: { flex: '0 0 50%', width: '50%', minWidth: 0, overflow: 'hidden' },
-            onMouseEnter: () => noteHover('tree'),
-            children: jsx(LaneList, { ctx })
-          }),
+      jsx('div', {
+        // 50 / 50, and inline: an arbitrary width class is not in the app's stylesheet.
+        className: 'flex shrink-0 flex-col',
+        'data-pi-side': 'tree',
+        // Clip at the seam: the scroll area runs fourteen pixels wide to lose its native bar,
+        // and without this a row's highlight paints over the divider.
+        style: { flex: '0 0 50%', width: '50%', minWidth: 0, overflow: 'hidden' },
+        onMouseEnter: () => noteHover('tree'),
+        children: jsx(LaneList, { ctx })
+      }),
       jsx('div', {
         className: 'flex min-w-0 flex-1 flex-col overflow-hidden',
         'data-pi-side': 'pane',
-        style: nothingYet
-          ? { flex: '1 1 100%', width: '100%', minWidth: 0 }
-          : { flex: '1 1 50%', width: '50%', minWidth: 0 },
+        style: { flex: '1 1 50%', width: '50%', minWidth: 0 },
         onMouseEnter: () => noteHover('pane'),
         children: settingsOpen
           ? jsx(SettingsView, { data: settingsQuery.data })
@@ -3765,7 +3768,7 @@ function TeamPane({ ctx }) {
               ? jsx(Onboarding, { onAddProject: () => composeProject.set(true) })
               : jsx(LaneStatus, { ctx })
       }),
-      nothingYet ? null : jsx(SelectionOutline, {}),
+      jsx(SelectionOutline, {}),
       jsx('div', {
         // The track starts under the header: a pill in the header would sit on the title.
         style: {
