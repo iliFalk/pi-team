@@ -1,37 +1,54 @@
 # pi-team
 
-Coding lanes for the Hermes desktop: one panel, one row per lane, the whole lane beside it.
+**A workbench for coding lanes inside Hermes.** One panel, one row per lane, the whole lane beside it.
 
-A lane is one worktree plus one headless [`pi`](https://github.com/earendil-works/pi) run. The panel shows
-where every lane is — running, waiting on a question, done, in review — with the text it last wrote, the
-diff it made, the plan it follows, and a thread you can answer in. Nothing hides in a chat log: a lane that
-waits for you says so on the card.
-
-The lane model follows [ThinkRail](https://github.com/JetBrains/thinkrail) (JetBrains): one task, one
-worktree, specs that stay alive. pi-team takes that board out of the IDE and runs it inside Hermes.
+You start work the way you already do — by talking to your agent. pi-team turns that into visible,
+parallel, reviewable lanes: each one a git worktree plus a headless [`pi`](https://github.com/earendil-works/pi)
+run, with its own branch, its own diff and its own question when it gets stuck.
 
 | | |
 |---|---|
-| **Instead of** | asking the agent "what is running?" and reading a wall of text |
-| **You get** | a tree of projects → features → lanes, and one card per lane with `SEND`, `TO REVIEW`, `ANSWER`, `CLOSE` |
-| **It ships** | a desktop panel, a dashboard API behind it, and the `pi-coach` procedure registered as a skill |
+| **Without it** | five agents, five terminals, and you as the router: "what is running?", "which one is stuck?", "what did it change?" |
+| **With it** | a tree of projects → features → lanes, and one card per lane: task, plan, diff, thread, `ANSWER`, `TO REVIEW`, `CLOSE` |
+| **What ships** | a desktop panel, a dashboard API behind it, and the `pi-coach` procedure as a skill — all from one install |
+
+<!-- screenshot: docs/panel.png (the panel docked right, two lanes running) — add before the catalog PR -->
+
+## Requirements
+
+| Needs | Why |
+|---|---|
+| Hermes Agent `>= 0.23.0` | the plugin host that serves a dashboard API |
+| Hermes Desktop | the panel is a Desktop SDK extension, not a web page |
+| [`pi`](https://github.com/earendil-works/pi) `1.4.0` or newer | every lane is one headless `pi` run |
+| `git` | a lane is a worktree cut from your repository |
+| a provider key in Hermes | lanes take their model from the providers Hermes already knows |
 
 ## Install
 
-1. **The plugin.** In the Hermes desktop: Settings → Plugins → search `pi-team` → Install. Without the
-   catalog: `hermes plugins install iliFalk/pi-team`. One install carries both halves — the panel
-   (`desktop/plugin.js`) and the backend (`dashboard/`) — plus the skill `pi-team:pi-coach`.
+About five minutes. Steps 2 and 3 are what make a lane run; the plugin alone draws an empty board.
+
+1. **The plugin.** Today from Git — in the desktop, Settings → Plugins → Install from Git, paste
+   `iliFalk/pi-team`. Or `hermes plugins install iliFalk/pi-team`. One install carries both halves, the
+   panel (`desktop/plugin.js`) and the backend (`dashboard/`), plus the skill `pi-team:pi-coach`.
 2. **The runner.** Lanes are started by `pi-lane`, which is not a plugin file:
 
    ```sh
-   cp runner/pi-lane runner/pireg.py runner/pi-feature ~/.hermes/scripts/
-   chmod +x ~/.hermes/scripts/pi-lane ~/.hermes/scripts/pi-feature
+   mkdir -p ~/.hermes/scripts
+   cp runner/pi-lane runner/pi-feature runner/pi-team-demo runner/pireg.py ~/.hermes/scripts/
+   chmod +x ~/.hermes/scripts/pi-lane ~/.hermes/scripts/pi-feature ~/.hermes/scripts/pi-team-demo
    ```
 
-3. **The coding agent.** `npm install -g --ignore-scripts @earendil-works/pi-coding-agent` (1.4.0 or
-   newer), and a provider key in Hermes Settings → Providers.
-4. **Buttons that speak.** A panel button puts a message into the chat through the gateway. Off by
-   default:
+   `~/.hermes/scripts` is not on `PATH` by default, and the agent calls `pi-lane` by name. Add the
+   directory once:
+
+   ```sh
+   echo 'export PATH="$HOME/.hermes/scripts:$PATH"' >> ~/.bashrc
+   ```
+
+3. **The coding agent.** `npm install -g --ignore-scripts @earendil-works/pi-coding-agent`, then a provider
+   key in Hermes Settings → Providers.
+4. **Buttons that speak.** A panel button puts a message into the chat through the gateway. Off by default:
 
    ```sh
    hermes config set plugins.entries.pi-team.allow_gateway_injection true
@@ -39,40 +56,56 @@ worktree, specs that stay alive. pi-team takes that board out of the IDE and run
 
 5. **Restart the gateway.** `dashboard/plugin_api.py` is imported once, when `hermes-serve` starts.
 
-The panel appears beside the chat. A fresh install has no lanes, so the right column opens on `start here`
-with the five steps above and one button that adds the first project.
+The panel appears beside the chat. A first run has no lanes, so the panel opens on `start here` — the five
+steps above, and one button that adds the first project.
 
-## See it with data before you have any
+## First lane
 
-```sh
-pi-team-demo              # a scratch repo in ~/work/pi-team-demo and three lanes
-pi-team-demo --remove     # the lanes, their worktrees and branches, the project entry, the repo
-```
+1. Press `+` in the `projects` header, paste a repository URL. The project appears at once; the agent clones
+   it into `~/work`.
+2. Ask for a feature in one line — *"a settings menu with a theme row"*. A lane starts on its own worktree
+   and branch.
+3. Watch the row. When the lane needs a decision, its card says so: pick an option, press `ANSWER`, and it
+   continues.
+4. `TO REVIEW` files a finished lane; the queue's `SEND` puts the whole queue into the chat; `CLOSE` merges
+   and shelves it. Nothing closes before a check.
 
-The fixture writes three fixed lane records — one waiting on a question, one in review, one checked — so
-the card can be seen without spending tokens. It removes exactly what it wrote; a lane from a real run is
-never touched.
-
-## Use
+## The panel
 
 | Where | What it does |
 |---|---|
-| Left pane | projects, their features and the lanes inside each one |
-| `+` in the `projects` header | add a project by its repository URL; the agent clones it into `~/work` |
-| `+` on a feature | a feature asked for in one line; the agent names it after |
-| `+` / `✓` on a feature | link the current chat session to the feature, or drop the link |
+| Left pane | projects, their features and the lanes inside each one; the current project follows your chat |
 | Right pane | state, branch, changes, plan, spec tree, sessions of the selected thing |
 | Lane card | last text, last tool, tokens, the question with its answers, the diff, the thread |
-| `TO REVIEW`, then the queue's `SEND` | file finished lanes for review, then put the whole queue in the chat |
-| `CLOSE` | merge and close a lane — the only path onto the shelf |
+| `+` / `✓` on a feature | link the current chat session to the feature, or drop the link |
+| `SEND` | send the thread's message, the lane's model and your answer in one field |
+| `TO REVIEW` → queue `SEND` | file finished lanes, then hand the whole queue to the agent |
+| `CLOSE` | merge and close — the only path onto the shelf |
 
-The procedure itself is the skill `pi-team:pi-coach`: how to start a lane, what to check before it ships,
-when to answer instead of asking.
+The procedure behind the buttons is the skill `pi-team:pi-coach`: how to start a lane, what to check before
+it ships, when to answer instead of asking.
 
-## Settings
+## See it working before you have any lanes
 
-Nothing to configure in the panel. It reads provider keys through Hermes's own secret scope and only
-reports whether a key is set; add or change keys in Hermes Settings → Providers.
+```sh
+~/.hermes/scripts/pi-team-demo            # a scratch repo in ~/work/pi-team-demo and three lanes
+~/.hermes/scripts/pi-team-demo --remove   # the lanes, their worktrees and branches, the project entry, the repo
+```
+
+Three fixed lane records — one waiting on a question, one in review, one checked — so the card can be seen
+without spending tokens. It removes exactly what it wrote; a lane from a real run is never touched.
+
+## How it works
+
+| Piece | What it is |
+|---|---|
+| `desktop/plugin.js` | the panel, an ESM module loaded by the Desktop SDK. No build step |
+| `dashboard/plugin_api.py` | 18 routes under `/api/plugins/pi-team/`, served by the plugin host |
+| `runner/pi-lane` | starts one headless `pi` run per lane, parks its questions, records its events |
+| `skills/pi-coach` | the procedure the agent follows, registered as `pi-team:pi-coach` |
+
+The plugin itself runs no agent. Hermes is the orchestrator: it opens lanes, answers what they ask and
+decides what ships — so the memory, the skills and the vault that the work feeds are Hermes's own.
 
 ## What it touches
 
@@ -81,20 +114,31 @@ Disclosed because you should know before you install:
 - **Network.** The panel asks three model catalogues for their model ids over HTTPS —
   `integrate.api.nvidia.com`, `api.deepseek.com`, `openrouter.ai` — with the profile's key, cached for ten
   minutes. Adding a project runs `git clone` on the URL you paste, over https or ssh.
-- **Reads outside its own data.** `~/.hermes/lanes/<lane>/` (record, event stream, question, thread), the
-  git state of the worktrees it shows, `~/.hermes/plugin-data/pi-team/projects.json`, and the agent's name
-  from `~/.hermes/SOUL.md`.
-- **Writes.** Lane records and the project registry, only through the routes it serves. The panel never
-  writes a provider key and never reads one back.
+- **Reads outside its own data.** `~/.hermes/lanes/<lane>/` (record, event stream, question, thread), the git
+  state of the worktrees it shows, `~/.hermes/plugin-data/pi-team/projects.json`, and the agent's name from
+  `~/.hermes/SOUL.md`.
+- **Credentials.** Provider keys come only through Hermes's secret scope. The panel reports whether a key is
+  set and never reads or writes one; add keys in Hermes Settings → Providers.
+- **Writes.** Lane records and the project registry, only through the routes it serves.
 - **Shell and processes.** `git status`, `git diff`, `git log`, `git worktree` and `git clone` in your
-  repositories, and `pi` as a child process of `pi-lane`, with your permissions. A lane is a real coding
-  agent with real access to the worktree it runs in.
-- **Background work.** No daemon. The panel polls `/lanes` while a window is open, and a lane keeps
-  running only as long as its `pi` process does.
-- **No self-update.** The plugin never replaces its own files. A catalog install is pinned to one commit;
-  updates come from `hermes plugins update pi-team` or from a fresh install.
+  repositories, and `pi` as a child process of `pi-lane`, with your permissions. A lane is a real coding agent
+  with real access to the worktree it runs in.
+- **Background work.** No daemon. The panel polls `/lanes` while a window is open, and a lane keeps running
+  only as long as its `pi` process does.
+- **No self-update.** The plugin never replaces its own files. An install is pinned to one commit; updates
+  come from `hermes plugins update pi-team` or a fresh install.
 
-## Repository layout
+## Troubleshooting
+
+| Symptom | Cause and fix |
+|---|---|
+| Panel missing after install | the desktop app has not reloaded — Command-K → Reload desktop plugins |
+| Panel is there, no data, no error | the backend half was imported before Hermes restarted — `systemctl --user restart hermes-serve` |
+| Buttons do nothing | `plugins.entries.pi-team.allow_gateway_injection` is off — step 4 above |
+| `start here` and nothing else | no project yet — press `+`, or run `~/.hermes/scripts/pi-team-demo` to see the card with data |
+| A lane reads `stopped` | its `pi` process died; the record keeps the last event and `stderr.txt` says why |
+
+## Development
 
 ```
 plugin.yaml            the manifest: name, version, requires_hermes
@@ -108,8 +152,6 @@ skills/pi-coach/       the procedure, its reference and its probe script
 docs/DEVELOPMENT.md    architecture, data, routes
 ```
 
-## Checks
-
 ```sh
 node --check desktop/plugin.js
 node desktop/props-check.mjs      # two style keys in one props object
@@ -118,6 +160,9 @@ python3 -m py_compile dashboard/plugin_api.py __init__.py pi_team_state.py
 hermes plugins validate .         # the catalog gate
 ```
 
-## License
+## Lineage and license
+
+The lane model follows [ThinkRail](https://github.com/JetBrains/thinkrail) (JetBrains): one task, one
+worktree, specs that stay alive. pi-team takes that board out of the IDE and runs it inside Hermes.
 
 MIT.
