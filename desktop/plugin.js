@@ -3402,6 +3402,9 @@ function ProjectView({ ctx, project, onDone }) {
 function FeatureCompose({ ctx, project, sessionId, onDone }) {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
+  // The request has to land somewhere: link the chat that is open now, before the feature exists,
+  // so a first run never sits on "waiting for the agent".
+  const [attach, setAttach] = useState(true)
 
   const send = async () => {
     const body = text.trim()
@@ -3413,6 +3416,17 @@ function FeatureCompose({ ctx, project, sessionId, onDone }) {
         body: { project, text: body, session_key: sessionId },
         timeoutMs: 15000
       })
+      if (attach && sessionId && result.feature) {
+        try {
+          await ctx.rest('/link', {
+            method: 'POST',
+            body: { project, feature: result.feature, session: sessionId },
+            timeoutMs: 8000
+          })
+        } catch (error) {
+          host.notify({ kind: 'error', message: `link failed: ${(error && error.message) || error}` })
+        }
+      }
       host.notify({
         kind: 'info',
         message: result.message_sent
@@ -3445,6 +3459,29 @@ function FeatureCompose({ ctx, project, sessionId, onDone }) {
         className:
           'w-full min-w-0 resize-none rounded border border-(--ui-stroke-secondary) bg-transparent px-2 py-1.5 text-[0.6875rem] outline-none focus:border-(--ui-accent)',
         style: { color: 'var(--ui-text-primary)' }
+      }),
+      jsxs('div', {
+        className: 'flex shrink-0 items-center gap-2 text-[0.625rem]',
+        style: { color: attach && sessionId ? RUN_TEXT : 'var(--ui-text-tertiary)' },
+        children: [
+          jsx('span', { className: 'shrink-0 uppercase tracking-wide', children: 'session' }),
+          jsx('span', {
+            className: 'min-w-0 flex-1 truncate',
+            children: !sessionId
+              ? 'no chat open — this feature will wait for the agent'
+              : attach
+                ? 'attached to this chat'
+                : 'not attached — press to attach'
+          }),
+          jsx(HoverBox, {
+            onClick: () => setAttach(!attach),
+            title: 'link this chat to the feature, so the agent answers inside it',
+            hoverFill: 'var(--ui-bg-tertiary)',
+            className: 'shrink-0 rounded border px-1.5 text-[0.625rem] uppercase',
+            style: { borderColor: 'var(--ui-stroke-secondary)', color: attach ? RUN_TEXT : 'var(--ui-text-secondary)' },
+            children: attach ? 'linked' : 'link'
+          })
+        ]
       }),
       jsxs('div', {
         className: 'flex shrink-0 items-center gap-2',
