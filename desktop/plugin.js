@@ -3616,7 +3616,7 @@ function Onboarding({ onAddProject }) {
   const name = { className: 'shrink-0 text-[0.625rem] uppercase tracking-wide', style: { color: 'var(--ui-text-secondary)', width: '58px' } }
   const gives = { className: 'text-[0.625rem] leading-relaxed', style: { color: 'var(--ui-text-secondary)' } }
   const lead = { className: 'mt-0.5 text-[0.5625rem] uppercase tracking-wide', style: { color: 'var(--ui-text-tertiary)' } }
-  const command = { className: 'mt-0.5 block whitespace-pre-wrap break-all rounded px-1.5 py-1 font-mono text-[0.5625rem] leading-relaxed', style: { color: 'var(--ui-text-primary)', background: 'var(--ui-bg-tertiary)' } }
+  const command = { className: 'mt-0.5 block whitespace-pre-wrap break-words rounded px-1.5 py-1 font-mono text-[0.5625rem] leading-relaxed', style: { color: 'var(--ui-text-primary)', background: 'var(--ui-bg-tertiary)' } }
   // number, label, what it gives you, the line above the action, the action itself
   const rows = [
     ['1', 'pi', 'the agent that writes the code', 'paste and run in a terminal',
