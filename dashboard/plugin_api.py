@@ -1246,10 +1246,21 @@ def send_review(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
             f'- {entry.get("project")}/{entry.get("group") or "-"}/{entry["lane"]} — '
             f'{entry["state"]} — {change}{trouble}'
         )
+        # What a skill is later written from: the ask, what pi said it did, and where to look. The
+        # stream behind it stays in the lane folder; this is the digest an agent can act on.
+        if entry.get("task"):
+            lines.append(f'  task: {entry["task"]}')
+        said = (entry.get("last_text") or "").strip()
+        if said:
+            one_line = " ".join(said.split())
+            lines.append(f'  says: {one_line[:240]}')
+        worktree = str(entry.get("worktree") or "")
+        if worktree:
+            lines.append(f'  look: {worktree} · pi-lane check {entry["lane"]}')
     text = (
         f"Review queue: {len(lanes)} lane(s).\n"
         + "\n".join(lines)
-        + "\n\nCheck each one, report what you found, and wait for my go before merging or closing."
+        + "\n\nSay what you found in each one, then wait for my go before merging or closing."
     )
     sent = False
     ctx = _plugin_ctx()
