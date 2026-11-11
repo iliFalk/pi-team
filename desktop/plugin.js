@@ -3599,19 +3599,22 @@ function SettingsView({ data }) {
   })
 }
 
-/** The first run. A fresh install has no lanes and no projects, so the panel says what to do next
- *  instead of showing an empty tree: four steps in the order a person meets them, and the one button
- *  that starts the third. `pi-team-demo` seeds three lanes when a viewer wants the card at once. */
+/** The first run. A fresh install has no lanes and no projects, so the panel says what to do next:
+ *  five steps, each with what it gives you and where it happens, so nobody has to guess whether a
+ *  command goes into a terminal or into a click. `pi-team-demo` seeds three lanes for a look. */
 function Onboarding({ onAddProject }) {
   const step = { className: 'shrink-0 font-mono text-[0.625rem]', style: { color: 'var(--ui-text-tertiary)', width: '14px' } }
   const name = { className: 'shrink-0 text-[0.625rem] uppercase tracking-wide', style: { color: 'var(--ui-text-secondary)', width: '58px' } }
-  const text = { className: 'min-w-0 flex-1 text-[0.625rem] leading-relaxed' }
+  const where = { className: 'shrink-0 text-[0.5625rem] uppercase tracking-wide', style: { color: 'var(--ui-text-tertiary)' } }
+  const command = { className: 'mt-0.5 block truncate font-mono text-[0.5625rem]', style: { color: 'var(--ui-text-tertiary)' } }
+  const purpose = { className: 'min-w-0 text-[0.625rem] leading-relaxed', style: { color: 'var(--ui-text-secondary)' } }
+  // number, label, what it gives you, where it happens, the line to run or the action to take
   const rows = [
-    ['1', 'pi', 'npm install -g --ignore-scripts @earendil-works/pi-coding-agent'],
-    ['2', 'runner', 'cp runner/pi-lane ~/.hermes/scripts/pi-lane && chmod +x ~/.hermes/scripts/pi-lane'],
-    ['3', 'key', 'Add a provider key in Hermes Settings → Providers. Lanes take the model from that list.'],
-    ['4', 'project', 'Add a repository this machine can read: the project the lanes will work in.'],
-    ['5', 'lane', 'Ask the agent for a lane in it. The pi-coach procedure arrived with this panel.']
+    ['1', 'pi', 'the agent that writes the code', 'terminal', 'npm install -g --ignore-scripts @earendil-works/pi-coding-agent'],
+    ['2', 'runner', 'starts one lane and records it', 'terminal', 'cp runner/* ~/.hermes/scripts/ && chmod +x ~/.hermes/scripts/pi-*'],
+    ['3', 'key', 'the model a lane thinks with', 'settings', 'add a provider key in Hermes Settings → Providers'],
+    ['4', 'project', 'the code a lane works in', 'this panel', 'press + in the projects header, paste a repository'],
+    ['5', 'lane', 'the work itself', 'the agent', 'ask for a feature in one line']
   ]
   return jsx(CardShell, {
     title: jsx('span', { children: 'start here' }),
@@ -3620,18 +3623,30 @@ function Onboarding({ onAddProject }) {
       jsx('div', {
         className: 'text-[0.625rem] leading-relaxed',
         style: { color: 'var(--ui-text-tertiary)' },
-        children: 'No lane yet. A lane is one worktree and one headless pi run, shown here from its first file change to its review.'
+        children: 'Two commands, two clicks, one sentence — once. Then a lane is one worktree and one headless pi run, shown here from its first change to its review.'
       }),
-      ...rows.map(([number, label, body], index) =>
+      ...rows.map(([number, label, gives, place, line], index) =>
         jsx(
           'div',
           {
-            className: 'flex shrink-0 items-start gap-2 py-0.5',
+            className: 'flex shrink-0 items-start gap-2 py-1',
             style: { borderBottom: index === rows.length - 1 ? 'none' : '1px solid var(--ui-stroke-secondary)' },
             children: [
               jsx('span', { ...step, children: number }),
               jsx('span', { ...name, children: label }),
-              jsx('span', { ...text, style: { color: 'var(--ui-text-secondary)' }, children: body })
+              jsxs('span', {
+                className: 'min-w-0 flex-1',
+                children: [
+                  jsxs('span', {
+                    className: 'flex items-baseline justify-between gap-2',
+                    children: [
+                      jsx('span', { ...purpose, children: gives }),
+                      jsx('span', { ...where, children: place })
+                    ]
+                  }),
+                  jsx('code', { ...command, children: line })
+                ]
+              })
             ]
           },
           `step-${number}`
@@ -3654,7 +3669,7 @@ function Onboarding({ onAddProject }) {
       jsx('div', {
         className: 'text-[0.625rem] leading-relaxed',
         style: { color: 'var(--ui-text-tertiary)' },
-        children: 'To see the panel with data first, run `pi-team-demo` from the plugin’s runner folder: it seeds three lanes in a scratch project and removes them with `pi-team-demo --remove`.'
+        children: 'To see the panel with data first, run pi-team-demo from the runner folder: three lanes in a scratch project, removed with --remove.'
       })
     ]
   })
@@ -3750,7 +3765,7 @@ function TeamPane({ ctx }) {
               ? jsx(Onboarding, { onAddProject: () => composeProject.set(true) })
               : jsx(LaneStatus, { ctx })
       }),
-      jsx(SelectionOutline, {}),
+      nothingYet ? null : jsx(SelectionOutline, {}),
       jsx('div', {
         // The track starts under the header: a pill in the header would sit on the title.
         style: {
