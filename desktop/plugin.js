@@ -3697,20 +3697,26 @@ function TeamPane({ ctx }) {
           '.pi-team-scroll::-webkit-scrollbar{width:0;height:0;display:none}' +
           '.pi-team-scroll{scrollbar-width:none}'
       }),
-      jsx('div', {
-        // 50 / 50, and inline: an arbitrary width class is not in the app's stylesheet.
-        className: 'flex shrink-0 flex-col',
-        'data-pi-side': 'tree',
-        // Clip at the seam: the scroll area runs fourteen pixels wide to lose its native bar,
-        // and without this a row's highlight paints over the divider.
-        style: { flex: '0 0 50%', width: '50%', minWidth: 0, overflow: 'hidden' },
-        onMouseEnter: () => noteHover('tree'),
-        children: jsx(LaneList, { ctx })
-      }),
+      // A fresh install has no tree to show, so the onboarding card takes the whole pane: at half
+      // width the commands wrap into four lines and the add button drops below the fold.
+      nothingYet
+        ? null
+        : jsx('div', {
+            // 50 / 50, and inline: an arbitrary width class is not in the app's stylesheet.
+            className: 'flex shrink-0 flex-col',
+            'data-pi-side': 'tree',
+            // Clip at the seam: the scroll area runs fourteen pixels wide to lose its native bar,
+            // and without this a row's highlight paints over the divider.
+            style: { flex: '0 0 50%', width: '50%', minWidth: 0, overflow: 'hidden' },
+            onMouseEnter: () => noteHover('tree'),
+            children: jsx(LaneList, { ctx })
+          }),
       jsx('div', {
         className: 'flex min-w-0 flex-1 flex-col overflow-hidden',
         'data-pi-side': 'pane',
-        style: { flex: '1 1 50%', width: '50%', minWidth: 0 },
+        style: nothingYet
+          ? { flex: '1 1 100%', width: '100%', minWidth: 0 }
+          : { flex: '1 1 50%', width: '50%', minWidth: 0 },
         onMouseEnter: () => noteHover('pane'),
         children: settingsOpen
           ? jsx(SettingsView, { data: settingsQuery.data })
