@@ -3747,19 +3747,32 @@ function TeamPane({ ctx }) {
               : jsx(LaneStatus, { ctx })
       }),
       // A first run has one thing to press, so the panel draws the pointer itself: from the + in the
-      // tree header, across the seam, into the card that explains what that + does.
+      // tree header, across the seam, into the card that explains what that + does. SVG path data takes
+      // plain numbers only — a calc() in `d` draws nothing — so the box is anchored on the seam and the
+      // curve is written in local coordinates.
       nothingYet
         ? jsx('svg', {
             'aria-hidden': true,
-            style: { position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 6, overflow: 'visible' },
+            style: {
+              position: 'absolute',
+              left: '50%',
+              top: 0,
+              width: '190px',
+              height: '270px',
+              marginLeft: '-96px',
+              pointerEvents: 'none',
+              zIndex: 6,
+              overflow: 'visible'
+            },
             children: jsxs('g', {
               stroke: '#D5B26C',
               fill: 'none',
-              strokeWidth: 2,
+              strokeWidth: 2.5,
               strokeLinecap: 'round',
+              strokeLinejoin: 'round',
               children: [
-                jsx('path', { d: 'M calc(50% - 34px) 20 C calc(50% + 10px) 18, calc(50% + 52px) 70, calc(50% + 20px) 158' }),
-                jsx('path', { d: 'M calc(50% + 33px) 134 L calc(50% + 19px) 160 L calc(50% + 44px) 164' })
+                jsx('path', { d: 'M 58 14 C 150 22, 158 120, 100 214' }),
+                jsx('path', { d: 'M 78 196 L 99 218 L 120 198' })
               ]
             })
           })
