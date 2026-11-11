@@ -816,6 +816,26 @@ function paintFrame(box) {
 }
 
 
+function measureArrow() {
+  const root = document.querySelector('[data-pi-root]')
+  const plus = root && root.querySelector('[data-pi-plus]')
+  const end = root && root.querySelector('[data-pi-arrow-end]')
+  if (!root || !plus || !end) return null
+  const outer = root.getBoundingClientRect()
+  const p = plus.getBoundingClientRect()
+  const e = end.getBoundingClientRect()
+  const from = { x: e.left - outer.left + 6, y: e.top - outer.top + e.height / 2 }
+  const to = { x: p.left - outer.left + p.width / 2, y: p.bottom - outer.top + 6 }
+  if (!(from.x > to.x)) return null
+  const bendX = to.x + 26
+  const body = `M ${from.x.toFixed(1)} ${from.y.toFixed(1)} C ${bendX.toFixed(1)} ${from.y.toFixed(1)}, ` +
+    `${bendX.toFixed(1)} ${to.y.toFixed(1)}, ${(to.x + 12).toFixed(1)} ${to.y.toFixed(1)}`
+  const head = `M ${(to.x + 2).toFixed(1)} ${(to.y - 11).toFixed(1)} L ${to.x.toFixed(1)} ${to.y.toFixed(1)} ` +
+    `L ${(to.x + 14).toFixed(1)} ${(to.y + 6).toFixed(1)}`
+  return { body, head, key: `${from.x}|${from.y}|${to.x}|${to.y}` }
+}
+
+
 function measureSelection() {
   const root = document.querySelector('[data-pi-root]')
   const row = root && root.querySelector('[data-pi-selected]')
@@ -1675,12 +1695,20 @@ function LaneList({ ctx }) {
         style: { height: HEADER_H },
         children: [
           jsx('span', { children: `projects · ${projects.length}` }),
-          jsx(HeaderControl, {
-            title: 'add a project by its repository',
-            glyph: '+',
-            size: BAND_MIN_H,
-            fontSize: '11.5px',
-            onClick: () => showComposeProject()
+          // Nothing registered yet: the + is the whole next step, so it is ringed in the same amber the
+          // arrow uses. The ring is the target; the arrow only says that it exists.
+          jsx('span', {
+            'data-pi-plus': '',
+            style: projects.length === 0
+              ? { display: 'inline-flex', borderRadius: '5px', boxShadow: '0 0 0 2px rgba(213,178,108,0.65)' }
+              : { display: 'inline-flex' },
+            children: jsx(HeaderControl, {
+              title: 'add a project by its repository',
+              glyph: '+',
+              size: BAND_MIN_H,
+              fontSize: '11.5px',
+              onClick: () => showComposeProject()
+            })
           }),
           // The gear sits on the plus's own line and shape: the app's lucide settings icon at 11px, which
           // is the one pictograph this panel allows, because he named it by its picture.
@@ -3628,6 +3656,7 @@ function Onboarding({ onAddProject }) {
         jsx(
           'div',
           {
+            'data-pi-arrow-end': number === '2' ? '' : undefined,
             className: 'flex shrink-0 items-start gap-2 py-1',
             style: { borderBottom: index === rows.length - 1 ? 'none' : '1px solid var(--ui-stroke-secondary)' },
             children: [
@@ -3680,6 +3709,24 @@ function TeamPane({ ctx }) {
   const nothingYet =
     !((lanesQuery.data && lanesQuery.data.lanes) || []).length &&
     !((lanesQuery.data && lanesQuery.data.registry) || []).length
+  const [arrowPath, setArrowPath] = useState(null)
+  // Measured after paint, like SelectionOutline: the + and the project step only have a box once the
+  // whole panel has laid out.
+  const arrowProbe = jsx('span', {
+    style: { display: 'none' },
+    ref: () => {
+      const run = () => {
+        if (!nothingYet) {
+          if (arrowPath) setArrowPath(null)
+          return
+        }
+        const next = measureArrow()
+        if (next) setArrowPath(next)
+      }
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run)
+      else run()
+    }
+  })
   const compose = useValue(composeAtom)
   const feature = useValue(selectedFeature)
   const project = useValue(selectedProject)
@@ -3750,20 +3797,13 @@ function TeamPane({ ctx }) {
       // tree header, across the seam, into the card that explains what that + does. SVG path data takes
       // plain numbers only — a calc() in `d` draws nothing — so the box is anchored on the seam and the
       // curve is written in local coordinates.
-      nothingYet
+      // A first run has one target: the arrow leaves the project step and ends on the + that step tells
+      // you to press. Both ends are measured from the DOM, because the pane is resizable and a fixed
+      // overlay would point at nothing as soon as the window changed.
+      nothingYet && arrowPath
         ? jsx('svg', {
             'aria-hidden': true,
-            style: {
-              position: 'absolute',
-              left: '50%',
-              top: 0,
-              width: '190px',
-              height: '270px',
-              marginLeft: '-96px',
-              pointerEvents: 'none',
-              zIndex: 6,
-              overflow: 'visible'
-            },
+            style: { position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 6, overflow: 'visible' },
             children: jsxs('g', {
               stroke: '#D5B26C',
               fill: 'none',
@@ -3771,12 +3811,13 @@ function TeamPane({ ctx }) {
               strokeLinecap: 'round',
               strokeLinejoin: 'round',
               children: [
-                jsx('path', { d: 'M 58 14 C 150 22, 158 120, 100 214' }),
-                jsx('path', { d: 'M 78 196 L 99 218 L 120 198' })
+                jsx('path', { d: arrowPath.body }),
+                jsx('path', { d: arrowPath.head })
               ]
             })
           })
         : null,
+      arrowProbe,
       jsx(SelectionOutline, {}),
       jsx('div', {
         // The track starts under the header: a pill in the header would sit on the title.
