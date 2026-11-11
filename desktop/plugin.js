@@ -3676,6 +3676,39 @@ function SettingsView({ data }) {
  *  two things an install cannot bring: the coding agent, and a repository to work in. Everything else —
  *  the runner, the skill, the key — arrives with the plugin or with Hermes itself. */
 function Onboarding({ onAddProject }) {
+  const [copied, setCopied] = useState('')
+  // A pane is not a terminal: selecting a line and copying it is fiddly, so the command carries its
+  // own copy button. navigator.clipboard first, a hidden textarea as the fallback.
+  const copy = (text, key) => {
+    const done = () => {
+      setCopied(key)
+      setTimeout(() => setCopied(''), 1600)
+    }
+    const fallback = () => {
+      try {
+        const box = document.createElement('textarea')
+        box.value = text
+        box.style.position = 'fixed'
+        box.style.opacity = '0'
+        document.body.appendChild(box)
+        box.select()
+        document.execCommand('copy')
+        document.body.removeChild(box)
+        done()
+      } catch (error) {
+        host.notify({ kind: 'error', message: 'copy failed — select the line by hand' })
+      }
+    }
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(fallback)
+        return
+      }
+    } catch (error) {
+      /* fall through to the textarea */
+    }
+    fallback()
+  }
   const step = { className: 'shrink-0 font-mono text-[0.625rem]', style: { color: 'var(--ui-text-tertiary)', width: '14px' } }
   const name = { className: 'shrink-0 text-[0.625rem] uppercase tracking-wide', style: { color: 'var(--ui-text-secondary)', width: '58px' } }
   const gives = { className: 'text-[0.625rem] leading-relaxed', style: { color: 'var(--ui-text-secondary)' } }
@@ -3712,7 +3745,27 @@ function Onboarding({ onAddProject }) {
                   jsx('span', { ...gives, children: line }),
                   jsx('div', { ...lead, children: instruction }),
                   action
-                    ? jsx('code', { ...command, children: action })
+                    ? jsxs('div', {
+                        className: 'mt-0.5 flex items-start gap-1',
+                        children: [
+                          jsx('code', {
+                            ...command,
+                            style: { ...command.style, userSelect: 'text' },
+                            children: action
+                          }),
+                          jsx(HoverBox, {
+                            onClick: () => copy(action, number),
+                            title: 'copy this line',
+                            hoverFill: 'var(--ui-bg-tertiary)',
+                            className: 'shrink-0 rounded border px-1 text-[0.5625rem] uppercase',
+                            style: {
+                              borderColor: 'var(--ui-stroke-secondary)',
+                              color: copied === number ? RUN_TEXT : 'var(--ui-text-secondary)'
+                            },
+                            children: copied === number ? 'copied' : 'copy'
+                          })
+                        ]
+                      })
                     : null
                 ]
               })
