@@ -1660,18 +1660,10 @@ function LaneList({ ctx }) {
         ]
   )
 
-  // No project yet: the one thing to press is the + in the header above, so the hint points at it
-  // instead of describing an empty list.
-  const emptyHint = jsxs('div', {
-    className: 'flex flex-col gap-1 px-2.5 py-2 text-[0.625rem] leading-relaxed text-(--ui-text-tertiary)',
-    children: [
-      jsxs('div', {
-        className: 'flex items-center justify-end gap-1 text-[0.6875rem]',
-        style: { color: 'var(--ui-text-secondary)' },
-        children: [jsx('span', { children: 'add the first project' }), jsx('span', { children: '↗' })]
-      }),
-      jsx('div', { children: 'Press + above and paste a repository URL. The project appears here at once, and the right column tells you what to do next.' })
-    ]
+  // No project yet: the arrow from the + says where to start, so the hint only explains what happens.
+  const emptyHint = jsx('div', {
+    className: 'px-2.5 pt-10 text-[0.625rem] leading-relaxed text-(--ui-text-tertiary)',
+    children: 'Press + above and paste a repository URL. The project appears here at once, and the right column tells you what to do next.'
   })
 
   return jsxs('div', {
@@ -3656,20 +3648,6 @@ function Onboarding({ onAddProject }) {
           `step-${number}`
         )
       ),
-      jsx(HoverBox, {
-        onClick: onAddProject,
-        title: 'add a project by its repository',
-        className: 'flex shrink-0 items-center justify-center rounded border text-[0.625rem] uppercase',
-        style: {
-          height: `${BAND_MIN_H}px`,
-          boxSizing: 'border-box',
-          marginTop: '4px',
-          borderColor: 'var(--ui-stroke-secondary)',
-          color: 'var(--ui-text-secondary)'
-        },
-        hoverFill: 'var(--ui-bg-tertiary)',
-        children: 'add project'
-      }),
       jsx('div', {
         className: 'text-[0.625rem] leading-relaxed',
         style: { color: 'var(--ui-text-tertiary)' },
@@ -3768,6 +3746,24 @@ function TeamPane({ ctx }) {
               ? jsx(Onboarding, { onAddProject: () => composeProject.set(true) })
               : jsx(LaneStatus, { ctx })
       }),
+      // A first run has one thing to press, so the panel draws the pointer itself: from the + in the
+      // tree header, across the seam, into the card that explains what that + does.
+      nothingYet
+        ? jsx('svg', {
+            'aria-hidden': true,
+            style: { position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 6, overflow: 'visible' },
+            children: jsxs('g', {
+              stroke: '#D5B26C',
+              fill: 'none',
+              strokeWidth: 2,
+              strokeLinecap: 'round',
+              children: [
+                jsx('path', { d: 'M calc(50% - 34px) 20 C calc(50% + 10px) 18, calc(50% + 52px) 70, calc(50% + 20px) 158' }),
+                jsx('path', { d: 'M calc(50% + 33px) 134 L calc(50% + 19px) 160 L calc(50% + 44px) 164' })
+              ]
+            })
+          })
+        : null,
       jsx(SelectionOutline, {}),
       jsx('div', {
         // The track starts under the header: a pill in the header would sit on the title.
