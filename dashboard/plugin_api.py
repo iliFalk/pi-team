@@ -1128,6 +1128,43 @@ def prepare_project(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any
     }
 
 
+@router.post("/prepare/ask")
+def ask_agent(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Hand a placeholder's request to the chat again.
+
+    ``/projects/prepare`` and ``/features/prepare`` create the row first and ask the agent second.
+    When nothing is linked yet, that ask has no session to land in: the row stays a placeholder and
+    the panel shows "waiting for the agent" with this route behind its button. Same prompt, again.
+    """
+    kind = str(payload.get("kind") or "").strip()
+    project = str(payload.get("project") or "").strip()
+    feature = str(payload.get("feature") or "").strip()
+    entry = next((item for item in _registry() if item["name"] == project), None)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"unknown project: {project}")
+    if kind == "project":
+        remote = entry.get("remote") or entry.get("repo") or ""
+        text = PROJECT_PROMPT.format(name=project, url=remote, slug=remote)
+    elif kind == "feature":
+        item = next((f for f in entry.get("features") or [] if f.get("name") == feature), None)
+        if item is None:
+            raise HTTPException(status_code=404, detail=f"unknown feature: {feature}")
+        text = PREPARE_PROMPT.format(
+            where=f"{project}/{feature}", text=item.get("request") or item.get("title") or feature
+        )
+    else:
+        raise HTTPException(status_code=422, detail="kind is 'project' or 'feature'")
+
+    sent = False
+    ctx = _plugin_ctx()
+    if ctx is not None:
+        try:
+            sent = bool(ctx.inject_message(text, session_key=payload.get("session_key") or None))
+        except Exception:
+            sent = False
+    return {"ok": True, "message_sent": sent, "text": text}
+
+
 @router.post("/projects/cancel")
 def cancel_project(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
     """Drop a project placeholder that was never cloned."""
