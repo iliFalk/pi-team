@@ -1284,10 +1284,24 @@ def hand_lane(lane: str, payload: Dict[str, Any] = Body(default={})) -> Dict[str
     record["handed_at"] = int(time.time())
     (lane_dir / "lane.json").write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
-    # SILENT on purpose: this button files the lane on the `review` shelf and says nothing. The check starts
-    # from the `SEND` on the review row (`/review/send`), which posts the whole queue in one message — with
-    # both speaking, every click produced two requests for the same check.
-    return {"ok": True, "handed_at": record["handed_at"]}
+    # One short line, not a request: the person expects to see the click land, and the line is the record
+    # a skill is later written from. The check itself still starts from the queue's `SEND`, which is the
+    # only place that asks for work — two askers produced two checks per click.
+    entry = _lane_entry(lane_dir) or {}
+    change = f'{entry.get("files", 0)} files +{entry.get("insertions", 0)} −{entry.get("deletions", 0)}'
+    line = (
+        f"filed for review: {record.get('project') or '?'}/{record.get('group') or '-'}/{lane} · {change}"
+    )
+    if record.get("task"):
+        line += f' · task: {record["task"]}'
+    sent = False
+    ctx = _plugin_ctx()
+    if ctx is not None:
+        try:
+            sent = bool(ctx.inject_message(line, session_key=payload.get("session_key") or None))
+        except Exception:
+            sent = False
+    return {"ok": True, "handed_at": record["handed_at"], "message_sent": sent}
 
 
 @router.post("/lanes/{lane}/answer")
