@@ -3683,16 +3683,6 @@ function Onboarding({ onAddProject }) {
           `step-${number}`
         )
       ),
-      jsx('div', {
-        className: 'text-[0.625rem] leading-relaxed',
-        style: { color: 'var(--ui-text-tertiary)' },
-        children: 'Then ask the agent for a feature in one line: “a settings menu with a theme row”. It opens a lane on its own worktree and the row appears here.'
-      }),
-      jsx('div', {
-        className: 'text-[0.625rem] leading-relaxed',
-        style: { color: 'var(--ui-text-tertiary)' },
-        children: 'For a look with data first, paste and run pi-team-demo: three lanes in a scratch project, removed with pi-team-demo --remove.'
-      })
     ]
   })
 }
