@@ -34,6 +34,10 @@ const TASK_H = `${Math.round((100 - 30) * 0.7)}px`
 // higher on the card: the block is pinned to the bottom, so growing it upward is the same as lifting that
 // header. `100 + 50` was his first step and `+ 100` his second, kept as arithmetic so the numbers stay visible.
 const THREAD_MIN_H = `${100 + 50 + 100}px`
+// An error is the one thing on the card that must be read in full. It takes 70 px from the thread's
+// floor and scrolls inside that: the thread already keeps the rest of the card's spare height.
+const ERROR_H = '70px'
+const THREAD_MIN_H_ERROR = `${100 + 50 + 100 - 70}px`
 // Tree geometry: a node owns its line, so a level cannot break into loose segments.
 // The line hangs under the icon, so the icon column and the line are one axis.
 const GUIDE_STEP_N = 18
@@ -1687,10 +1691,32 @@ function LaneList({ ctx }) {
         ]
   )
 
-  // No project yet: the arrow from the + says where to start, so the hint only explains what happens.
-  const emptyHint = jsx('div', {
-    className: 'px-2.5 pt-10 text-[0.625rem] leading-relaxed text-(--ui-text-tertiary)',
-    children: 'Press + above and paste a repository URL. The project appears here at once, and the right column tells you what to do next.'
+  // Two things a first run has to do before anything works: put a message in the chat, and add a
+  // repository. The left arrow points out of the panel at the session the plugin talks through.
+  const emptyHint = jsxs('div', {
+    className: 'flex flex-col gap-3 px-2.5 pt-8 text-[0.625rem] leading-relaxed text-(--ui-text-tertiary)',
+    children: [
+      jsxs('div', {
+        className: 'flex items-start gap-2',
+        children: [
+          jsx('span', { style: { color: ASK_TEXT, fontSize: '15px', lineHeight: '1' }, children: '\u2190' }),
+          jsxs('span', {
+            className: 'min-w-0',
+            children: [
+              jsx('div', {
+                className: 'text-[0.6875rem] uppercase tracking-wide',
+                style: { color: 'var(--ui-text-secondary)' },
+                children: 'greet the agent'
+              }),
+              jsx('div', { children: '(a live session is what links Hermes to pi-team)' })
+            ]
+          })
+        ]
+      }),
+      jsx('div', {
+        children: 'Press + above and paste a repository URL. The project appears here at once, and the right column tells you what to do next.'
+      })
+    ]
   })
 
   return jsxs('div', {
@@ -2564,7 +2590,7 @@ function ThreadView({ ctx, lane, draft, setDraft, onSent }) {
         // 250 px is the floor it asks for; above that it takes every spare pixel of the card (no `38vh`
         // ceiling any more, his call) and scrolls inside, so no empty strip is left between TASK and THREAD.
         style: {
-          height: THREAD_MIN_H,
+          height: lane.last_error ? THREAD_MIN_H_ERROR : THREAD_MIN_H,
           minHeight: 0,
           flex: '1 1 auto',
           display: 'flex',
@@ -2931,7 +2957,21 @@ function LaneStatus({ ctx }) {
       // No `branch` (it is `lane/<the header>`) and no `tool` (he removed it): both rows said what the card
       // or the last message already says.
       lane.last_error
-        ? jsx(Row, { label: 'error', value: lane.last_error, color: BAD_TEXT })
+        ? jsxs('div', {
+            className: 'shrink-0 px-2.5 pt-0.5',
+            children: [
+              jsx('div', {
+                className: 'text-[0.5625rem] uppercase tracking-wide',
+                style: { color: BAD_TEXT },
+                children: 'error'
+              }),
+              jsx('div', {
+                className: 'overflow-y-auto whitespace-pre-wrap break-words font-mono text-[0.625rem] leading-snug',
+                style: { maxHeight: ERROR_H, color: BAD_TEXT },
+                children: lane.last_error
+              })
+            ]
+          })
         : null,
 
       // A closed lane that did not end well still says why, even after its worktree is gone.

@@ -37,9 +37,13 @@ ENV_KEYS = (
     "NVIDIA_API_KEY",
     "DEEPSEEK_API_KEY",
     "OPENROUTER_API_KEY",
+    "OPENCODE_API_KEY",
     "OPENCODE_GO_API_KEY",
     "ANTHROPIC_API_KEY",
 )
+# pi names the opencode credential OPENCODE_API_KEY; Hermes stores the same value as
+# OPENCODE_GO_API_KEY. Hand pi the name it reads, or the provider looks unconfigured.
+ALIASES = {"OPENCODE_GO_API_KEY": "OPENCODE_API_KEY"}
 DEFAULT_PROVIDER = "nvidia"
 DEFAULT_MODEL = "nvidia/nemotron-3.5-super-vl-120b-a12b"
 DEFAULT_THINKING = "medium"
@@ -82,8 +86,13 @@ def load_env_keys() -> None:
         return
     for line in lines:
         name, sep, value = line.partition("=")
-        if sep and name.strip() in ENV_KEYS and not os.environ.get(name.strip()):
-            os.environ[name.strip()] = value.strip()
+        name = name.strip()
+        if not sep or name not in ENV_KEYS:
+            continue
+        value = value.strip()
+        target = ALIASES.get(name, name)
+        if not os.environ.get(target):
+            os.environ[target] = value
 
 
 def write_record(lane_dir: Path, record: dict) -> None:
