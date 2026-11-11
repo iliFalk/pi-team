@@ -2105,6 +2105,10 @@ function SessionTitle({ ctx, entry, project, feature, onRemove, onChanged }) {
 }
 
 
+const UI_MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
+// A drawn frame, not a sentence: pi's previews are built from +--- and | columns.
+const DRAWN = /\+\-{2,}|\|[^\n]*\|/
+
 function QuestionBlock({ ctx, lane, question, onDone }) {
   // Answers go to pi; words go to ME. pi takes one of the option strings as the answer and nothing else, so
   // the words he adds are shown INSIDE the option and travel as a thread note beside the answer.
@@ -2189,9 +2193,16 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
         style: { color: ASK_TEXT },
         children: 'the lane asks'
       }),
+      // pi draws previews with pipes and dashes when it asks about a layout. Wrapped as prose they turn
+      // into a wall: keep the art monospace and pre-formatted, and let a wide drawing scroll sideways.
       jsx('div', {
-        className: 'px-2.5 pb-0.5 pt-1 text-[0.6875rem] leading-relaxed',
-        style: { color: 'var(--ui-text-primary)' },
+        className: 'overflow-x-auto px-2.5 pb-0.5 pt-1 text-[0.6875rem]',
+        style: {
+          color: 'var(--ui-text-primary)',
+          fontFamily: DRAWN.test(question.title || '') ? UI_MONO : 'inherit',
+          whiteSpace: DRAWN.test(question.title || '') ? 'pre' : 'normal',
+          lineHeight: DRAWN.test(question.title || '') ? 1.35 : 1.6
+        },
         children: question.title || question.message || 'a question without text'
       }),
       // Four options with a paragraph each do not fit in a card. The list scrolls inside the card
