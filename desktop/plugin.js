@@ -1635,7 +1635,7 @@ function LaneList({ ctx }) {
           tag: placing
             ? (() => {
                 const minutes = Math.floor((Date.now() / 1000 - Number((registered || {}).created || 0)) / 60)
-                return minutes >= 1 ? `waiting for the agent · ${minutes}m` : 'waiting for the agent'
+                return minutes >= 1 ? `add the first feature · ${minutes}m` : 'add the first feature'
               })()
             : '',
           dim: placing ? 'italic' : '',
@@ -3234,7 +3234,7 @@ function ProjectCompose({ ctx, sessionId, onDone }) {
         kind: 'info',
         message: result.message_sent
           ? `${result.name}: project created, the request went to the chat`
-          : `${result.name}: created — waiting for the agent to pick it up.`
+          : `${result.name}: created — press + on its row for the first feature.`
       })
       setUrl('')
       setCheck(null)
