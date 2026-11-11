@@ -2197,6 +2197,13 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
   return jsxs('div', {
     className: 'flex flex-col pt-1',
     children: [
+      // Everything above the action row scrolls as one: the question, the sketches and the options.
+      // Capping only the options left a tall drawing pushing the buttons off the card, and the card
+      // head is fixed height, so this band carries its own limit.
+      jsx('div', {
+        className: 'min-h-0 overflow-y-auto',
+        style: { maxHeight: '46vh' },
+        children: [
       jsx('div', {
         className: 'px-2.5 text-[0.625rem] uppercase tracking-wide',
         style: { color: ASK_TEXT },
@@ -2220,8 +2227,7 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
       // Four options with a paragraph each do not fit in a card. The list scrolls inside the card
       // instead of pushing the answer button off the bottom edge.
       jsx('div', {
-        className: 'min-h-0 overflow-y-auto',
-        style: { maxHeight: '38vh' },
+        className: 'flex flex-col',
         children: options.map((option, index) =>
         jsxs(
           'div',
@@ -2305,6 +2311,7 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
           option
         )
       )}),
+      ]}),
       jsxs('div', {
         className: 'mx-2.5 my-1 flex items-center gap-1',
         children: [
