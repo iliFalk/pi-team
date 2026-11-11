@@ -3706,6 +3706,21 @@ function TeamPane({ ctx }) {
     !((lanesQuery.data && lanesQuery.data.lanes) || []).length &&
     !((lanesQuery.data && lanesQuery.data.registry) || []).length
   const [arrowPath, setArrowPath] = useState(null)
+  // Opening the panel on "pick a lane" wastes the one card the whole plugin is about: with lanes but
+  // no pick, show the one that wants a person first, else the newest. It never overrides a pick.
+  const autoPick = jsx('span', {
+    style: { display: 'none' },
+    ref: () => {
+      const run = () => {
+        const lanes = (lanesQuery.data && lanesQuery.data.lanes) || []
+        if (!lanes.length || selectedLane.get() || selectedFeature.get() || selectedProject.get()) return
+        const first = lanes.find(lane => lane.state === 'waiting') || lanes[0]
+        if (first && first.lane) showLane(first.lane)
+      }
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run)
+      else run()
+    }
+  })
   // Measured after paint, like SelectionOutline: the + and the project step only have a box once the
   // whole panel has laid out.
   const arrowProbe = jsx('span', {
@@ -3816,6 +3831,7 @@ function TeamPane({ ctx }) {
           })
         : null,
       arrowProbe,
+      autoPick,
       jsx(SelectionOutline, {}),
       jsx('div', {
         // The track starts under the header: a pill in the header would sit on the title.
