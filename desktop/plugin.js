@@ -1466,13 +1466,14 @@ function LaneList({ ctx }) {
           trunk: gopen && items.length > 0,
           row: jsx(ListHeader, {
             selected: chosen,
+            action: preparing ? retry({ kind: 'feature', project, feature: groupKey }, `${project}/${groupKey}`) : undefined,
             colour,
             label: preparing ? meta.title || groupKey : groupKey || 'ungrouped',
             // How long it has been waiting for me: a placeholder nobody picked up must show it.
             tag: preparing
               ? (() => {
                   const minutes = Math.floor((Date.now() / 1000 - Number(meta.created || 0)) / 60)
-                  return minutes >= 1 ? `preparation · ${minutes}m` : 'preparation'
+                  return minutes >= 1 ? `waiting for the agent · ${minutes}m` : 'waiting for the agent'
                 })()
               : '',
             dim: preparing ? 'italic' : '',
