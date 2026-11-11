@@ -3599,22 +3599,24 @@ function SettingsView({ data }) {
   })
 }
 
-/** The first run. A fresh install has no lanes and no projects, so the panel says what to do next:
- *  five steps, each with what it gives you and where it happens, so nobody has to guess whether a
+/** The first run. A fresh install has no lanes and no projects, so the panel says what to do next.
+ *  Every row carries what the step gives you and the exact line to paste, so nobody guesses whether a
  *  command goes into a terminal or into a click. `pi-team-demo` seeds three lanes for a look. */
 function Onboarding({ onAddProject }) {
   const step = { className: 'shrink-0 font-mono text-[0.625rem]', style: { color: 'var(--ui-text-tertiary)', width: '14px' } }
   const name = { className: 'shrink-0 text-[0.625rem] uppercase tracking-wide', style: { color: 'var(--ui-text-secondary)', width: '58px' } }
-  const where = { className: 'shrink-0 text-[0.5625rem] uppercase tracking-wide', style: { color: 'var(--ui-text-tertiary)' } }
-  const command = { className: 'mt-0.5 block truncate font-mono text-[0.5625rem]', style: { color: 'var(--ui-text-tertiary)' } }
-  const purpose = { className: 'min-w-0 text-[0.625rem] leading-relaxed', style: { color: 'var(--ui-text-secondary)' } }
-  // number, label, what it gives you, where it happens, the line to run or the action to take
+  const gives = { className: 'text-[0.625rem] leading-relaxed', style: { color: 'var(--ui-text-secondary)' } }
+  const lead = { className: 'mt-0.5 text-[0.5625rem] uppercase tracking-wide', style: { color: 'var(--ui-text-tertiary)' } }
+  const command = { className: 'mt-0.5 block whitespace-pre-wrap break-all rounded px-1.5 py-1 font-mono text-[0.5625rem] leading-relaxed', style: { color: 'var(--ui-text-primary)', background: 'var(--ui-bg-tertiary)' } }
+  // number, label, what it gives you, the line above the action, the action itself
   const rows = [
-    ['1', 'pi', 'the agent that writes the code', 'terminal', 'npm install -g --ignore-scripts @earendil-works/pi-coding-agent'],
-    ['2', 'runner', 'starts one lane and records it', 'terminal', 'cp runner/* ~/.hermes/scripts/ && chmod +x ~/.hermes/scripts/pi-*'],
-    ['3', 'key', 'the model a lane thinks with', 'settings', 'add a provider key in Hermes Settings → Providers'],
-    ['4', 'project', 'the code a lane works in', 'this panel', 'press + in the projects header, paste a repository'],
-    ['5', 'lane', 'the work itself', 'the agent', 'ask for a feature in one line']
+    ['1', 'pi', 'the agent that writes the code', 'paste and run in a terminal',
+      'npm install -g --ignore-scripts @earendil-works/pi-coding-agent'],
+    ['2', 'runner', 'starts one lane and records it', 'paste and run in a terminal',
+      'cp runner/* ~/.hermes/scripts/ && chmod +x ~/.hermes/scripts/pi-*'],
+    ['3', 'key', 'the model a lane thinks with', 'open Hermes Settings → Providers and add a key', ''],
+    ['4', 'project', 'the code a lane works in', 'press + in the projects header, then paste a repository URL', ''],
+    ['5', 'lane', 'the work itself', 'ask the agent for a feature in one line, for example', 'a settings menu with a theme row']
   ]
   return jsx(CardShell, {
     title: jsx('span', { children: 'start here' }),
@@ -3623,9 +3625,9 @@ function Onboarding({ onAddProject }) {
       jsx('div', {
         className: 'text-[0.625rem] leading-relaxed',
         style: { color: 'var(--ui-text-tertiary)' },
-        children: 'Two commands, two clicks, one sentence — once. Then a lane is one worktree and one headless pi run, shown here from its first change to its review.'
+        children: 'Two commands, two clicks, one sentence — once. After that a lane is one worktree and one headless pi run, shown here from its first change to its review.'
       }),
-      ...rows.map(([number, label, gives, place, line], index) =>
+      ...rows.map(([number, label, line, instruction, action], index) =>
         jsx(
           'div',
           {
@@ -3637,14 +3639,11 @@ function Onboarding({ onAddProject }) {
               jsxs('span', {
                 className: 'min-w-0 flex-1',
                 children: [
-                  jsxs('span', {
-                    className: 'flex items-baseline justify-between gap-2',
-                    children: [
-                      jsx('span', { ...purpose, children: gives }),
-                      jsx('span', { ...where, children: place })
-                    ]
-                  }),
-                  jsx('code', { ...command, children: line })
+                  jsx('span', { ...gives, children: line }),
+                  jsx('div', { ...lead, children: instruction }),
+                  action
+                    ? jsx('code', { ...command, children: action })
+                    : null
                 ]
               })
             ]
@@ -3669,7 +3668,7 @@ function Onboarding({ onAddProject }) {
       jsx('div', {
         className: 'text-[0.625rem] leading-relaxed',
         style: { color: 'var(--ui-text-tertiary)' },
-        children: 'To see the panel with data first, run pi-team-demo from the runner folder: three lanes in a scratch project, removed with --remove.'
+        children: 'To see the panel with data first, paste and run pi-team-demo: three lanes in a scratch project, removed with pi-team-demo --remove.'
       })
     ]
   })
