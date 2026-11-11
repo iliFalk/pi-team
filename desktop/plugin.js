@@ -2109,6 +2109,15 @@ const UI_MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
 // A drawn frame, not a sentence: pi's previews are built from +--- and | columns.
 const DRAWN = /\+\-{2,}|\|[^\n]*\|/
 
+/** A question title split into prose and drawings: [{text, drawn}]. */
+function titleParts(question) {
+  const title = (question.title || question.message || 'a question without text').trim()
+  const [head, ...tail] = title.split(/\n\n(?=Preview)/)
+  const parts = [{ text: head, drawn: false }]
+  for (const block of tail) parts.push({ text: block.trimEnd(), drawn: DRAWN.test(block) })
+  return parts.length ? parts : [{ text: title, drawn: false }]
+}
+
 function QuestionBlock({ ctx, lane, question, onDone }) {
   // Answers go to pi; words go to ME. pi takes one of the option strings as the answer and nothing else, so
   // the words he adds are shown INSIDE the option and travel as a thread note beside the answer.
@@ -2193,18 +2202,21 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
         style: { color: ASK_TEXT },
         children: 'the lane asks'
       }),
-      // pi draws previews with pipes and dashes when it asks about a layout. Wrapped as prose they turn
-      // into a wall: keep the art monospace and pre-formatted, and let a wide drawing scroll sideways.
-      jsx('div', {
-        className: 'overflow-x-auto px-2.5 pb-0.5 pt-1 text-[0.6875rem]',
-        style: {
-          color: 'var(--ui-text-primary)',
-          fontFamily: DRAWN.test(question.title || '') ? UI_MONO : 'inherit',
-          whiteSpace: DRAWN.test(question.title || '') ? 'pre' : 'normal',
-          lineHeight: DRAWN.test(question.title || '') ? 1.35 : 1.6
-        },
-        children: question.title || question.message || 'a question without text'
-      }),
+      // pi draws layout previews with pipes and dashes, and the RPC wire has no `preview` field: it
+      // folds them into the title after a blank line. Split there — the question stays prose, the
+      // drawings go monospace and pre-formatted in a band that scrolls sideways.
+      ...titleParts(question).map((part, index) =>
+        jsx('div', {
+          className: 'overflow-x-auto px-2.5 pb-0.5 pt-1 text-[0.6875rem]',
+          style: {
+            color: 'var(--ui-text-primary)',
+            fontFamily: part.drawn ? UI_MONO : 'inherit',
+            whiteSpace: part.drawn ? 'pre' : 'normal',
+            lineHeight: part.drawn ? 1.35 : 1.6
+          },
+          children: part.text
+        }, index)
+      ),
       // Four options with a paragraph each do not fit in a card. The list scrolls inside the card
       // instead of pushing the answer button off the bottom edge.
       jsx('div', {
