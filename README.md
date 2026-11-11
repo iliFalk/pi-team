@@ -26,12 +26,33 @@ run, with its own branch, its own diff and its own question when it gets stuck.
 
 ## Install
 
-About five minutes. Steps 2 and 3 are what make a lane run; the plugin alone draws an empty board.
+One action, both halves — the panel and the backend behind it — plus the skill `pi-team:pi-coach`.
 
-1. **The plugin.** Today from Git — in the desktop, Settings → Plugins → Install from Git, paste
-   `iliFalk/pi-team`. Or `hermes plugins install iliFalk/pi-team`. One install carries both halves, the
-   panel (`desktop/plugin.js`) and the backend (`dashboard/`), plus the skill `pi-team:pi-coach`.
-2. **The runner.** Lanes are started by `pi-lane`, which is not a plugin file:
+**In the desktop:** Settings → Plugins → Install from Git → paste `iliFalk/pi-team`, and say yes when it
+offers to enable the plugin. The app copies the panel half itself.
+
+**From a shell instead:**
+
+```sh
+hermes plugins install iliFalk/pi-team     # then connect the desktop app once: it copies the panel half
+```
+
+**Then restart the gateway**, so the dashboard API is imported:
+
+```sh
+systemctl --user restart hermes-serve
+```
+
+The panel appears beside the chat. Until a lane exists it opens on `start here` and draws nothing else.
+
+## Before the first lane
+
+Three one-time steps. The plugin alone draws an empty board: a lane is a real coding agent, so it needs that
+agent, a key and a runner.
+
+1. **The coding agent.** `npm install -g --ignore-scripts @earendil-works/pi-coding-agent`, then a provider
+   key in Hermes Settings → Providers.
+2. **The runner**, which starts and records one lane per run. It is not a plugin file:
 
    ```sh
    mkdir -p ~/.hermes/scripts
@@ -46,20 +67,13 @@ About five minutes. Steps 2 and 3 are what make a lane run; the plugin alone dra
    echo 'export PATH="$HOME/.hermes/scripts:$PATH"' >> ~/.bashrc
    ```
 
-3. **The coding agent.** `npm install -g --ignore-scripts @earendil-works/pi-coding-agent`, then a provider
-   key in Hermes Settings → Providers.
-4. **Buttons that speak.** A panel button puts a message into the chat through the gateway. Off by default:
+3. **Buttons that speak.** A panel button puts a message into the chat through the gateway. Off by default:
 
    ```sh
    hermes config set plugins.entries.pi-team.allow_gateway_injection true
    ```
 
-5. **Restart the gateway.** `dashboard/plugin_api.py` is imported once, when `hermes-serve` starts.
-
-The panel appears beside the chat. A first run has no lanes, so the panel opens on `start here` — the five
-steps above, and one button that adds the first project.
-
-## First lane
+## Your first lane
 
 1. Press `+` in the `projects` header, paste a repository URL. The project appears at once; the agent clones
    it into `~/work`.
