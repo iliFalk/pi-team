@@ -26,6 +26,100 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, HTTPException
 
+# --- the two mechanical steps -------------------------------------------------
+# Cloning and starting a lane are script calls, not judgement calls. Asking an agent to do them cost
+# three minutes of exploration for a ten-second clone, and the panel sat in CLONING while it thought.
+# The plugin now runs the same scripts an agent would, and the chat gets the result instead of the
+# errand. Anything that needs judgement — the task text, the review — still goes to the chat.
+
+def _tool(name: str) -> Optional[str]:
+    """Locate a pi-team script: the profile's scripts directory first, then PATH."""
+    local = Path.home() / ".hermes" / "scripts" / name
+    if local.exists() and os.access(local, os.X_OK):
+        return str(local)
+    for entry in (os.environ.get("PATH") or "").split(os.pathsep):
+        candidate = Path(entry) / name
+        if candidate.exists() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
+
+
+def _say(text: str, session_key: Optional[str]) -> bool:
+    """Put one line in the chat; silence is not an error."""
+    ctx = _plugin_ctx()
+    if ctx is None:
+        return False
+    try:
+        return bool(ctx.inject_message(text, session_key=session_key or None))
+    except Exception:
+        return False
+
+
+def _clone_project(name: str, url: str) -> tuple[bool, str]:
+    """Clone and register. Returns (ok, what to tell the person)."""
+    tool = _tool("pi-project")
+    if tool is None:
+        return False, "pi-project is not installed (see the README, Install)"
+    # The panel takes a bare `github.com/owner/name`; git needs a scheme or it reads a local path.
+    if not url.startswith(("http://", "https://", "ssh://", "git@")):
+        url = "https://" + url
+    try:
+        done = subprocess.run(
+            [tool, "add", name, url],
+            capture_output=True, text=True, timeout=300, cwd=str(Path.home()),
+        )
+    except subprocess.TimeoutExpired:
+        return False, "clone timed out after 5 minutes"
+    except Exception as exc:  # noqa: BLE001 - the message is the report
+        return False, str(exc)
+    if done.returncode != 0:
+        detail = (done.stderr or done.stdout or "").strip().splitlines()
+        return False, (detail[-1] if detail else f"pi-project exited {done.returncode}")
+    return True, str(Path.home() / "work" / name)
+
+
+def _start_lane(project_name: str, slug: str, text: str) -> tuple[bool, str]:
+    """Start the lane the way the skill does, detached, and return at once."""
+    tool = _tool("pi-lane")
+    if tool is None:
+        return False, "pi-lane is not installed (see the README, Install)"
+    repo = ""
+    for entry in _registry():
+        if entry.get("name") == project_name:
+            repo = str(entry.get("repo") or "")
+            break
+    if not repo or not Path(repo).is_dir():
+        return False, "the project has no clone yet"
+    # A lane carries the name of its work, not the placeholder its row was created under. The same
+    # rename an agent would do with `pi-lane` by hand, done here so the panel never shows `prep-ab12cd`.
+    # Name it after the first clause: "add a theme switch; ask me first" is the lane
+    # `add-a-theme-switch`, and the instruction after the semicolon stays in the task.
+    head = (text or "").split(";")[0]
+    wanted = re.sub(r"[^a-z0-9]+", "-", head.lower()).strip("-")[:40].strip("-") or "feature"
+    if wanted != slug:
+        try:
+            pireg.finish_feature(project_name, slug, wanted, text)
+            slug = wanted
+        except Exception:  # noqa: BLE001 - a name is not worth failing the lane over
+            pass
+    argv = [tool, slug, text, "--repo", repo, "--project", project_name, "--feature", slug]
+    # Pi's own default provider wins unless the operator pinned one for the panel: the plugin does not
+    # choose a model, and a demo that needs a fast one says so in the environment.
+    provider = (os.environ.get("PI_TEAM_PROVIDER") or "").strip()
+    model = (os.environ.get("PI_TEAM_MODEL") or "").strip()
+    if provider and model:
+        argv += ["--provider", provider, "--model", model]
+    try:
+        log = open(_lanes_root() / "spawn.log", "a")
+        subprocess.Popen(
+            argv, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+            start_new_session=True, cwd=repo, close_fds=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return False, str(exc)
+    return True, f"{project_name}/{slug}"
+
+
 router = APIRouter()
 
 # The registry's rules live with the CLI helpers; import them by path so the panel and
@@ -1107,24 +1201,18 @@ def prepare_project(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any
         pireg.prepare_project(name, url)
     except KeyError:
         raise HTTPException(status_code=409, detail=f"project already exists: {name}")
-    sent = False
-    ctx = _plugin_ctx()
-    if ctx is not None:
-        try:
-            sent = bool(
-                ctx.inject_message(
-                    PROJECT_PROMPT.format(name=name, url=url, slug=checked.get("slug") or url),
-                    session_key=payload.get("session_key") or None,
-                )
-            )
-        except Exception:
-            sent = False
+    # No chat line. Every message in a Hermes session is a work order for the agent there: a
+    # "cloned …" report made it read the repository for four minutes. The panel shows this step;
+    # the chat is kept for the moment that needs a person — the review queue.
+    cloned, note = _clone_project(name, url)
     return {
         "ok": True,
         "name": name,
         "slug": checked.get("slug"),
         "branch": checked.get("branch"),
-        "message_sent": sent,
+        "cloned": cloned,
+        "note": note,
+        "message_sent": False,
     }
 
 
@@ -1185,19 +1273,17 @@ def prepare_feature(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any
         slug, item = pireg.prepare_feature(project_name, text, str(payload.get("session_key") or ""))
     except KeyError:
         raise HTTPException(status_code=404, detail=f"unknown project: {project_name}")
-    sent = False
-    ctx = _plugin_ctx()
-    if ctx is not None:
-        try:
-            sent = bool(
-                ctx.inject_message(
-                    PREPARE_PROMPT.format(where=f"{project_name}/{slug}", text=text),
-                    session_key=payload.get("session_key") or None,
-                )
-            )
-        except Exception:
-            sent = False
-    return {"ok": True, "project": project_name, "feature": slug, "title": item["title"], "message_sent": sent}
+    # Silent for the same reason as the clone above: the panel already shows the lane appearing.
+    started, note = _start_lane(project_name, slug, text)
+    return {
+        "ok": True,
+        "project": project_name,
+        "feature": slug,
+        "title": item["title"],
+        "started": started,
+        "note": note,
+        "message_sent": False,
+    }
 
 
 @router.post("/features/cancel")
@@ -1294,13 +1380,7 @@ def hand_lane(lane: str, payload: Dict[str, Any] = Body(default={})) -> Dict[str
     )
     if record.get("task"):
         line += f' · task: {record["task"]}'
-    sent = False
-    ctx = _plugin_ctx()
-    if ctx is not None:
-        try:
-            sent = bool(ctx.inject_message(line, session_key=payload.get("session_key") or None))
-        except Exception:
-            sent = False
+    sent = _say(line, payload.get("session_key"))
     return {"ok": True, "handed_at": record["handed_at"], "message_sent": sent}
 
 

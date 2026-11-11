@@ -2194,7 +2194,12 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
         style: { color: 'var(--ui-text-primary)' },
         children: question.title || question.message || 'a question without text'
       }),
-      ...options.map((option, index) =>
+      // Four options with a paragraph each do not fit in a card. The list scrolls inside the card
+      // instead of pushing the answer button off the bottom edge.
+      jsx('div', {
+        className: 'min-h-0 overflow-y-auto',
+        style: { maxHeight: '38vh' },
+        children: options.map((option, index) =>
         jsxs(
           'div',
           {
@@ -2222,7 +2227,7 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
                     onClick: () => setPicked(index),
                     children: notes[index]
                       ? jsxs('span', {
-                          className: 'min-w-0 truncate',
+                          className: 'min-w-0 break-words',
                           children: [
                             option,
                             jsx('span', {
@@ -2276,7 +2281,7 @@ function QuestionBlock({ ctx, lane, question, onDone }) {
           },
           option
         )
-      ),
+      )}),
       jsxs('div', {
         className: 'mx-2.5 my-1 flex items-center gap-1',
         children: [

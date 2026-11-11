@@ -59,6 +59,18 @@ def fail(message: str) -> NoReturn:
     raise SystemExit(2)
 
 
+def apply_aliases() -> None:
+    """Hermes names a credential differently from pi; hand pi the name it reads.
+
+    Both env branches end here: a spawn that already carries the Hermes name returns early,
+    and without this pass ``opencode-go`` stays unconfigured while the key sits in the env.
+    """
+    for source, target in ALIASES.items():
+        value = (os.environ.get(source) or "").strip()
+        if value and not (os.environ.get(target) or "").strip():
+            os.environ[target] = value
+
+
 def load_env_keys() -> None:
     """Put the provider keys into this process, for the pi run it starts.
 
@@ -73,10 +85,11 @@ def load_env_keys() -> None:
             value = (get_secret(name) or "").strip()
             if value and not os.environ.get(name):
                 os.environ[name] = value
-        if any(os.environ.get(name) for name in ENV_KEYS):
-            return
     except Exception:
         pass
+    # No early return here. A scope that answers for one provider says nothing about another, and a
+    # single unrelated key in the environment — the gateway's own, say — used to stop this fallback
+    # before it read the file. The file is the last place a key can come from: read it always.
     env_file = hermes_home() / ".env"
     if not env_file.is_file():
         return
@@ -93,6 +106,7 @@ def load_env_keys() -> None:
         target = ALIASES.get(name, name)
         if not os.environ.get(target):
             os.environ[target] = value
+    apply_aliases()
 
 
 def write_record(lane_dir: Path, record: dict) -> None:
