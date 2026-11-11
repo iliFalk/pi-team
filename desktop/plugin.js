@@ -1347,26 +1347,6 @@ function LaneList({ ctx }) {
   const lanes = (query.data && query.data.lanes) || []
 
   const toggle = key => collapsedAtom.set({ ...collapsed, [key]: !collapsed[key] })
-  // "waiting for the agent": the row was created, the ask found no chat to land in. This sends the
-  // same request again, to the session the person is looking at.
-  const ask = (body, label) => {
-    ctx.rest('/prepare/ask', { method: 'POST', body: { ...body, session_key: sessionId }, timeoutMs: 20000 })
-      .then(result => host.notify({
-        kind: result && result.message_sent ? 'info' : 'error',
-        message: result && result.message_sent
-          ? `${label}: the request went to the chat`
-          : `${label}: still no chat to send to — open a session and press ⟳ again`
-      }))
-      .catch(error => host.notify({ kind: 'error', message: `${label}: ${(error && error.message) || error}` }))
-  }
-  const retry = (body, label) => jsx(HoverBox, {
-    onClick: () => ask(body, label),
-    title: 'send this request to the chat again',
-    className: 'shrink-0 rounded px-1 text-[0.6875rem]',
-    style: { color: ASK_TEXT },
-    hoverColour: 'var(--ui-text-primary)',
-    children: '⟳'
-  })
   const isOpen = key => !collapsed[key]
 
   const [askUpdate, setAskUpdate] = useState(false)
@@ -1466,7 +1446,6 @@ function LaneList({ ctx }) {
           trunk: gopen && items.length > 0,
           row: jsx(ListHeader, {
             selected: chosen,
-            action: preparing ? retry({ kind: 'feature', project, feature: groupKey }, `${project}/${groupKey}`) : undefined,
             colour,
             label: preparing ? meta.title || groupKey : groupKey || 'ungrouped',
             // How long it has been waiting for me: a placeholder nobody picked up must show it.
@@ -1652,7 +1631,6 @@ function LaneList({ ctx }) {
         trunk: open,
         row: jsx(ListHeader, {
           label: project,
-          action: placing ? retry({ kind: 'project', project }, project) : undefined,
           // A project that is only a repository link: it has no lanes and nothing to open yet.
           tag: placing
             ? (() => {
@@ -3256,7 +3234,7 @@ function ProjectCompose({ ctx, sessionId, onDone }) {
         kind: 'info',
         message: result.message_sent
           ? `${result.name}: project created, the request went to the chat`
-          : `${result.name}: created — waiting for the agent. Press the cycle on its row to send the request again.`
+          : `${result.name}: created — waiting for the agent to pick it up.`
       })
       setUrl('')
       setCheck(null)
@@ -3431,7 +3409,7 @@ function FeatureCompose({ ctx, project, sessionId, onDone }) {
         kind: 'info',
         message: result.message_sent
           ? `${project}: feature created, the request went to the chat`
-          : `${project}: created — waiting for the agent. Press the cycle on its row to send the request again.`
+          : `${project}: created — waiting for the agent to pick it up.`
       })
       setText('')
       onDone()
