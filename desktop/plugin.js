@@ -1632,12 +1632,13 @@ function LaneList({ ctx }) {
         row: jsx(ListHeader, {
           label: project,
           // A project that is only a repository link: it has no lanes and nothing to open yet.
+          // cloning while the placeholder waits, then a plain "done" for a repository with nothing in
+          // it yet: the + on this row is the next step, so the tag never has to ask for it in words.
           tag: placing
-            ? (() => {
-                const minutes = Math.floor((Date.now() / 1000 - Number((registered || {}).created || 0)) / 60)
-                return minutes >= 1 ? `add the first feature · ${minutes}m` : 'add the first feature'
-              })()
-            : '',
+            ? 'cloning'
+            : all.length === 0 && ((registered && registered.features) || []).length === 0
+              ? 'done'
+              : '',
           dim: placing ? 'italic' : '',
           // A project always sums its own lanes, open or closed.
           counts: placing ? null : countStates(all),
