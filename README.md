@@ -43,35 +43,29 @@ hermes plugins install iliFalk/pi-team     # then connect the desktop app once: 
 systemctl --user restart hermes-serve
 ```
 
+The plugin places its runner — `pi-lane`, `pi-feature`, `pi-team-demo` — in `~/.hermes/scripts` on its
+first start. Files already there are left alone, so a local edit survives an update.
+
 The panel appears beside the chat. Until a lane exists it opens on `start here` and draws nothing else.
 
 ## Before the first lane
 
-Three one-time steps. The plugin alone draws an empty board: a lane is a real coding agent, so it needs that
-agent, a key and a runner.
+The install brings the panel, the runner and the procedure. Two things are left.
 
-1. **The coding agent.** `npm install -g --ignore-scripts @earendil-works/pi-coding-agent`, then a provider
-   key in Hermes Settings → Providers.
-2. **The runner**, which starts and records one lane per run. It is not a plugin file:
-
-   ```sh
-   mkdir -p ~/.hermes/scripts
-   cp runner/pi-lane runner/pi-feature runner/pi-team-demo runner/pireg.py ~/.hermes/scripts/
-   chmod +x ~/.hermes/scripts/pi-lane ~/.hermes/scripts/pi-feature ~/.hermes/scripts/pi-team-demo
-   ```
-
-   `~/.hermes/scripts` is not on `PATH` by default, and the agent calls `pi-lane` by name. Add the
-   directory once:
-
-   ```sh
-   echo 'export PATH="$HOME/.hermes/scripts:$PATH"' >> ~/.bashrc
-   ```
-
-3. **Buttons that speak.** A panel button puts a message into the chat through the gateway. Off by default:
+1. **The coding agent**, which every lane runs: `npm install -g --ignore-scripts @earendil-works/pi-coding-agent`,
+   and a provider key in Hermes Settings → Providers.
+2. **Buttons that speak.** A panel button puts a message into the chat through the gateway. Off by default:
 
    ```sh
    hermes config set plugins.entries.pi-team.allow_gateway_injection true
    ```
+
+`~/.hermes/scripts` is not on `PATH` by default, and the agent calls `pi-lane` by name. Add the
+directory once, so both you and the agent find it:
+
+```sh
+echo 'export PATH="$HOME/.hermes/scripts:$PATH"' >> ~/.bashrc
+```
 
 ## Your first lane
 

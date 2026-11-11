@@ -3599,9 +3599,9 @@ function SettingsView({ data }) {
   })
 }
 
-/** The first run. A fresh install has no lanes and no projects, so the panel says what to do next.
- *  Every row carries what the step gives you and the exact line to paste, so nobody guesses whether a
- *  command goes into a terminal or into a click. `pi-team-demo` seeds three lanes for a look. */
+/** The first run. The plugin is already installed by the time this card is visible, so it asks for the
+ *  two things an install cannot bring: the coding agent, and a repository to work in. Everything else —
+ *  the runner, the skill, the key — arrives with the plugin or with Hermes itself. */
 function Onboarding({ onAddProject }) {
   const step = { className: 'shrink-0 font-mono text-[0.625rem]', style: { color: 'var(--ui-text-tertiary)', width: '14px' } }
   const name = { className: 'shrink-0 text-[0.625rem] uppercase tracking-wide', style: { color: 'var(--ui-text-secondary)', width: '58px' } }
@@ -3612,11 +3612,7 @@ function Onboarding({ onAddProject }) {
   const rows = [
     ['1', 'pi', 'the agent that writes the code', 'paste and run in a terminal',
       'npm install -g --ignore-scripts @earendil-works/pi-coding-agent'],
-    ['2', 'runner', 'starts one lane and records it', 'paste and run in a terminal',
-      'cp runner/* ~/.hermes/scripts/ && chmod +x ~/.hermes/scripts/pi-*'],
-    ['3', 'key', 'the model a lane thinks with', 'open Hermes Settings → Providers and add a key', ''],
-    ['4', 'project', 'the code a lane works in', 'press + in the projects header, then paste a repository URL', ''],
-    ['5', 'lane', 'the work itself', 'ask the agent for a feature in one line, for example', 'a settings menu with a theme row']
+    ['2', 'project', 'the code a lane works in', 'press + in the projects header, then paste a repository URL', '']
   ]
   return jsx(CardShell, {
     title: jsx('span', { children: 'start here' }),
@@ -3625,7 +3621,7 @@ function Onboarding({ onAddProject }) {
       jsx('div', {
         className: 'text-[0.625rem] leading-relaxed',
         style: { color: 'var(--ui-text-tertiary)' },
-        children: 'Two commands, two clicks, one sentence — once. After that a lane is one worktree and one headless pi run, shown here from its first change to its review.'
+        children: 'The panel, its runner and the pi-coach procedure are installed. Two things are left.'
       }),
       ...rows.map(([number, label, line, instruction, action], index) =>
         jsx(
@@ -3668,7 +3664,12 @@ function Onboarding({ onAddProject }) {
       jsx('div', {
         className: 'text-[0.625rem] leading-relaxed',
         style: { color: 'var(--ui-text-tertiary)' },
-        children: 'To see the panel with data first, paste and run pi-team-demo: three lanes in a scratch project, removed with pi-team-demo --remove.'
+        children: 'Then ask the agent for a feature in one line: “a settings menu with a theme row”. It opens a lane on its own worktree and the row appears here.'
+      }),
+      jsx('div', {
+        className: 'text-[0.625rem] leading-relaxed',
+        style: { color: 'var(--ui-text-tertiary)' },
+        children: 'For a look with data first, paste and run pi-team-demo: three lanes in a scratch project, removed with pi-team-demo --remove.'
       })
     ]
   })
