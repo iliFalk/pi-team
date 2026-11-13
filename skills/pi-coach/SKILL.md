@@ -132,6 +132,10 @@ pi-lane wait <lane> [--timeout SECONDS] [--interval 2] [--json]
 `--json` prints one object (`state`, `files`, `insertions`, `deletions`, `closed`, `question`), and the
 verb prints one line per state change, not one per poll.
 
+Wait on a whole batch with the names you started: `pi-lane wait --all tokens material screens`. It
+returns `3` as soon as ANY of them asks a question, `1` if any failed, `0` when all are done, `124` on
+timeout. Without names it follows every lane that is still running or waiting.
+
 **Never wait with `sleep`.** It burns no tokens and costs wall time twice over: measured, a three-lane
 run spent about a third of its 36 minutes asleep between polls.
 
@@ -154,6 +158,33 @@ hermes config set approvals.mode smart   # after
 ```
 
 `--yolo` is not enough: it bypasses terminal-command approvals, not file writes.
+
+## Lane: parallel
+
+Start as many lanes as the work has independent slices, then wait once. Nothing in the runner
+serialises them: each lane is its own process, its own worktree and its own branch.
+
+```sh
+pi-lane tokens  "<brief>" --project <p> --feature <f> &
+pi-lane material "<brief>" --project <p> --feature <f> &
+pi-lane screens "<brief>" --project <p> --feature <f>
+pi-lane wait --all tokens material screens
+```
+
+**The one rule that keeps it safe: disjoint file ownership.** Two lanes may run at once only when
+their briefs name non-overlapping files. Worktrees prevent write conflicts, not semantic ones: two
+lanes editing the same component or the same token block merge into a conflict, or worse, the second
+merge silently replaces the first one's reasoning. A slice that must touch a shared file is sequential
+by definition — put it in a lane that starts after the merge.
+
+- Write the file list into every brief ("these files and nothing else"). A lane that wanders outside
+  its list makes the boundary meaningless.
+- Merge in dependency order, one lane at a time, and re-run the gates after each merge that touches a
+  gate input. Two lanes that both change `src/index.css` are a dependency, not a pair.
+- Parallelism buys wall time, not money: N lanes read the context N times, so tokens grow roughly
+  linearly while the clock does not. Use it when the slices are real, not to look fast.
+- A question parks its own lane only. `wait --all` returns `3` for the first one that asks, so answer
+  it (`pi-lane answer <lane> "<option>"`) and call `wait --all` again.
 
 ## Lane: follow up
 
@@ -196,6 +227,11 @@ output. A lane whose gates were not run does not close.
 `TO REVIEW` in the panel writes the same `handed_at` and says nothing; the check is what the queue's
 `SEND` asks for, and the panel offers `CLOSE` only while `checked_sha` equals the worktree HEAD — so a
 commit after the check hides the button again. Run `pi-lane check` as the last step of every check.
+
+**Not merged is not delivered.** A lane's work lives on its branch until the orchestrator merges it, so
+"lane done" means nothing on its own. Before reporting a task finished: merge every lane the task
+needed, then run the gates **in the merged tree** — a gate green in a lane worktree says nothing about
+`main` after three merges. Name any lane left unmerged instead of counting it as done.
 
 **Show the plan before closing.** Bare `pi-lane close` prints what will be merged and deleted; paste
 it into the chat, wait for his go, then run `--yes`. Close commits the lane's uncommitted work on its

@@ -525,6 +525,94 @@ def list_lanes(argv: list) -> int:
     return 0
 
 
+def _lane_state(lane: str) -> tuple[str, dict | None, dict | None]:
+    lane_dir = hermes_home() / "lanes" / lane
+    record = read_json(lane_dir / "lane.json")
+    question = read_json(lane_dir / "question.json") if record and record.get("state") == "waiting" else None
+    return (str(record.get("state") or "") if record else "gone"), record, question
+
+
+def _report_lane(lane: str, state: str, record: dict | None, question: dict | None,
+                 files: int, added: int, removed: int, as_json: bool) -> None:
+    if as_json:
+        print(json.dumps({
+            "lane": lane, "state": state, "files": files, "insertions": added,
+            "deletions": removed, "closed": bool((record or {}).get("closed_at")),
+            "question": ({"id": question.get("id"), "title": question.get("title") or question.get("message") or ""}
+                         if isinstance(question, dict) else None),
+        }, ensure_ascii=False))
+    elif question is not None:
+        print(f"{lane}: waiting — {question.get('title') or question.get('message') or ''}")
+    elif state == "done":
+        print(f"{lane}: done — {files} files +{added} -{removed}")
+    else:
+        print(f"{lane}: {state}")
+
+
+def wait_all(argv: list) -> int:
+    """Wait for several lanes at once.
+
+    `pi-lane wait --all` follows every lane that is running or waiting; names may narrow it.
+    Returns 3 as soon as ANY lane is waiting on a question, because that one needs a person
+    before the others can be merged. This is the verb that makes parallel lanes affordable:
+    start three, wait on all three, merge in dependency order.
+    """
+    parser = argparse.ArgumentParser(prog="pi-lane wait --all")
+    parser.add_argument("--all", action="store_true")
+    parser.add_argument("lanes", nargs="*")
+    parser.add_argument("--timeout", type=int, default=3600, help="seconds; 0 waits forever")
+    parser.add_argument("--interval", type=float, default=3.0)
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+
+    watch = list(args.lanes)
+    if not watch:
+        for record in lane_records():
+            if str(record.get("state") or "") in ("running", "waiting"):
+                watch.append(str(record.get("lane")))
+    if not watch:
+        if args.json:
+            print(json.dumps({"lanes": [], "state": "empty"}))
+        else:
+            print("no lanes to wait for")
+        return 0
+
+    deadline = (time.monotonic() + args.timeout) if args.timeout else None
+    printed: dict[str, str] = {}
+    while True:
+        states: dict[str, str] = {}
+        waiting: list[str] = []
+        failed = False
+        for lane in watch:
+            state, record, question = _lane_state(lane)
+            states[lane] = state
+            if question is not None:
+                waiting.append(lane)
+            if state in ("failed", "error"):
+                failed = True
+            if printed.get(lane) != state or question is not None:
+                files = added = removed = 0
+                if record and record.get("repo") and record.get("branch"):
+                    try:
+                        files, added, removed = _shortstat(str(record["repo"]), str(record["branch"]))
+                    except Exception:
+                        pass
+                _report_lane(lane, state, record, question, files, added, removed, args.json)
+                printed[lane] = state
+        if waiting:
+            return 3
+        if all(s in ("done", "failed", "stopped", "cancelled", "error", "gone") for s in states.values()):
+            if not args.json:
+                done = sum(1 for s in states.values() if s == "done")
+                print(f"all settled — {done}/{len(watch)} done")
+            return 1 if failed else 0
+        if deadline is not None and time.monotonic() > deadline:
+            pending = ", ".join(f"{k}={v}" for k, v in states.items() if v in ("running", "waiting"))
+            print(f"timeout after {args.timeout}s — still: {pending}", file=sys.stderr)
+            return 124
+        time.sleep(args.interval)
+
+
 def wait_lane(argv: list) -> int:
     """Block until a lane stops moving on its own: done, failed, or waiting on a question.
 
@@ -757,6 +845,8 @@ def continue_lane(argv: list) -> int:
 
 
 def main() -> int:
+    if len(sys.argv) > 2 and sys.argv[1] == "wait" and "--all" in sys.argv[2:]:
+        return wait_all(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "wait":
         return wait_lane(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "hand":
@@ -778,6 +868,7 @@ def main() -> int:
         prog="pi-lane",
         epilog=(
             "verbs with the lane lifecycle: pi-lane wait <lane> [--timeout S] [--json] (block until it finishes or asks), "
+            "pi-lane wait --all [lane …] (block on several at once, 3 if any asks), "
             "pi-lane hand <lane> (file for review), "
             "pi-lane check <lane> (record that its work was read), "
             "pi-lane close <lane> [--no-merge] [--yes], "
