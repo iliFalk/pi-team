@@ -674,6 +674,94 @@ def wait_lane(argv: list) -> int:
         time.sleep(args.interval)
 
 
+def gate_lanes(argv: list) -> int:
+    """Run the project gates in the MERGED tree and record the check on each lane.
+
+    Two refusals make this verb worth having. A lane whose branch is not yet an ancestor of HEAD
+    was never merged, so a green run here would bless work that is not in the tree. And lanes from
+    different repositories cannot share one gate run, because one command set would answer for both.
+    On success it writes `checked_at` and `checked_sha` — the same pair the panel reads to offer
+    CLOSE.
+    """
+    parser = argparse.ArgumentParser(prog="pi-lane gate")
+    parser.add_argument("lanes", nargs="+")
+    parser.add_argument("--cmd", action="append", default=[], help="a gate command; repeatable")
+    parser.add_argument("--cwd", default="", help="run here instead of the repository root")
+    parser.add_argument("--timeout", type=int, default=1800, help="seconds per command")
+    args = parser.parse_args(argv)
+    if not args.cmd:
+        print("pi-lane gate: pass at least one --cmd \"<command>\"", file=sys.stderr)
+        return 2
+
+    records = {}
+    repos = set()
+    for lane in args.lanes:
+        record = read_json(hermes_home() / "lanes" / lane / "lane.json")
+        if record is None:
+            print(f"{lane}: no such lane", file=sys.stderr)
+            return 1
+        if record.get("closed_at"):
+            print(f"{lane}: already closed", file=sys.stderr)
+            return 1
+        repo = str(record.get("repo") or "")
+        if not repo:
+            print(f"{lane}: the record carries no repository", file=sys.stderr)
+            return 1
+        records[lane] = record
+        repos.add(os.path.realpath(repo))
+    if len(repos) != 1:
+        print(f"lanes span {len(repos)} repositories: {', '.join(sorted(repos))}", file=sys.stderr)
+        return 1
+    repo = repos.pop()
+    workdir = os.path.realpath(args.cwd) if args.cwd else repo
+
+    rc, head, err = _git(repo, "rev-parse", "HEAD")
+    if rc != 0:
+        print(f"{repo}: git says: {err}", file=sys.stderr)
+        return 1
+
+    # The whole point: a gate that runs next to unmerged work proves nothing about the tree.
+    unmerged = []
+    for lane, record in records.items():
+        branch = str(record.get("branch") or "")
+        if not branch:
+            continue
+        rc, _, _ = _git(repo, "merge-base", "--is-ancestor", branch, "HEAD")
+        if rc != 0:
+            unmerged.append(lane)
+    if unmerged:
+        print(f"refusing: not merged into HEAD ({head[:7]}): {', '.join(sorted(unmerged))}", file=sys.stderr)
+        print("merge them first — a gate here would bless work that is not in the tree", file=sys.stderr)
+        return 1
+
+    started = time.time()
+    for command in args.cmd:
+        print(f"$ {command}   (in {workdir})")
+        try:
+            done = subprocess.run(command, shell=True, cwd=workdir, capture_output=True, text=True,
+                                  timeout=args.timeout)
+        except subprocess.TimeoutExpired:
+            print(f"timeout after {args.timeout}s: {command}", file=sys.stderr)
+            return 1
+        output = ((done.stdout or "") + (done.stderr or "")).strip()
+        tail = "\n".join(output.splitlines()[-12:])
+        if tail:
+            print(tail)
+        print(f"-> exit {done.returncode}")
+        if done.returncode != 0:
+            print(f"gate failed, nothing recorded: {command}", file=sys.stderr)
+            return 1
+
+    for lane, record in records.items():
+        record["checked_at"] = int(time.time())
+        record["checked_sha"] = head
+        record["gate_cmds"] = list(args.cmd)
+        record["gate_seconds"] = int(time.time() - started)
+        write_record(hermes_home() / "lanes" / lane, record)
+    print(f"gate ok — checked {len(records)} lane(s) at {head[:7]}")
+    return 0
+
+
 def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: str, question_timeout: int) -> int:
     """One `pi --mode rpc` turn: the lane's first task or a continuation of its session."""
     events_path = lane_dir / "events.jsonl"
@@ -847,6 +935,8 @@ def continue_lane(argv: list) -> int:
 def main() -> int:
     if len(sys.argv) > 2 and sys.argv[1] == "wait" and "--all" in sys.argv[2:]:
         return wait_all(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "gate":
+        return gate_lanes(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "wait":
         return wait_lane(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "hand":
@@ -869,6 +959,7 @@ def main() -> int:
         epilog=(
             "verbs with the lane lifecycle: pi-lane wait <lane> [--timeout S] [--json] (block until it finishes or asks), "
             "pi-lane wait --all [lane …] (block on several at once, 3 if any asks), "
+            "pi-lane gate <lane …> --cmd \"…\" (run the gates in the MERGED tree and record the check), "
             "pi-lane hand <lane> (file for review), "
             "pi-lane check <lane> (record that its work was read), "
             "pi-lane close <lane> [--no-merge] [--yes], "

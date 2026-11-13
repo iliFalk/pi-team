@@ -211,8 +211,20 @@ git -C <repo>/.worktrees/<lane> diff --stat
 git -C <repo>/.worktrees/<lane> diff
 ```
 
-Then run the real gates in that directory — tests, build, a `curl` to a live server — and show the
-output. A lane whose gates were not run does not close.
+Then run the real gates and record them:
+
+```sh
+pi-lane gate <lane> [<lane> …] --cmd "python3 -m unittest discover -s tests" --cmd "npm run build"
+```
+
+It runs every command in the **merged tree** — the repository root, not a lane worktree — prints each
+command with its exit code and the tail of its output, and on success writes `checked_at` and
+`checked_sha` (the merged HEAD) on every named lane, which is what makes the panel offer `CLOSE`.
+It refuses for a reason worth knowing: a lane whose branch is not an ancestor of HEAD was never
+merged, and a gate run next to unmerged work would bless code that is not in the tree. Lanes from
+different repositories cannot share one run either.
+
+A lane whose gates were not run does not close.
 
 ## Review, close
 
@@ -230,8 +242,8 @@ commit after the check hides the button again. Run `pi-lane check` as the last s
 
 **Not merged is not delivered.** A lane's work lives on its branch until the orchestrator merges it, so
 "lane done" means nothing on its own. Before reporting a task finished: merge every lane the task
-needed, then run the gates **in the merged tree** — a gate green in a lane worktree says nothing about
-`main` after three merges. Name any lane left unmerged instead of counting it as done.
+needed, run `pi-lane gate` over them (it refuses while any of them is unmerged), and name any lane
+left unmerged instead of counting it as done.
 
 **Show the plan before closing.** Bare `pi-lane close` prints what will be merged and deleted; paste
 it into the chat, wait for his go, then run `--yes`. Close commits the lane's uncommitted work on its
