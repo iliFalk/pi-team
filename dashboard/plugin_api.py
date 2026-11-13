@@ -44,6 +44,12 @@ def _tool(name: str) -> Optional[str]:
     return None
 
 
+def _task_head(text: Any, limit: int = 300) -> str:
+    """The first `limit` characters of a task, on one line. The list shows this; the card shows all."""
+    flat = " ".join(str(text or "").split())
+    return flat if len(flat) <= limit else flat[: limit - 1] + "…"
+
+
 def _say(text: str, session_key: Optional[str]) -> bool:
     """Put one line in the chat, when the operator allows the plugin to speak at all.
 
@@ -809,9 +815,12 @@ def list_lanes() -> Dict[str, Any]:
     lanes = _all_lanes()
     known = {lane["lane"] for lane in lanes}
     lanes += [entry for entry in _closed_entries() if entry["lane"] not in known]
+    # The list is polled every few seconds and a lane's task may be an 8 KB brief, so the list carries
+    # its point. The card reads /lanes/<lane>, which keeps the whole text.
     return {
         "lanes": [
-            {k: v for k, v in lane.items() if k not in ("status", "spec_tree")}
+            {k: (v if k != "task" else _task_head(v)) for k, v in lane.items()
+             if k not in ("status", "spec_tree")}
             for lane in lanes
         ],
         "count": len(lanes),

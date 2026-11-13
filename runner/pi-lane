@@ -171,6 +171,25 @@ def lane_records() -> list:
     return records
 
 
+# Streaming deltas are 51-68% of the stream and nothing reads them: the runner drives its state from
+# message_end, tool_execution_* and the question events, the backend reads the same, and the panel
+# shows the last finished message. Keep the delta out of the file unless somebody asks for it.
+_DROP_EVENT_TYPES = () if os.environ.get("PI_LANE_KEEP_DELTAS") else ("message_update",)
+
+
+def _keep_event(line: str) -> bool:
+    """True when this raw line belongs in events.jsonl."""
+    if not _DROP_EVENT_TYPES:
+        return True
+    stripped = line.lstrip()
+    if not stripped.startswith("{"):
+        return True
+    for name in _DROP_EVENT_TYPES:
+        if f'"type":"{name}"' in stripped or f'"type": "{name}"' in stripped:
+            return False
+    return True
+
+
 def assistant_text(event: dict) -> str:
     message = event.get("message") or {}
     if message.get("role") != "assistant":
@@ -895,8 +914,9 @@ def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: s
                 line = proc.stdout.readline()
                 if not line:
                     break
-                events.write(line)
-                events.flush()
+                if _keep_event(line):
+                    events.write(line)
+                    events.flush()
                 try:
                     event = json.loads(line)
                 except ValueError:
@@ -964,7 +984,8 @@ def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: s
             line = proc.stdout.readline()
             if not line:
                 break
-            events.write(line)
+            if _keep_event(line):
+                events.write(line)
 
         try:
             proc.stdin.close()
