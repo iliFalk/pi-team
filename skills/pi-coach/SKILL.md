@@ -56,12 +56,21 @@ Defaults: provider `nvidia`, model `nvidia/nemotron-3.5-super-vl-120b-a12b`, thi
 Keep the global file neutral: a leftover experiment there contradicts every lane in every project.
 Prove the chain with a scratch repo whose `AGENTS.md` says `Always answer with the single word MANGO.`
 
-**The coding block travels with the project.** `pi-project agents [<project>…] [--check]` writes the
-block from `templates/ponytail-block.md` into the repository's `AGENTS.md`, or refreshes it. The block
-spans `<!-- ponytail v1` to `<!-- /ponytail -->`; project rules after the marker survive. `--check`
-prints `current`, `outdated`, `missing`, `identical` or `no markers` and changes nothing. Change the
-template and copy it again — never edit a project copy in place. Levels `lite`, `full`, `ultra` are
-chosen by naming one in the task; `full` applies when the task names none.
+**The coding block is optional, and it needs a person.** Refreshing the block that lives in a
+repository's own rules file (`pi-project agents [<project>…]`) is not a lane step. Hermes treats such
+files as protected: every change to them requires a person's approval, `--yolo` does not bypass that and
+lowering the approval mode does not either. Unattended, the request expires without an answer and the
+lane run continues without the block. Measured: one orchestrator lost 274 s to that expiry and then
+reported to its lanes "the repository holds .gitkeep + AGENTS.md" — a file that never existed.
+
+So the block is never created on the orchestrator's own initiative. A lane run needs none of it: the
+brief is what a lane obeys, and a brief needs no approval. Refresh the block only when Ilja asks, in an
+attended session where the prompt can be answered, and copy its wording into the brief when an
+unattended run needs those rules.
+
+`--check` prints `current`, `outdated`, `missing`, `identical` or `no markers` and changes nothing, so it
+is safe to run alone. Change the template and copy it again — never edit a project copy in place. Levels
+`lite`, `full`, `ultra` are chosen by naming one in the task; `full` applies when the task names none.
 
 **Ilja's text is his text.** Apply only the edits he asked for and keep his wording verbatim. Mark
 every addition (`<!-- +ADDED … -->`) and show the marked text in chat before writing the file.
