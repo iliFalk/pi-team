@@ -3307,10 +3307,10 @@ function ProjectCompose({ ctx, sessionId, onDone }) {
         timeoutMs: 40000
       })
       host.notify({
-        kind: 'info',
-        message: result.message_sent
-          ? `${result.name}: project created, the request went to the chat`
-          : `${result.name}: created — press + on its row for the first feature.`
+        kind: result.cloned === false ? 'error' : 'info',
+        message: result.cloned === false
+          ? `${result.name}: clone failed — ${result.note || 'see the server log'}`
+          : `${result.name}: cloned into ~/work — press + on its row for the first feature.`
       })
       setUrl('')
       setCheck(null)
@@ -3482,10 +3482,10 @@ function FeatureCompose({ ctx, project, sessionId, onDone }) {
         }
       }
       host.notify({
-        kind: 'info',
-        message: result.message_sent
-          ? `${project}: feature created, the request went to the chat`
-          : `${project}: created — waiting for the agent to pick it up.`
+        kind: result.started === false ? 'error' : 'info',
+        message: result.started === false
+          ? `${project}: lane did not start — ${result.note || 'see the server log'}`
+          : `${project}: lane ${result.feature} started.`
       })
       setText('')
       onDone()

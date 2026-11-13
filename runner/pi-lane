@@ -184,6 +184,26 @@ def assistant_text(event: dict) -> str:
     return "\n".join(p for p in parts if p).strip()
 
 
+def assistant_texts(lane_dir) -> list:
+    """The lane's own final texts, oldest first, read from the tail of its event stream."""
+    path = Path(lane_dir) / "events.jsonl"
+    out: list = []
+    try:
+        lines = path.read_text(errors="replace").splitlines()[-400:]
+    except OSError:
+        return out
+    for line in lines:
+        try:
+            event = json.loads(line)
+        except Exception:
+            continue
+        if isinstance(event, dict) and event.get("type") == "message_end":
+            text = assistant_text(event)
+            if text and text.strip():
+                out.append(text.strip())
+    return out
+
+
 def read_json(path: Path):
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -762,6 +782,83 @@ def gate_lanes(argv: list) -> int:
     return 0
 
 
+def review_queue(argv: list) -> int:
+    """Print the review shelf: the lanes a person filed, with everything a check needs.
+
+    This is the pull half of the panel's `SEND`: nothing is injected into a chat, the orchestrator
+    asks for the queue when it wants to work. Same fields the injected message carried.
+    """
+    parser = argparse.ArgumentParser(prog="pi-lane review")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+    rows = [r for r in lane_records() if r.get("handed_at") and not r.get("closed_at")]
+    rows.sort(key=lambda r: r.get("handed_at") or 0)
+    if args.json:
+        print(json.dumps([{k: r.get(k) for k in ("lane", "project", "group", "state", "task",
+                                                 "files", "insertions", "deletions", "worktree")}
+                          for r in rows], ensure_ascii=False))
+        return 0
+    if not rows:
+        print("review queue: empty")
+        return 0
+    print(f"Review queue: {len(rows)} lane(s).")
+    for r in rows:
+        print(f"- {r.get('project') or '?'}/{r.get('group') or '-'}/{r.get('lane')} — {r.get('state')}"
+              f" — {r.get('files', 0)} files +{r.get('insertions', 0)} -{r.get('deletions', 0)}")
+        if r.get("task"):
+            # The record's `task` is the full brief a lane was given; print its point, not its length.
+            head = " ".join(str(r["task"]).split())[:140]
+            print(f"  task: {head}")
+        texts = assistant_texts(hermes_home() / "lanes" / str(r.get("lane")))
+        if texts:
+            print(f"  says: {' '.join(texts[-1].split())[:240]}")
+        if r.get("worktree"):
+            print(f"  look: {r['worktree']} · pi-lane check {r.get('lane')}")
+    print("\nCheck each one, report what you found, and wait for his go before closing.")
+    return 0
+
+
+def digest_lane(argv: list) -> int:
+    """Print one lane as a compact record: task, commits, diff size, gate result, leftovers.
+
+    The point is to make a later 'write a skill from this' cost one call instead of a re-read of
+    the repository.
+    """
+    parser = argparse.ArgumentParser(prog="pi-lane digest")
+    parser.add_argument("lane")
+    args = parser.parse_args(argv)
+    lane_dir = hermes_home() / "lanes" / args.lane
+    record = read_json(lane_dir / "lane.json")
+    if record is None:
+        print(f"no such lane: {args.lane}", file=sys.stderr)
+        return 1
+    repo = str(record.get("repo") or "")
+    branch = str(record.get("branch") or "")
+    print(f"lane      {record.get('lane')}  ({record.get('state')})")
+    print(f"project   {record.get('project') or '-'} / {record.get('group') or '-'}")
+    print(f"task      {' '.join(str(record.get('task') or '').split())[:300]}")
+    print(f"model     {record.get('provider') or '?'} / {record.get('model') or '?'}")
+    if record.get("handed_at"):
+        print(f"handed    yes")
+    if record.get("checked_at"):
+        print(f"checked   {str(record.get('checked_sha'))[:7]} · {'; '.join(record.get('gate_cmds') or [])}")
+    if record.get("last_error"):
+        print(f"error     {str(record.get('last_error'))[:200]}")
+    if repo and branch:
+        rc, log, _ = _git(repo, "log", "--oneline", f"-8", branch)
+        if rc == 0 and log:
+            print("commits   " + "\n          ".join(log.splitlines()))
+        rc, base, _ = _git(repo, "merge-base", branch, "HEAD")
+        if rc == 0:
+            rc2, stat, _ = _git(repo, "diff", "--stat", f"{base[:12]}..{branch}")
+            if rc2 == 0 and stat:
+                print("diff      " + "\n          ".join(stat.splitlines()[-4:]))
+    texts = assistant_texts(lane_dir)
+    if texts:
+        print(f"says      {' '.join(texts[-1].split())[:300]}")
+    return 0
+
+
 def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: str, question_timeout: int) -> int:
     """One `pi --mode rpc` turn: the lane's first task or a continuation of its session."""
     events_path = lane_dir / "events.jsonl"
@@ -935,6 +1032,10 @@ def continue_lane(argv: list) -> int:
 def main() -> int:
     if len(sys.argv) > 2 and sys.argv[1] == "wait" and "--all" in sys.argv[2:]:
         return wait_all(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "review":
+        return review_queue(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "digest":
+        return digest_lane(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "gate":
         return gate_lanes(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "wait":
@@ -960,6 +1061,7 @@ def main() -> int:
             "verbs with the lane lifecycle: pi-lane wait <lane> [--timeout S] [--json] (block until it finishes or asks), "
             "pi-lane wait --all [lane …] (block on several at once, 3 if any asks), "
             "pi-lane gate <lane …> --cmd \"…\" (run the gates in the MERGED tree and record the check), "
+            "pi-lane review (print the review shelf instead of injecting it), pi-lane digest <lane> (a compact record), "
             "pi-lane hand <lane> (file for review), "
             "pi-lane check <lane> (record that its work was read), "
             "pi-lane close <lane> [--no-merge] [--yes], "

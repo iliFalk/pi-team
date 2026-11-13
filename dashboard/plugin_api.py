@@ -45,7 +45,20 @@ def _tool(name: str) -> Optional[str]:
 
 
 def _say(text: str, session_key: Optional[str]) -> bool:
-    """Put one line in the chat; silence is not an error."""
+    """Put one line in the chat, when the operator allows the plugin to speak at all.
+
+    `plugins.entries.pi-team.allow_gateway_injection` is off by default: a click changes state and
+    nobody's context grows. The agent pulls what it needs with `pi-lane review` instead.
+    """
+    try:
+        from hermes_cli.config import load_config, cfg_get
+
+        allowed = bool(cfg_get(load_config(), "plugins", "entries", "pi-team",
+                               "allow_gateway_injection", default=False))
+    except Exception:
+        allowed = False
+    if not allowed:
+        return False
     ctx = _plugin_ctx()
     if ctx is None:
         return False

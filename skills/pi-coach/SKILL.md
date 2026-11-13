@@ -220,6 +220,21 @@ pi-lane gate <lane> [<lane> …] --cmd "python3 -m unittest discover -s tests" -
 It runs every command in the **merged tree** — the repository root, not a lane worktree — prints each
 command with its exit code and the tail of its output, and on success writes `checked_at` and
 `checked_sha` (the merged HEAD) on every named lane, which is what makes the panel offer `CLOSE`.
+
+## Pull, do not push
+
+Nothing in the panel speaks into the chat by default: `plugins.entries.pi-team.allow_gateway_injection`
+stays off, so a click changes state and no message arrives. The agent asks for what it needs:
+
+```sh
+pi-lane review            # the review shelf, with task, what the lane said, and where to look
+pi-lane digest <lane>     # one lane as a record: task, commits, diff size, gate result, leftovers
+```
+
+This is the economy that matters: a message in a chat costs a full agent turn with its whole context,
+and the same facts cost one call with `pi-lane review`. Keep the record on disk rich — it is what a
+later "write a skill from this" reads — and spend tokens on synthesis only when somebody asks for it.
+
 It refuses for a reason worth knowing: a lane whose branch is not an ancestor of HEAD was never
 merged, and a gate run next to unmerged work would bless code that is not in the tree. Lanes from
 different repositories cannot share one run either.
