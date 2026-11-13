@@ -457,6 +457,74 @@ def say_in_thread(argv: list) -> int:
     return 0
 
 
+def hand_lane(argv: list) -> int:
+    """File a finished lane for review: `handed_at`, the field the panel reads as TO REVIEW.
+
+    Same field the panel's route writes, so an orchestrator in a chat session reaches the review
+    shelf without the desktop being open.
+    """
+    parser = argparse.ArgumentParser(prog="pi-lane hand")
+    parser.add_argument("lane")
+    args = parser.parse_args(argv)
+    lane_dir = hermes_home() / "lanes" / args.lane
+    record = read_json(lane_dir / "lane.json")
+    if record is None:
+        print(f"no such lane: {args.lane}", file=sys.stderr)
+        return 1
+    if record.get("closed_at"):
+        print(f"{args.lane}: already closed", file=sys.stderr)
+        return 1
+    if record.get("state") in ("running", "waiting"):
+        print(f"{args.lane}: still {record.get('state')} — a lane is filed when it has finished", file=sys.stderr)
+        return 1
+    record["handed_at"] = int(time.time())
+    write_record(lane_dir, record)
+    files, added, removed = _shortstat(str(record.get("repo") or ""), str(record.get("branch") or ""))
+    print(f"{args.lane}: in review — {files} files +{added} -{removed}")
+    return 0
+
+
+def answer_lane(argv: list) -> int:
+    """Answer the question a waiting lane parked in `question.json`, from any host."""
+    parser = argparse.ArgumentParser(prog="pi-lane answer")
+    parser.add_argument("lane")
+    parser.add_argument("value")
+    args = parser.parse_args(argv)
+    lane_dir = hermes_home() / "lanes" / args.lane
+    if not (lane_dir / "lane.json").exists():
+        print(f"no such lane: {args.lane}", file=sys.stderr)
+        return 1
+    question = read_json(lane_dir / "question.json")
+    payload: dict = {"value": args.value}
+    if isinstance(question, dict) and question.get("id"):
+        payload["id"] = question["id"]
+    tmp = lane_dir / "answer.json.tmp"
+    tmp.write_text(json.dumps(payload, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.replace(tmp, lane_dir / "answer.json")
+    print(f"{args.lane}: answered")
+    return 0
+
+
+def list_lanes(argv: list) -> int:
+    """Print lanes with the state the panel shows, so an agent can pick one without the UI."""
+    rows = []
+    for record in lane_records():
+        rows.append(record)
+    rows.sort(key=lambda r: r.get("started") or 0, reverse=True)
+    if not rows:
+        print("no lanes")
+        return 0
+    for r in rows:
+        if r.get("closed_at"):
+            shelf = "closed"
+        elif r.get("handed_at"):
+            shelf = "review"
+        else:
+            shelf = str(r.get("state") or "?")
+        print(f"{r.get('lane')}\t{shelf}\t{r.get('project') or '-'}\t{(r.get('task') or '')[:60]}")
+    return 0
+
+
 def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: str, question_timeout: int) -> int:
     """One `pi --mode rpc` turn: the lane's first task or a continuation of its session."""
     events_path = lane_dir / "events.jsonl"
@@ -628,6 +696,12 @@ def continue_lane(argv: list) -> int:
 
 
 def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] == "hand":
+        return hand_lane(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "answer":
+        return answer_lane(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "list":
+        return list_lanes(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "close":
         return close_lanes(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "check":
@@ -637,7 +711,15 @@ def main() -> int:
     if len(sys.argv) > 1 and sys.argv[1] == "continue":
         return continue_lane(sys.argv[2:])
 
-    parser = argparse.ArgumentParser(prog="pi-lane")
+    parser = argparse.ArgumentParser(
+        prog="pi-lane",
+        epilog=(
+            "verbs with the lane lifecycle: pi-lane hand <lane> (file for review), "
+            "pi-lane check <lane> (record that its work was read), "
+            "pi-lane close <lane> [--no-merge] [--yes], "
+            "pi-lane say <lane> \"text\", pi-lane answer <lane> \"value\", pi-lane list"
+        ),
+    )
     parser.add_argument("lane")
     parser.add_argument("task")
     parser.add_argument("--repo", default="", help="repository path; resolved from the registry when omitted")
