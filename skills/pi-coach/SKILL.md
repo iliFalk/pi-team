@@ -195,6 +195,43 @@ lane already running in the same feature prints a note on stderr and still start
 one feature are allowed, identical names are not. There are no lock files: the record and its pid are the
 truth, and a dead pid means free.
 
+## Lane: wait
+
+```sh
+pi-lane wait <lane> [--timeout SECONDS] [--interval 2] [--json]
+```
+
+Block until the lane stops moving on its own, then read the exit code:
+
+| Code | Meaning | What you do next |
+|---|---|---|
+| `0` | `done`, `failed`, `stopped` or closed | read the diff, run the gates |
+| `3` | `waiting` — a question is open | answer it: `pi-lane answer <lane> "<option>"` |
+| `124` | still `running` after `--timeout` | the task is bigger than the timeout; wait again, do not restart the lane |
+
+`--json` prints one object (`state`, `files`, `insertions`, `deletions`, `closed`, and `question` when one
+is open) for a scripted caller. The verb prints one line per state change, not one per poll.
+
+**Never wait with `sleep`.** A `sleep 180` loop burns no tokens, but it costs wall time twice over: every
+poll is either too early or too late. A measured run of three lanes spent about a third of its 36 minutes
+in `sleep` between checks. `pi-lane wait` returns the moment the state changes.
+
+## Lane: unattended runs need the approval gate off
+
+A lane itself needs nobody: `pi --mode rpc` runs headless and an unanswered question is cancelled after
+`--question-timeout`. The orchestrator in front of it does need a person, because every `write_file` it
+attempts goes through Hermes's approval system. In a `hermes chat -q` run with `approvals.mode: smart`
+the first `write_file` (the project's `AGENTS.md`) blocks forever with `waiting for user approval`.
+
+For an unattended or benchmark run, set the mode explicitly and restore it afterwards:
+
+```sh
+hermes config set approvals.mode off     # before
+hermes config set approvals.mode smart   # after
+```
+
+`--yolo` is not enough: it bypasses terminal-command approvals, not file writes.
+
 ## Lane: follow up
 
 A lane owns a `pi` session, not a conversation: the runner starts it with `--session-id <repo>-<lane>`, so

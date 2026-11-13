@@ -525,6 +525,67 @@ def list_lanes(argv: list) -> int:
     return 0
 
 
+def wait_lane(argv: list) -> int:
+    """Block until a lane stops moving on its own: done, failed, or waiting on a question.
+
+    This is what an orchestrator needs instead of `sleep 180` in a loop. Exit codes are the
+    contract: 0 terminal state, 3 the lane is waiting for an answer, 124 timeout.
+    """
+    parser = argparse.ArgumentParser(prog="pi-lane wait")
+    parser.add_argument("lane")
+    parser.add_argument("--timeout", type=int, default=3600, help="seconds; 0 waits forever")
+    parser.add_argument("--interval", type=float, default=2.0)
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+    lane_dir = hermes_home() / "lanes" / args.lane
+    deadline = (time.monotonic() + args.timeout) if args.timeout else None
+    seen_printed = ""
+    while True:
+        record = read_json(lane_dir / "lane.json")
+        if record is None:
+            if args.json:
+                print(json.dumps({"lane": args.lane, "state": "gone"}))
+            else:
+                print(f"no such lane: {args.lane}", file=sys.stderr)
+            return 1
+        state = str(record.get("state") or "")
+        files = added = removed = 0
+        repo = str(record.get("repo") or "")
+        branch = str(record.get("branch") or "")
+        if repo and branch:
+            try:
+                files, added, removed = _shortstat(repo, branch)
+            except Exception:
+                pass
+        question = None
+        if state == "waiting":
+            q = read_json(lane_dir / "question.json")
+            if isinstance(q, dict):
+                question = {"id": q.get("id"), "title": q.get("title") or q.get("message") or ""}
+        if args.json:
+            payload = {"lane": args.lane, "state": state, "files": files,
+                       "insertions": added, "deletions": removed,
+                       "closed": bool(record.get("closed_at")), "question": question}
+            print(json.dumps(payload, ensure_ascii=False))
+        elif state != seen_printed:
+            # One line per state change: a poll loop that repeats itself is noise in an agent's context.
+            seen_printed = state
+            if question is not None:
+                print(f"{args.lane}: waiting — {question['title']}")
+            elif state == "done":
+                print(f"{args.lane}: done — {files} files +{added} -{removed}")
+            else:
+                print(f"{args.lane}: {state}")
+        if question is not None:
+            return 3
+        if state in ("done", "failed", "stopped", "cancelled", "error") or record.get("closed_at"):
+            return 0 if state == "done" or record.get("closed_at") else 1
+        if deadline is not None and time.monotonic() > deadline:
+            print(f"{args.lane}: timeout after {args.timeout}s in state {state}", file=sys.stderr)
+            return 124
+        time.sleep(args.interval)
+
+
 def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: str, question_timeout: int) -> int:
     """One `pi --mode rpc` turn: the lane's first task or a continuation of its session."""
     events_path = lane_dir / "events.jsonl"
@@ -696,6 +757,8 @@ def continue_lane(argv: list) -> int:
 
 
 def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] == "wait":
+        return wait_lane(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "hand":
         return hand_lane(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "answer":
@@ -714,7 +777,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         prog="pi-lane",
         epilog=(
-            "verbs with the lane lifecycle: pi-lane hand <lane> (file for review), "
+            "verbs with the lane lifecycle: pi-lane wait <lane> [--timeout S] [--json] (block until it finishes or asks), "
+            "pi-lane hand <lane> (file for review), "
             "pi-lane check <lane> (record that its work was read), "
             "pi-lane close <lane> [--no-merge] [--yes], "
             "pi-lane say <lane> \"text\", pi-lane answer <lane> \"value\", pi-lane list"
