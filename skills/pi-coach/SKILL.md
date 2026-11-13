@@ -56,17 +56,14 @@ Defaults: provider `nvidia`, model `nvidia/nemotron-3.5-super-vl-120b-a12b`, thi
 Keep the global file neutral: a leftover experiment there contradicts every lane in every project.
 Prove the chain with a scratch repo whose `AGENTS.md` says `Always answer with the single word MANGO.`
 
-**The coding block is optional, and it needs a person.** Refreshing the block that lives in a
-repository's own rules file (`pi-project agents [<project>…]`) is not a lane step. Hermes treats such
-files as protected: every change to them requires a person's approval, `--yolo` does not bypass that and
-lowering the approval mode does not either. Unattended, the request expires without an answer and the
-lane run continues without the block. Measured: one orchestrator lost 274 s to that expiry and then
-reported to its lanes "the repository holds .gitkeep + AGENTS.md" — a file that never existed.
+**Never touch an agent-instruction file.** `AGENTS.md`, `CLAUDE.md`, `SOUL.md` and `.cursorrules`
+steer future agents, so Hermes requires a person for every change to them: `--yolo` does not bypass that
+and lowering the approval mode does not either. Unattended, the request expires unanswered — measured at
+274 s — and the run continues without the file. A lane run needs no such file: the brief is what a lane
+obeys, and a brief needs no approval. Write the rules you want into the brief instead.
 
-So the block is never created on the orchestrator's own initiative. A lane run needs none of it: the
-brief is what a lane obeys, and a brief needs no approval. Refresh the block only when Ilja asks, in an
-attended session where the prompt can be answered, and copy its wording into the brief when an
-unattended run needs those rules.
+The ponytail block in `templates/ponytail-block.md` stays a manual, attended action for Ilja; the
+orchestrator never places it on its own.
 
 `--check` prints `current`, `outdated`, `missing`, `identical` or `no markers` and changes nothing, so it
 is safe to run alone. Change the template and copy it again — never edit a project copy in place. Levels
@@ -319,6 +316,9 @@ git before it runs. The order is the point: commit after merge turns the merge i
 - **`pi` exits 0 when the provider never answered** — trust the runner's `failed`, not the exit code.
 - **The backend is imported once at `hermes-serve` start**: an edited `plugin_api.py` needs a restart,
   and the session runs inside it, so schedule it and say the window reconnects.
+- **A refused write is not a no-op — it becomes a lie in the brief.** One orchestrator's protected-file
+  write expired unanswered and it kept going, telling its lanes the repository held that file. After any
+  write that can be refused, read the tool result before building facts from it.
 - **A probe lane is a live row in his panel**: remove the worktree, prune, close with `--no-merge
   --yes`, and confirm zero lanes before calling the panel ready.
 
