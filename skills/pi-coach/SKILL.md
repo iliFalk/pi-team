@@ -114,7 +114,7 @@ separate calls. Two guards fire before the worktree is touched: the same lane na
 the same repository is refused (exit 2), and a second lane in one feature is allowed with a note.
 There are no lock files — the record and its pid are the truth, and a dead pid means free.
 
-**Phrase the task as an order.** `A lane that reads and narrates a plan ends `done` with an empty
+**Phrase the task as an order.** A lane that reads and narrates a plan ends `done` with an empty
 worktree. Say "Edit these files now, do not describe a plan" and name the files.
 
 ## Lane: wait
