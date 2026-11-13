@@ -1103,6 +1103,11 @@ def main() -> int:
     if not LANE_RE.match(args.lane):
         fail(f"bad lane name: {args.lane}")
 
+    # A brief is input tokens for this lane, every time. Show its size; a slice brief is under 2.5 KB.
+    brief_bytes = len(args.task.encode("utf-8"))
+    note = " — a slice brief is under 2500" if brief_bytes > 3000 else ""
+    print(f"brief: {brief_bytes} bytes{note}", file=sys.stderr)
+
     project = args.project
     repo_path = args.repo
     if project:

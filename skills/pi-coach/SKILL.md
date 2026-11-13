@@ -97,6 +97,28 @@ one visible surface per feature — a README-only repository yields an empty wor
 A placeholder never has lanes, so dropping it is safe; both `cancel` routes refuse afterwards.
 `pi-feature rename` moves lanes already filed under the old key.
 
+## The brief
+
+A lane receives one text: its brief. `templates/lane-brief.md` holds the shape — files, the facts the
+lane must not re-derive, the names it must use, what done means, the report format. Budget 2 500
+characters; the worked example is 1 698.
+
+Measured on three lanes: briefs of 6–9 KB each, paid as input tokens again by every lane, while half of
+each was a restatement of the whole task. A slice brief names its slice and stops:
+
+- **The slice, never the whole request.** The orchestrator read the task; a lane that reads it again
+  pays twice.
+- **Facts, not exploration.** Runtime, tools, the state of the tree and the commands. Two `ls` calls per
+  lane disappear when the brief states what is there.
+- **Names, not descriptions.** A contract line is `<symbol> <signature>`. The reasoning stays with the
+  orchestrator.
+- **The gate verbatim**, so a lane self-checks instead of being re-run.
+- **Thinking level by kind of work:** `--thinking low` for docs, compose, config and glue; `medium` for
+  code that must reason about existing behaviour.
+
+The runner prints the brief size when it starts a lane and notes anything over 3 000 characters, so a
+fat brief is visible in the log instead of only in the bill.
+
 ## Lane: open
 
 ```sh
