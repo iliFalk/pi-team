@@ -22,13 +22,19 @@ a function returns. Budget: 1 500 characters.
         <function>(<arg>: <type>, ...) -> <return type and, for a dict or tuple, its keys in order>
         <class>.<method>(<arg>: <type>) -> <return type>
         <module-level constant or key>  <meaning>
+        <NAME>_KEYS     the exact keys of every dict a slice returns, in order: e.g.
+                        INGEST_RESULT_KEYS = ("total", "added", "likes"). A signature cannot
+                        carry these, and a slice that invents its own keys breaks a sibling
+                        silently — measured: three functions returned the wrong keys while
+                        every test stayed green.
 
     ## Done means
-        python3 -m unittest discover -s tests prints OK, and one test per declared name asserts BOTH:
+        python3 -m unittest discover -s tests prints OK, and one test per declared name asserts ALL of:
         `inspect.signature(<name>)` equals the declared parameters — their names, order, defaults and
-        annotations — and calling it raises NotImplementedError. An import that passes while the
-        arguments are wrong is the seam this lane exists to close: the first slice codes against the
-        signature it reads, and the mismatch lands in the merge, not here.
+        annotations; calling it raises NotImplementedError; and, for a function that returns a dict,
+        that a `<NAME>_KEYS` constant exists with its keys in order (the slices assert against it).
+        An import that passes while the arguments are wrong is the seam this lane exists to close:
+        the first slice codes against what it reads, and the mismatch lands in the merge, not here.
 
     ## Report
         the declared names with their signatures, the test output verbatim, and what the slices must not
@@ -36,3 +42,8 @@ a function returns. Budget: 1 500 characters.
 
 After this lane merges, every slice brief carries one line: "implement the signatures declared in
 `<package>/_contract.py`; do not change them; `tests/test_contract.py` must stay green."
+
+**A signature is not a shape.** `inspect.signature` compares parameters; it says nothing about the keys
+of the dict that comes back. One measured run closed with three functions returning `{count, added,
+state}` where the contract promised `{total, added, likes}` — no test failed, because no test looked at
+the result. The `*_KEYS` constants are what turns that into a failing test in the slice's own worktree.

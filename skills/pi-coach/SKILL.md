@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.13.0
+version: 3.13.1
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -41,7 +41,16 @@ Depth lives beside this file, and each is read only when a step names it:
 
 ```sh
 pi --version                     # 1.4.0 on the agent machine
+pi-lane --help                   # must answer on PATH
 ls ~/.hermes/scripts/pi-lane     # the runner
+```
+
+**`pi-lane` lives in `~/.hermes/scripts`, which is not on PATH in a nested `hermes chat` run** — a
+benchmark orchestrator spent eleven shell calls finding that out (`which`, `echo $PATH`, `ls`) before it
+could open its first lane. Symlink the three scripts into a directory that is on PATH for every process:
+
+```sh
+ln -sf ~/.hermes/scripts/pi-lane ~/.hermes/scripts/pi-project ~/.hermes/scripts/pi-feature ~/.local/bin/
 ```
 
 The runner refuses a bad lane name, a non-repository path and a missing `pi`. It loads the provider
@@ -263,9 +272,11 @@ Close it with one lane before the slices start:
 
 1. Open a `contract` lane. Its brief names one file `<package>/_contract.py` with every shared function and
    its full signature and return shape, bodies raising `NotImplementedError`, plus `tests/test_contract.py`
-   that asserts, per name, `inspect.signature` — the parameters, their order, defaults and annotations — and
-   the shape of one return value. An import alone proves nothing: a name that imports with the wrong
-   arguments passes it and fails the first sibling that calls it.
+   that asserts, per name, `inspect.signature` — the parameters, their order, defaults and annotations —
+   and, for a dict, a `<NAME>_KEYS` constant whose order the slices assert against. An import alone
+   proves nothing, and `inspect.signature` alone proves only the parameters: one measured run closed
+   with three functions returning `{count, added, state}` where the contract promised `{total, added,
+   likes}`, and every test was green because none looked at the result.
 2. Wait for it, merge it into the main branch, run the gates. This happens before any slice exists.
 3. Every slice brief then says: "implement the signatures declared in `<package>/_contract.py`; do not change
    them; `tests/test_contract.py` must stay green", and its `RESULT.verify.cmd` names that suite.
