@@ -47,6 +47,38 @@ ALIASES = {"OPENCODE_GO_API_KEY": "OPENCODE_API_KEY"}
 DEFAULT_PROVIDER = "nvidia"
 DEFAULT_MODEL = "nvidia/nemotron-3.5-super-vl-120b-a12b"
 DEFAULT_THINKING = "medium"
+# The critic reads what the lane wrote and reports only what breaks. A different vendor on purpose:
+# a reviewer on the author's own model shares its blind spots.
+DEFAULT_REVIEW_PROVIDER = os.environ.get("PI_TEAM_REVIEW_PROVIDER") or "opencode-go"
+DEFAULT_REVIEW_MODEL = os.environ.get("PI_TEAM_REVIEW_MODEL") or "glm-5.3-flash"
+REVIEW_TIMEOUT = 300
+REVIEW_MARKER = "REVIEW:"
+REVIEW_PROMPT = """You review one slice of a coding task. You cannot change anything: judge what you read.
+
+BRIEF THE LANE WAS GIVEN:
+{brief}
+
+FILES THE LANE DECLARED:
+{touches}
+
+WHAT THE LANE CLAIMS (its RESULT line):
+{result}
+
+GIT STATUS IN THE LANE'S WORKTREE:
+{status}
+
+DIFF AGAINST THE BRANCH IT WAS CUT FROM:
+{diff}
+
+Report only defects that matter:
+P0 — the diff does not do what the brief says, a documented path is broken, work or data is lost,
+     a test it claims green cannot pass, a secret is written, or a file it was told not to touch is edited.
+P1 — the RESULT claims what the diff does not show, or a declared file is missing or empty.
+Never report style, naming, formatting or taste. Empty lists mean the work is clean.
+
+Answer with one line as the last line of your answer:
+REVIEW: {{"p0": ["..."], "p1": ["..."], "notes": ["..."]}}
+"""
 # A lane that loops on a failing test must not run all night: the idle cap catches the stuck case
 # without a word from anybody, and the money and turn caps are opt-in because a big slice is allowed.
 DEFAULT_MAX_USD = 0.0
@@ -211,37 +243,40 @@ def assistant_text(event: dict) -> str:
 RESULT_MARKER = "RESULT:"
 
 
-def parse_result(text: str) -> tuple:
-    """Read the lane's machine-readable report: the last `RESULT: {...}` in its final text.
-
-    Returns `(result, status)` with status `ok`, `missing` or `invalid`. The prose stays for a person;
-    this object is what an orchestrator reads without paying for the whole report again.
-    """
+def _json_after(text: str, marker: str):
+    """The first JSON object that follows the last `marker` in a text, or None."""
     if not text:
-        return None, "missing"
-    index = text.upper().rfind(RESULT_MARKER)
+        return None
+    index = text.upper().rfind(marker)
     if index < 0:
-        return None, "missing"
-    tail = text[index + len(RESULT_MARKER):].strip().strip("`").strip()
+        return None
+    tail = text[index + len(marker):].strip().strip("`").strip()
     start = tail.find("{")
     if start < 0:
-        return None, "invalid"
+        return None
     depth = 0
-    end = -1
     for position, char in enumerate(tail[start:], start=start):
         if char == "{":
             depth += 1
         elif char == "}":
             depth -= 1
             if depth == 0:
-                end = position
-                break
-    if end < 0:
-        return None, "invalid"
-    try:
-        result = json.loads(tail[start:end + 1])
-    except ValueError:
-        return None, "invalid"
+                try:
+                    return json.loads(tail[start:position + 1])
+                except ValueError:
+                    return None
+    return None
+
+
+def parse_result(text: str) -> tuple:
+    """Read the lane's machine-readable report: the last `RESULT: {...}` in its final text.
+
+    Returns `(result, status)` with status `ok`, `missing` or `invalid`. The prose stays for a person;
+    this object is what an orchestrator reads without paying for the whole report again.
+    """
+    if RESULT_MARKER not in text.upper():
+        return None, "missing"
+    result = _json_after(text, RESULT_MARKER)
     if not isinstance(result, dict):
         return None, "invalid"
     files = result.get("files")
@@ -254,6 +289,118 @@ def parse_result(text: str) -> tuple:
     if verify is not None and not (isinstance(verify, dict) and "exit" in verify):
         return None, "invalid"
     return result, "ok"
+
+
+def parse_review(text: str) -> tuple:
+    """Read the critic's line: `REVIEW: {p0, p1, notes}`, each a list of strings."""
+    if REVIEW_MARKER not in text.upper():
+        return None, "missing"
+    review = _json_after(text, REVIEW_MARKER)
+    if not isinstance(review, dict):
+        return None, "invalid"
+    for key in ("p0", "p1", "notes"):
+        if key in review and not (isinstance(review[key], list)
+                                  and all(isinstance(item, str) for item in review[key])):
+            return None, "invalid"
+    if not isinstance(review.get("p0"), list) or not isinstance(review.get("p1"), list):
+        return None, "invalid"
+    return review, "ok"
+
+
+def run_review(lane_dir: Path, record: dict, lane: str) -> dict | None:
+    """One read-only pass over the lane by a critic on another model.
+
+    The lane's own model carries the author's blind spots; this one reads the brief, the diff and the
+    lane's claim, and reports only what breaks. It is billed into `review.usage`, never into the lane.
+    """
+    worktree = Path(str(record.get("worktree") or ""))
+    repo = str(record.get("repo") or "")
+    branch = str(record.get("branch") or "")
+    if not worktree.is_dir() or not repo:
+        return None
+    base = str(record.get("base_sha") or "")
+    if not base:
+        rc, out, _ = _git(repo, "merge-base", _default_branch(repo), branch)
+        if rc == 0 and out:
+            base = out
+    rc, diff, err = _git(str(worktree), "diff", base or "HEAD")
+    if rc != 0:
+        print(f"{lane}: review — git says: {err}", file=sys.stderr)
+        return None
+    if not diff.strip():
+        # Nothing to read is not a finding: a lane merged before this record kept its base gives an
+        # empty diff, and a critic asked about nothing invents a P0.
+        print(f"{lane}: review — no diff against {str(base)[:7] or 'HEAD'}; skipped", file=sys.stderr)
+        return None
+    rc, status, _ = _git(str(worktree), "status", "--porcelain")
+    if len(diff) > 60000:
+        diff = diff[:60000] + "\n… diff cut at 60000 characters\n"
+    prompt = REVIEW_PROMPT.format(
+        brief=" ".join(str(record.get("task") or "").split())[:4000],
+        touches=", ".join(record.get("touches") or []) or "(none declared)",
+        result=json.dumps(record.get("result"), ensure_ascii=False) if record.get("result") else "(none)",
+        status=status[:4000] or "(clean)",
+        diff=diff or "(no changes against the base)",
+    )
+    provider = str(record.get("review_provider") or DEFAULT_REVIEW_PROVIDER)
+    model = str(record.get("review_model") or DEFAULT_REVIEW_MODEL)
+    load_env_keys()
+    cmd = [
+        "pi", "-p", "-nt", "--no-session", "--mode", "json",
+        "--provider", provider, "--model", model, "--thinking", "low", prompt,
+    ]
+    started = time.monotonic()
+    try:
+        done = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=REVIEW_TIMEOUT,
+            stdin=subprocess.DEVNULL, cwd=str(worktree), check=False,
+        )
+    except subprocess.TimeoutExpired:
+        print(f"{lane}: review — the critic timed out after {REVIEW_TIMEOUT}s", file=sys.stderr)
+        return None
+    text = ""
+    usage = {"input": 0, "output": 0, "cache_read": 0, "cost_usd": 0.0, "turns": 0}
+    for line in done.stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if event.get("type") != "message_end":
+            continue
+        message = event.get("message") or {}
+        if message.get("role") != "assistant":
+            continue
+        said = assistant_text(event)
+        if said:
+            text = said
+        raw = message.get("usage")
+        if isinstance(raw, dict):
+            usage["input"] += int(raw.get("input") or 0)
+            usage["output"] += int(raw.get("output") or 0)
+            usage["cache_read"] += int(raw.get("cacheRead") or 0)
+            usage["cost_usd"] = round(usage["cost_usd"]
+                                      + float((raw.get("cost") or {}).get("total") or 0), 6)
+            usage["turns"] += 1
+    review, review_status = parse_review(text)
+    payload = {
+        "status": review_status,
+        "p0": (review or {}).get("p0") or [],
+        "p1": (review or {}).get("p1") or [],
+        "notes": (review or {}).get("notes") or [],
+        "provider": provider,
+        "model": model,
+        "seconds": int(time.monotonic() - started),
+        "usage": usage,
+        "at": int(time.time()),
+    }
+    if review_status != "ok":
+        payload["said"] = text[:2000]
+    (lane_dir / "review.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+                                          encoding="utf-8")
+    record["review"] = payload
+    record["review_status"] = review_status
+    write_record(lane_dir, record)
+    return payload
 
 
 def normalise_touch(pattern: str) -> str:
@@ -667,6 +814,10 @@ def hand_lane(argv: list) -> int:
     parser.add_argument("lane")
     parser.add_argument("--allow-missing-result", action="store_true",
                         help="file a lane whose last text carried no valid RESULT object")
+    parser.add_argument("--no-review", action="store_true",
+                        help="file the lane without the critic pass on another model")
+    parser.add_argument("--accept-p0", action="store_true",
+                        help="file the lane although the critic reported P0 findings")
     args = parser.parse_args(argv)
     lane_dir = hermes_home() / "lanes" / args.lane
     record = read_json(lane_dir / "lane.json")
@@ -689,6 +840,26 @@ def hand_lane(argv: list) -> int:
               f"orchestrator reads the report as data. `--allow-missing-result` files it anyway",
               file=sys.stderr)
         return 1
+    review = None
+    if not args.no_review:
+        review = run_review(lane_dir, record, args.lane)
+        if review:
+            p0 = review.get("p0") or []
+            p1 = review.get("p1") or []
+            spent = float((review.get("usage") or {}).get("cost_usd") or 0)
+            print(f"{args.lane}: critic {review.get('model')} — P0 {len(p0)} · P1 {len(p1)} · "
+                  f"${spent:.4f} · {review.get('seconds')}s")
+            if review.get("status") != "ok":
+                print(f"{args.lane}: critic wrote no REVIEW line ({review.get('status')}) — "
+                      f"read {lane_dir / 'review.json'}", file=sys.stderr)
+            for item in p0[:5]:
+                print(f"  P0 {item}", file=sys.stderr)
+            for item in p1[:5]:
+                print(f"  P1 {item}", file=sys.stderr)
+            if p0 and not args.accept_p0:
+                print(f"{args.lane}: refused — {len(p0)} P0 finding(s). Fix them, run the gate again, "
+                      f"then hand; `--accept-p0` files it anyway", file=sys.stderr)
+                return 1
     record["handed_at"] = int(time.time())
     write_record(lane_dir, record)
     files, added, removed = _shortstat(str(record.get("repo") or ""), str(record.get("branch") or ""))
@@ -1044,6 +1215,14 @@ def digest_lane(argv: list) -> int:
     touches = record.get("touches") or []
     if touches:
         print(f"touches   {', '.join(touches)}")
+    review = record.get("review") or {}
+    if review:
+        print(f"review    {review.get('model')} — P0 {len(review.get('p0') or [])} · "
+              f"P1 {len(review.get('p1') or [])} · ${float((review.get('usage') or {}).get('cost_usd') or 0):.4f}")
+        for item in (review.get("p0") or [])[:3]:
+            print(f"  P0 {item}")
+        for item in (review.get("p1") or [])[:3]:
+            print(f"  P1 {item}")
     status = str(record.get("result_status") or "")
     if status:
         result = record.get("result") or {}
@@ -1386,8 +1565,8 @@ def ledger(argv: list) -> int:
         print("no lanes")
         return 0
     rows.sort(key=lambda r: r.get("started") or 0)
-    print(f"{'lane':20s} {'state':8s} {'input':>9s} {'output':>8s} {'cache':>9s} {'usd':>9s} {'min':>5s}  model")
-    total = {"input": 0, "output": 0, "cache": 0, "usd": 0.0}
+    print(f"{'lane':20s} {'state':8s} {'input':>9s} {'output':>8s} {'cache':>9s} {'usd':>9s} {'rev':>7s} {'min':>5s}  model")
+    total = {"input": 0, "output": 0, "cache": 0, "usd": 0.0, "rev": 0.0}
     from_session = 0
     for record in rows:
         usage = record.get("usage") or {}
@@ -1396,6 +1575,7 @@ def ledger(argv: list) -> int:
             usage = _usage_from_session(str(record.get("worktree") or "")) or {}
             mark = "~" if usage else ""
             from_session += 1 if mark else 0
+        review_cost = float(((record.get("review") or {}).get("usage") or {}).get("cost_usd") or 0)
         started = record.get("started") or 0
         finished = record.get("finished") or 0
         minutes = int((finished - started) // 60) if finished and started else 0
@@ -1404,14 +1584,16 @@ def ledger(argv: list) -> int:
             "output": int(usage.get("output") or 0),
             "cache": int(usage.get("cache_read") or 0),
             "usd": float(usage.get("cost_usd") or 0),
+            "rev": review_cost,
         }
         for key in total:
             total[key] += values[key]
         model = str(record.get("model") or "")
         print(f"{str(record.get('lane')):20s} {str(record.get('state')):8s} {values['input']:9d} "
-              f"{values['output']:8d} {values['cache']:9d} {values['usd']:8.4f}{mark:1s} {minutes:4d}  {model}")
+              f"{values['output']:8d} {values['cache']:9d} {values['usd']:8.4f}{mark:1s} "
+              f"{values['rev']:6.4f} {minutes:4d}  {model}")
     print(f"{'total':20s} {'':8s} {total['input']:9d} {total['output']:8d} {total['cache']:9d} "
-          f"{total['usd']:8.4f}")
+          f"{total['usd']:8.4f} {total['rev']:6.4f}")
     if from_session:
         print("~ billed from the pi session file: the record was written before the runner kept usage")
     return 0
@@ -1485,6 +1667,9 @@ def main() -> int:
                              "intersecting write-set are refused")
     parser.add_argument("--allow-overlap", action="store_true",
                         help="let this lane start although a lane in flight names the same file")
+    parser.add_argument("--review-provider", default=DEFAULT_REVIEW_PROVIDER,
+                        help="which provider the critic at `hand` uses (another vendor by default)")
+    parser.add_argument("--review-model", default=DEFAULT_REVIEW_MODEL)
     args = parser.parse_args()
 
     if not LANE_RE.match(args.lane):
@@ -1596,6 +1781,7 @@ def main() -> int:
         "repo": repo,
         "worktree": str(worktree),
         "branch": branch,
+        "base_sha": _git(repo, "rev-parse", _default_branch(repo))[1] or "",
         "session_id": f"{Path(repo).name}-{lane}",
         "provider": args.provider,
         "model": args.model,
@@ -1605,6 +1791,8 @@ def main() -> int:
         "started": int(time.time()),
         "exit": None,
         "touches": my_touches,
+        "review_provider": args.review_provider,
+        "review_model": args.review_model,
         "budget": {
             "max_usd": args.max_usd,
             "max_turns": args.max_turns,

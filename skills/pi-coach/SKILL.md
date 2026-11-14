@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.1.0
+version: 3.2.0
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -306,7 +306,7 @@ cost $0.06 and seven minutes, and that variance, not the lane model, decides mos
 | Step | Command | Field |
 |---|---|---|
 | record the check | `pi-lane gate <lane> … --cmd "…"` (or `pi-lane check <lane>`) | `checked_at` + `checked_sha` |
-| file for review | `pi-lane hand <lane>` | `handed_at` |
+| file for review | `pi-lane hand <lane>` — runs the critic first | `handed_at`, `review` |
 | close (plan) | `pi-lane close <lane>` | prints the plan, changes nothing |
 | close (execute) | `pi-lane close <lane> --yes` | `closed_at` |
 | close without merge | `--no-merge`; keep the worktree | `--keep` |
@@ -319,6 +319,16 @@ filed: merge it and gate it.
 
 **A hand needs a RESULT too.** The lane's last text must end with `RESULT: {…}`. Without it the hand
 refuses — `--allow-missing-result` files it anyway, and then the report is prose again.
+
+**A hand runs a critic on another model.** `pi-lane hand` gives a read-only `pi` run the brief, the
+declared files, the lane's `RESULT`, `git status` and the diff against `base_sha`. The critic answers one
+line, `REVIEW: {"p0": […], "p1": […], "notes": […]}`; P0 means broken, P1 means the report claims what
+the diff does not show. P0 blocks the hand until the work is fixed and gated again; `--accept-p0` files
+it anyway, `--no-review` skips the pass. Default critic: `opencode-go` / `glm-5.3-flash` — a different
+vendor from the lane, because a reviewer on the author's model shares its blind spots. Set
+`--review-provider` and `--review-model` at `open`, or `PI_TEAM_REVIEW_PROVIDER` / `PI_TEAM_REVIEW_MODEL`.
+Measured: $0.0006 and 6 s on a small slice, $0.0029 and 14 s on a larger one; a planted dry-run bug came
+back as two P0 and one P1.
 
 `TO REVIEW` in the panel writes the same `handed_at` and says nothing; the check is what the queue's
 `SEND` asks for, and the panel offers `CLOSE` only while `checked_sha` equals the worktree HEAD — so a
