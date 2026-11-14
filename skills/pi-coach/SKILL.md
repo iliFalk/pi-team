@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.0.1
+version: 3.0.2
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -268,6 +268,22 @@ merged, and a gate run next to unmerged work would bless code that is not in the
 different repositories cannot share one run either.
 
 A lane whose gates were not run does not close.
+
+## Measure a run
+
+A lane run pays two bills, and the second one is easy to forget:
+
+1. The orchestrator's own turns, from the Hermes session in `state.db`.
+2. Every lane's `pi` session: `~/.pi/agent/sessions/<cwd-slug>/*.jsonl`, field `usage.cost.total`.
+
+A solo arm has only the first bill. Count the orchestrator alone, and lanes look two times cheaper
+than they are: measured on one task, orchestrator $0.088 plus lanes $0.101 against solo $0.098.
+
+Read a token figure only after `exit=0`. A run cut off at minute 13 reported half the bill and all of
+its merges, and the unfinished arm looked better than the finished one.
+
+Count the repair rounds per lane (`pi-lane continue`) in the report. One extra round on a single slice
+cost $0.06 and seven minutes, and that variance, not the lane model, decides most of the spread.
 
 ## Review, close
 
