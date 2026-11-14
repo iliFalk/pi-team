@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.3.0
+version: 3.4.0
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -191,6 +191,24 @@ worktree is intact, so nothing may treat that as finished work or as free.
    the lane's session id: no re-read of the repository, and `usage` and `budget` carry over. It refuses a
    live lane, a closed lane and a lane whose worktree is gone.
 
+## Lane: autonomy — `auto` or `ask`
+
+`--autonomy auto` is the default (`PI_TEAM_AUTONOMY` overrides it). The lane never parks: the runner
+answers its dialogs itself and writes each choice to the thread, so a decision can be read later.
+
+| Dialog | The runner's reply | Why |
+|---|---|---|
+| `select` | the first option | a lane that stops for a person costs waiting time |
+| `confirm` | yes, unless the title or message names `rm`, `delete`, `drop`, `force`, `--hard`, `push`, a credential or `sudo` | nothing destructive runs unattended |
+| `input`, `editor` | cancelled, no value | the lane decides and states the assumption |
+
+`--autonomy ask` keeps the old behaviour: a dialog parks the lane in `waiting` until
+`pi-lane answer` lands. Choose it when the decision is Ilja's, not the lane's.
+
+Every automatic answer is one line in `thread.jsonl` and adds to `auto_answers` on the record. What
+replaces a person: the caps, the critic at `hand`, the gate in the merged tree and `dry-merge`. With
+`auto` on, `pi-lane gate` and a clean `REVIEW` are the only things between a lane and the main branch.
+
 ## Lane: questions and the files
 
 A waiting lane blocks until `answer.json` appears: `{"id": "<from question.json>", "value": "<option exactly as pi sent it>"}`, or `{"id": …, "cancelled": true}` to skip. Only `select`, `confirm`,
@@ -323,6 +341,7 @@ cost $0.06 and seven minutes, and that variance, not the lane model, decides mos
 | file for review | `pi-lane hand <lane>` — runs the critic first | `handed_at`, `review` |
 | close (plan) | `pi-lane close <lane>` | prints the plan, changes nothing |
 | close (execute) | `pi-lane close <lane> --yes` | `closed_at` |
+| close without a word | `pi-lane close <lane> --auto` | merges only when the gate sits at HEAD, the critic has no P0 and the merge is clean |
 | close without merge | `--no-merge`; keep the worktree | `--keep` |
 
 **A hand needs a fresh check.** `pi-lane hand` refuses, exit 1, unless `checked_sha` equals the

@@ -32,6 +32,11 @@ from pathlib import Path
 from typing import NoReturn
 
 DIALOG_METHODS = {"select", "confirm", "input", "editor"}
+# A confirmation that names one of these is refused without a person, even in autonomous mode.
+DESTRUCTIVE_WORDS = (
+    "rm -rf", "rm ", "delete", "drop table", "drop ", "force", "--hard", "push",
+    "truncate", "credential", "secret", "token", "password", "chmod 777", "sudo ",
+)
 POLL_SECONDS = 0.3
 ENV_KEYS = (
     "NVIDIA_API_KEY",
@@ -51,6 +56,10 @@ DEFAULT_THINKING = "medium"
 # a reviewer on the author's own model shares its blind spots.
 DEFAULT_REVIEW_PROVIDER = os.environ.get("PI_TEAM_REVIEW_PROVIDER") or "opencode-go"
 DEFAULT_REVIEW_MODEL = os.environ.get("PI_TEAM_REVIEW_MODEL") or "glm-5.3-flash"
+# `auto`: the lane answers its own dialogs and never parks for a person. `ask`: a dialog parks the lane
+# in `waiting` until an answer lands. Safe by construction, because `auto` refuses a destructive
+# confirmation and the critic and the gate still stand between the work and the main branch.
+DEFAULT_AUTONOMY = os.environ.get("PI_TEAM_AUTONOMY") or "auto"
 REVIEW_TIMEOUT = 300
 REVIEW_MARKER = "REVIEW:"
 REVIEW_PROMPT = """You review one slice of a coding task. You cannot change anything: judge what you read.
@@ -549,6 +558,55 @@ def pi_session_files(worktree: Path, session_id: str) -> list:
     return sorted(folder.glob(f"*_{session_id}.jsonl"))
 
 
+def auto_answer(question: dict) -> tuple:
+    """The runner's own reply to a dialog when the lane runs autonomously: `(payload, why)`.
+
+    A lane that stops for a person costs waiting time; in `auto` it decides and the decision goes into
+    its thread, so the choice can be audited instead of guessed. A destructive confirmation is always
+    refused: nothing is deleted unattended.
+    """
+    method = str(question.get("method") or "")
+    options = [str(option) for option in (question.get("options") or [])]
+    text = " ".join(str(question.get(key) or "") for key in ("title", "message")).lower()
+    if method == "select":
+        pick = options[0] if options else ""
+        return {"value": pick}, f"first option: {pick or '(none offered)'}"
+    if method == "confirm":
+        if any(word in text for word in DESTRUCTIVE_WORDS):
+            nope = next((o for o in options if o.strip().lower() in ("no", "cancel", "abort")), "")
+            return {"value": nope or "No"}, "refused — the dialog names a destructive action"
+        yes = next((o for o in options if o.strip().lower() in ("yes", "ok", "continue", "allow")), "")
+        return {"value": yes or "Yes"}, "allowed — nothing destructive in the dialog"
+    return {"cancelled": True}, "no value supplied — the lane decides and states the assumption"
+
+
+def _auto_close_blockers(name: str, record: dict) -> list:
+    """Why an autonomous close must not happen yet: an empty list means gate, critic and merge agree."""
+    blockers = []
+    repo = str(record.get("repo") or "")
+    branch = str(record.get("branch") or f"lane/{name}")
+    if not repo or not Path(repo).is_dir():
+        return ["no repository"]
+    rc, head, _ = _git(repo, "rev-parse", "HEAD")
+    checked = str(record.get("checked_sha") or "")
+    if rc != 0 or not checked:
+        blockers.append("no gate recorded")
+    elif checked != head:
+        blockers.append(f"the gate ran at {checked[:7]}, HEAD is {head[:7]}")
+    review = record.get("review") or {}
+    if str(record.get("review_status") or "") != "ok":
+        blockers.append("no critic review")
+    elif review.get("p0"):
+        blockers.append(f"the critic reported {len(review['p0'])} P0")
+    rc, _, _ = _git(repo, "merge-base", "--is-ancestor", branch, "HEAD")
+    if rc != 0:
+        done = subprocess.run(["git", "-C", repo, "merge-tree", "--write-tree", "HEAD", branch],
+                              capture_output=True, text=True, check=False)
+        if done.returncode != 0:
+            blockers.append("the merge would conflict")
+    return blockers
+
+
 def close_lanes(argv: list) -> int:
     """Close lanes for good: merge their branch, then write the closed marker.
 
@@ -560,6 +618,8 @@ def close_lanes(argv: list) -> int:
     parser.add_argument("--reason", default="", help="why it is closed; defaults to the merge")
     parser.add_argument("--keep", action="store_true", help="keep the worktree, branch and lane folder")
     parser.add_argument("--yes", action="store_true", help="confirm the deletion; without it only the plan prints")
+    parser.add_argument("--auto", action="store_true",
+                        help="merge and close without a word when the gate, the critic and the merge agree")
     args = parser.parse_args(argv)
 
     root = hermes_home() / "lanes"
@@ -582,6 +642,15 @@ def close_lanes(argv: list) -> int:
             print(f"{name}: still running — stop it first", file=sys.stderr)
             failed += 1
             continue
+
+        if args.auto:
+            blockers = _auto_close_blockers(name, record)
+            if blockers:
+                print(f"{name}: not closed — {', '.join(blockers)}", file=sys.stderr)
+                failed += 1
+                continue
+            print(f"{name}: auto-close — gate and critic agree, merging without a word")
+            args.yes = True
 
         if not args.yes and not args.no_merge:
             # Say exactly what disappears before anything does.
@@ -1288,6 +1357,7 @@ def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: s
     exit_code = 0
     finished = False
     budget = record.get("budget") or {}
+    autonomy = str(record.get("autonomy") or DEFAULT_AUTONOMY)
     max_usd = float(budget.get("max_usd") or 0)
     max_turns = int(budget.get("max_turns") or 0)
     idle_timeout = int(budget.get("idle_timeout") or 0)
@@ -1363,7 +1433,7 @@ def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: s
                         elif max_turns and turns_here >= max_turns:
                             stop_reason = f"max_turns {turns_here} >= {max_turns}"
                 elif kind == "extension_ui_request" and event.get("method") in DIALOG_METHODS:
-                    question = {
+                    dialog = {
                         "id": event.get("id"),
                         "method": event.get("method"),
                         "title": event.get("title") or "",
@@ -1371,10 +1441,25 @@ def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: s
                         "options": event.get("options") or [],
                         "asked_at": int(time.time()),
                     }
-                    question_since = time.monotonic()
-                    question_path.write_text(json.dumps(question, indent=2) + "\n", encoding="utf-8")
-                    record["state"] = "waiting"
-                    write_record(lane_dir, record)
+                    if autonomy == "auto":
+                        reply, why = auto_answer(dialog)
+                        reply.update({"type": "extension_ui_response", "id": dialog["id"]})
+                        proc.stdin.write(json.dumps(reply) + "\n")
+                        proc.stdin.flush()
+                        record["auto_answers"] = int(record.get("auto_answers") or 0) + 1
+                        write_record(lane_dir, record)
+                        with (lane_dir / "thread.jsonl").open("a", encoding="utf-8") as handle:
+                            handle.write(json.dumps({
+                                "who": "jarvis", "at": int(time.time()),
+                                "text": f"auto-answered {dialog['method']}: {why}",
+                            }, ensure_ascii=False) + "\n")
+                        print(f"{lane}: auto-answered {dialog['method']} — {why}", file=sys.stderr)
+                    else:
+                        question = dialog
+                        question_since = time.monotonic()
+                        question_path.write_text(json.dumps(question, indent=2) + "\n", encoding="utf-8")
+                        record["state"] = "waiting"
+                        write_record(lane_dir, record)
                 elif kind == "agent_end":
                     finished = True
 
@@ -1759,7 +1844,7 @@ def main() -> int:
             "pi-lane review (print the review shelf instead of injecting it), pi-lane digest <lane> (a compact record), "
             "pi-lane hand <lane> (file for review), "
             "pi-lane check <lane> (record that its work was read), "
-            "pi-lane close <lane> [--no-merge] [--yes], "
+            "pi-lane close <lane> [--no-merge] [--yes|--auto], "
             "pi-lane say <lane> \"text\", pi-lane answer <lane> \"value\", pi-lane list, "
             "pi-lane ledger [lane …] (tokens and money per lane), "
             "pi-lane dry-merge <lane …> (branches merged in memory, conflicts named), "
@@ -1791,6 +1876,8 @@ def main() -> int:
     parser.add_argument("--review-provider", default=DEFAULT_REVIEW_PROVIDER,
                         help="which provider the critic at `hand` uses (another vendor by default)")
     parser.add_argument("--review-model", default=DEFAULT_REVIEW_MODEL)
+    parser.add_argument("--autonomy", choices=("auto", "ask"), default=DEFAULT_AUTONOMY,
+                        help="auto: the lane answers its own dialogs; ask: a dialog parks it in waiting")
     args = parser.parse_args()
 
     if not LANE_RE.match(args.lane):
@@ -1914,6 +2001,7 @@ def main() -> int:
         "touches": my_touches,
         "review_provider": args.review_provider,
         "review_model": args.review_model,
+        "autonomy": args.autonomy,
         "budget": {
             "max_usd": args.max_usd,
             "max_turns": args.max_turns,
