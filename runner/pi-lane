@@ -968,6 +968,12 @@ def wait_all(argv: list) -> int:
         failed = False
         for lane in watch:
             state, record, question = _lane_state(lane)
+            if state in ("running", "waiting") and record is not None and not pid_alive(record.get("pid")):
+                print(f"{lane}: orphaned — its runner is gone; `pi-lane resume {lane}` picks it up",
+                      file=sys.stderr)
+                states[lane] = "orphaned"
+                failed = True
+                continue
             states[lane] = state
             if question is not None:
                 waiting.append(lane)
@@ -1020,6 +1026,14 @@ def wait_lane(argv: list) -> int:
                 print(f"no such lane: {args.lane}", file=sys.stderr)
             return 1
         state = str(record.get("state") or "")
+        if state in ("running", "waiting") and not pid_alive(record.get("pid")):
+            message = (f"{args.lane}: orphaned — its runner is gone (pid {record.get('pid')}); "
+                       f"`pi-lane resume {args.lane}` picks it up")
+            if args.json:
+                print(json.dumps({"lane": args.lane, "state": "orphaned", "question": None}))
+            else:
+                print(message)
+            return 1
         files = added = removed = 0
         repo = str(record.get("repo") or "")
         branch = str(record.get("branch") or "")
@@ -1298,9 +1312,17 @@ def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: s
         question: dict | None = None
         question_since = 0.0
         last_activity = time.monotonic()
+        last_beat = time.monotonic()
 
         while True:
             ready, _, _ = select.select([proc.stdout], [], [], POLL_SECONDS)
+
+            if time.monotonic() - last_beat >= 15:
+                # Liveness without noise: `reap` and the panel tell a slow lane from a dead one by
+                # the heartbeat and the pid, not by the last state change.
+                record["heartbeat"] = int(time.time())
+                write_record(lane_dir, record)
+                last_beat = time.monotonic()
 
             if ready:
                 last_activity = time.monotonic()
@@ -1493,6 +1515,99 @@ def continue_lane(argv: list) -> int:
     return run_session(lane_dir, record, args.lane, worktree, args.text, args.question_timeout)
 
 
+def reap(argv: list) -> int:
+    """Mark lanes whose runner is gone. A `running` record with a dead pid is a crash, not work.
+
+    Nothing else marks it: the panel keeps drawing such a lane as running, and `wait` used to block on
+    it forever. The state becomes `stopped` with a reason that names the cure, because a lane's pi
+    session survives on disk and `pi-lane resume` continues it.
+    """
+    parser = argparse.ArgumentParser(prog="pi-lane reap")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+    orphaned = []
+    for record in lane_records():
+        state = str(record.get("state") or "")
+        if state not in ("running", "waiting"):
+            continue
+        if pid_alive(record.get("pid")):
+            continue
+        lane = str(record.get("lane") or "")
+        if not lane:
+            continue
+        record["state"] = "stopped"
+        record["orphaned_at"] = int(time.time())
+        record["stop_reason"] = "runner gone — `pi-lane resume` continues it"
+        write_record(hermes_home() / "lanes" / lane, record)
+        orphaned.append(lane)
+    if args.json:
+        print(json.dumps({"orphaned": orphaned}))
+    elif orphaned:
+        for lane in orphaned:
+            print(f"{lane}: orphaned — its runner is gone; `pi-lane resume {lane}` continues it")
+    else:
+        print("no orphaned lanes")
+    return 0
+
+
+def resume_lane(argv: list) -> int:
+    """Pick up a lane whose runner died, in the same pi session.
+
+    A crash leaves the record `running` with a dead pid and the worktree intact. pi keeps the session
+    on disk under the lane's session id, so resuming sends the last prompt into that same conversation
+    instead of paying for the context again. Budget and usage carry over.
+    """
+    parser = argparse.ArgumentParser(prog="pi-lane resume")
+    parser.add_argument("lane")
+    parser.add_argument("--question-timeout", type=int, default=1800)
+    args = parser.parse_args(argv)
+    lane_dir = hermes_home() / "lanes" / args.lane
+    record = read_json(lane_dir / "lane.json")
+    if record is None:
+        print(f"no such lane: {args.lane}", file=sys.stderr)
+        return 1
+    if record.get("closed_at"):
+        print(f"{args.lane}: closed — open a new lane instead", file=sys.stderr)
+        return 1
+    if pid_alive(record.get("pid")) and str(record.get("state")) in ("running", "waiting"):
+        print(f"{args.lane}: still running (pid {record.get('pid')}) — nothing to resume", file=sys.stderr)
+        return 1
+    worktree = Path(str(record.get("worktree") or ""))
+    if not worktree.is_dir():
+        print(f"{args.lane}: its worktree is gone; open the slice again", file=sys.stderr)
+        return 1
+    prompt = str(record.get("task") or "")
+    thread_path = lane_dir / "thread.jsonl"
+    if thread_path.is_file():
+        for line in thread_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                continue
+            if entry.get("who") == "user" and str(entry.get("text") or "").strip():
+                prompt = str(entry["text"])
+    if not prompt:
+        print(f"{args.lane}: no prompt to resume", file=sys.stderr)
+        return 1
+    with thread_path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps({
+            "who": "jarvis", "at": int(time.time()),
+            "text": f"resumed after the runner was gone (was {record.get('state')})",
+        }, ensure_ascii=False) + "\n")
+    record["state"] = "running"
+    record["pid"] = os.getpid()
+    record["started"] = int(time.time())
+    record["resumed_at"] = int(time.time())
+    record["exit"] = None
+    record["finished"] = None
+    record.pop("stop_reason", None)
+    record.pop("orphaned_at", None)
+    write_record(lane_dir, record)
+    load_env_keys()
+    print(f"{args.lane}: resumed in session {record.get('session_id')}")
+    return run_session(lane_dir, record, args.lane, worktree, prompt, args.question_timeout)
+
+
 def set_budget(argv: list) -> int:
     """Change a lane's caps. `max_usd` covers the whole lane, so a spent lane refuses a continuation."""
     parser = argparse.ArgumentParser(prog="pi-lane budget")
@@ -1602,6 +1717,10 @@ def ledger(argv: list) -> int:
 def main() -> int:
     if len(sys.argv) > 2 and sys.argv[1] == "wait" and "--all" in sys.argv[2:]:
         return wait_all(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "reap":
+        return reap(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "resume":
+        return resume_lane(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "ledger":
         return ledger(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "dry-merge":
@@ -1644,6 +1763,8 @@ def main() -> int:
             "pi-lane say <lane> \"text\", pi-lane answer <lane> \"value\", pi-lane list, "
             "pi-lane ledger [lane …] (tokens and money per lane), "
             "pi-lane dry-merge <lane …> (branches merged in memory, conflicts named), "
+            "pi-lane reap (mark lanes whose runner is gone), pi-lane resume <lane> (continue one in "
+            "its own session), "
             "pi-lane budget <lane> [--max-usd N] [--max-turns N] [--idle-timeout S]"
         ),
     )

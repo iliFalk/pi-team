@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.2.0
+version: 3.3.0
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -164,6 +164,7 @@ pi-lane wait <lane> [--timeout SECONDS] [--interval 2] [--json]
 | Code | Meaning | Next |
 |---|---|---|
 | `0` | `done`, `failed`, `stopped` or closed | read the diff, run the gates |
+| `1` | `failed`, or the lane is **orphaned** — its runner died | `pi-lane resume <lane>` |
 | `3` | `waiting` — a question is open | `pi-lane answer <lane> "<option>"` |
 | `124` | still `running` after `--timeout` | wait again; do not restart the lane |
 
@@ -176,6 +177,19 @@ timeout. Without names it follows every lane that is still running or waiting.
 
 **Never wait with `sleep`.** It burns no tokens and costs wall time twice over: measured, a three-lane
 run spent about a third of its 36 minutes asleep between polls.
+
+## Lane: when a runner dies
+
+A crashed or killed runner leaves the record `running` with a dead pid. The lane did not fail and its
+worktree is intact, so nothing may treat that as finished work or as free.
+
+1. `pi-lane wait` and `wait --all` report `orphaned` and return `1` at once — they no longer block on a
+   record nobody is updating.
+2. `pi-lane reap` marks every such lane `stopped` with `stop_reason: runner gone`. It changes only lanes
+   whose pid is dead, so it is safe to run before any batch.
+3. `pi-lane resume <lane>` sends the last prompt again **in the same pi session**, which is on disk under
+   the lane's session id: no re-read of the repository, and `usage` and `budget` carry over. It refuses a
+   live lane, a closed lane and a lane whose worktree is gone.
 
 ## Lane: questions and the files
 
