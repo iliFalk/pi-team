@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.17.0
+version: 3.18.0
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -350,6 +350,31 @@ pi-lane holdout <plan> --json     # ok, sha, scenarios
   and nothing else.
 - `report` prints `holdout ok at <sha>`, `holdout FAILED` or `holdout not run` under every lane that
   carries a plan.
+
+## Mutation: does the suite notice?
+
+A green suite says the tests pass. It does not say they would fail if the code were different, and one
+measured pair proves the difference: two arms closed green with 89 and 27 tests, and only half of a
+six-mutant sample was caught.
+
+```sh
+pi-lane mutate --plan <id> [--cmd "python3 -m unittest discover -s tests"] [--max 12] [--min 1.0]
+pi-lane mutate --repo ~/work/bench11-lane --files 'music/*.py' --max 6
+```
+
+- **One mutant, one test run.** The operators are the ones a wrong thought flips: `==`/`!=`, `<`/`<=`,
+  `>`/`>=`, `and`/`or`. A non-zero exit is a kill, a crash included; a timeout is a survival, because a
+  suite that hangs judged nothing.
+- **Prose is not a mutation point.** Docstrings, comments and imports are skipped: the first run scored
+  2/6 because three "survivors" were `"artist and title"` inside a docstring. A mutant must land on
+  behaviour or the score measures the checker.
+- **The tree is read-only for the run.** A dirty tree is refused, every file is restored byte for byte,
+  the subprocess runs with `PYTHONDONTWRITEBYTECODE=1`, and the run fails if the sha moved.
+- **`"mutation": true` in the plan makes it a close blocker**, like the holdout: `close --auto` refuses
+  without a green check at HEAD and the refusal names the score and the survivors.
+- **A survivor is evidence, not a verdict.** An equivalent mutant (an `or` whose branch never differs)
+  survives and is no hole — the orchestrator reads the site before demanding a test. Measured: bench11
+  5/6 with one boundary survivor at `cli.py:124`, bench12 2/6.
 
 ## Lane: autonomy — `auto` or `ask`
 

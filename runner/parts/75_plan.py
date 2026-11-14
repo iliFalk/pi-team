@@ -188,6 +188,7 @@ def _write_plan_snapshot(plan_id: str, spec: dict, repo: str, gates: list, lanes
         "lanes": [name for name, _, _ in lanes],
         "acs": {name: _ac_list(entry.get("acs") or []) for name, _, entry in lanes},
         "waves": spec.get("waves") or None,
+        "mutation": bool(spec.get("mutation")),
         "opened_at": int(time.time()),
     }
     path.write_text(json.dumps(snapshot, indent=2) + "\n", encoding="utf-8")

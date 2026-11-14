@@ -188,6 +188,16 @@ def lane_blockers(name: str, record: dict, stage: str, *, allow_missing_result: 
             blockers.append(f"the holdout failed: {', '.join(failed) or 'no scenario ran'}")
         elif plan_id and facts["head"] and hold.get("sha") and hold["sha"] != facts["head"]:
             blockers.append(f"the holdout ran at {str(hold['sha'])[:7]}, HEAD is {facts['head'][:7]}")
+        snapshot = read_json(hermes_home() / "plans" / plan_id / "plan.json") if plan_id else None
+        if plan_id and (snapshot or {}).get("mutation"):
+            mutant = record.get("mutation") or {}
+            if not mutant:
+                blockers.append(f"the plan asks for a mutation check — `pi-lane mutate --plan {plan_id}`")
+            elif not mutant.get("ok"):
+                blockers.append(f"the mutation score is {mutant.get('score')} — survivors: "
+                                f"{', '.join(mutant.get('survivors') or [])}")
+            elif facts["head"] and mutant.get("sha") and mutant["sha"] != facts["head"]:
+                blockers.append(f"the mutation check ran at {str(mutant['sha'])[:7]}, HEAD is {facts['head'][:7]}")
         if facts["review"] not in ("ok", "skipped"):
             blockers.append("no critic review")
         elif facts["p0"]:

@@ -365,6 +365,10 @@ def report(argv: list) -> int:
                 notes.append("    holdout FAILED")
             else:
                 notes.append("    holdout not run")
+        mutant = record.get("mutation") or {}
+        if mutant:
+            notes.append(f"    mutation {mutant.get('killed')}/{mutant.get('total')} at "
+                         f"{str(mutant.get('sha'))[:7]}")
         acs = facts.get("acs") or {}
         if acs.get("declared"):
             note = f"    acs {len(acs['covered'])}/{len(acs['declared'])}"
