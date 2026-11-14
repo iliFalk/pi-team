@@ -79,5 +79,23 @@ git -C "$REPO" -c user.email=t@t.t -c user.name=t commit -q --allow-empty -m "af
 out=$("$RUNNER" close alpha --auto 2>&1); rc=$?
 [ $rc -ne 0 ] && echo "$out" | grep -q "the holdout ran at" && ok "a holdout older than HEAD is refused" || bad "stale holdout: rc=$rc $out"
 
+echo "== a finished run becomes one eval row"
+"$RUNNER" eval add sandbox-case --task-file "$SCR/plan.json" --gate "true" >/dev/null 2>&1
+out=$("$RUNNER" eval capture sandbox-case --repo "$REPO" --plan hold-run --wall 42 --orchestrator-usd 0.5 2>&1); rc=$?
+[ $rc -eq 0 ] && echo "$out" | grep -q "captured — pass" && ok "capture reads the lanes, the gates and the criteria" || bad "capture: rc=$rc $out"
+python3 - "$SCR" <<'PY' && ok "the row carries cost, lanes, criteria and holdout" || bad "row is incomplete"
+import json, os, sys
+path = os.path.join(sys.argv[1], "home/eval/results.jsonl")
+row = json.loads(open(path).read().strip().splitlines()[-1])
+assert row["case"] == "sandbox-case", row
+assert row["lanes"] == 1, row["lanes"]
+assert row["pass"] is True, row["gates"]
+assert row["criteria"]["declared"] == 1 and row["criteria"]["covered"] == 1, row["criteria"]
+assert row["holdout"].get("ok") is True, row["holdout"]
+assert row["orchestrator_usd"] == 0.5 and row["cost_usd"] >= 0.5, row["cost_usd"]
+PY
+out=$("$RUNNER" eval table 2>&1)
+echo "$out" | grep -q "sandbox-case" && ok "eval table prints the row" || bad "table: $out"
+
 echo "== exit $fail"
 exit $fail

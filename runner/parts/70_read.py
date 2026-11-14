@@ -19,6 +19,25 @@ def _write_eval_cases(cases: dict) -> None:
     tmp.replace(path)
 
 
+def _receipts() -> list:
+    """Every closed-lane receipt: the only record a closed lane leaves behind."""
+    path = hermes_home() / "lanes" / "closed.jsonl"
+    if not path.is_file():
+        return []
+    out = []
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(row, dict):
+            out.append(row)
+    return out
+
+
 def eval_add(argv: list) -> int:
     """Record one eval case: the task text, the gates that decide pass, and an optional seed tree."""
     parser = argparse.ArgumentParser(prog="pi-lane eval add")
@@ -139,6 +158,121 @@ def eval_run(argv: list) -> int:
     return 0 if passed else 1
 
 
+def eval_capture(argv: list) -> int:
+    """Turn a finished run into one row, so two arms are compared by a machine and not by memory.
+
+    A run leaves its evidence in four places — the lane records and their receipts, the plan snapshot, the
+    repository's requirements file and the holdout's verdict — and none of them is the table an evening of
+    experiments needs. This reads all four, runs the case's gates, and appends one line to `results.jsonl`.
+
+    The two numbers the runner cannot know are passed in, and they are named `--wall` and
+    `--orchestrator-usd` so nobody can quietly leave them at zero.
+    """
+    parser = argparse.ArgumentParser(prog="pi-lane eval capture")
+    parser.add_argument("case", help="the eval case this run belongs to")
+    parser.add_argument("--repo", required=True, help="the repository the run built")
+    parser.add_argument("--plan", default="", help="the plan id the lanes carry")
+    parser.add_argument("--wall", type=int, default=0, help="seconds the run took, as measured outside")
+    parser.add_argument("--orchestrator-usd", type=float, default=0.0,
+                        help="what the orchestrator itself spent; the lanes are summed here")
+    parser.add_argument("--note", default="", help="one line on what this arm did differently")
+    parser.add_argument("--no-gates", action="store_true", help="do not run the case's gate commands")
+    args = parser.parse_args(argv)
+    repo = os.path.realpath(Path(args.repo).expanduser())
+    if not Path(repo, ".git").exists():
+        print(f"eval capture: not a git repository: {repo}", file=sys.stderr)
+        return 1
+    cases = _eval_cases()
+    case = cases.get(args.case)
+    if case is None:
+        print(f"eval capture: no such case: {args.case} (eval add makes one)", file=sys.stderr)
+        return 1
+
+    planned = set()
+    if args.plan:
+        snapshot = read_json(hermes_home() / "plans" / args.plan / "plan.json") or {}
+        planned = set(snapshot.get("lanes") or [])
+
+    # A finished lane leaves a receipt and no folder, so both are the same population: read the records
+    # that still exist, add the receipts of the ones that closed, and never count a lane twice.
+    lanes = [record for record in lane_records()
+             if os.path.realpath(str(record.get("repo") or "")) == repo
+             and (not args.plan or record.get("plan") == args.plan)]
+    name = Path(repo).name
+    receipts = []
+    for receipt in _receipts():
+        # Receipts carry no repository path, only the project name, and one benchmark owns one repository —
+        # so the name is the join. Filtering them by the plan's lane list dropped the lanes a run opened
+        # outside the plan (a `repair`), which is exactly the work a comparison must see.
+        if str(receipt.get("project") or "") != name:
+            continue
+        receipts.append(receipt)
+    lane_usd = (sum(float((record.get("usage") or {}).get("cost_usd") or 0) for record in lanes)
+                + sum(float(receipt.get("cost_usd") or 0) for receipt in receipts))
+    critic_usd = (sum(float(((record.get("review") or {}).get("usage") or {}).get("cost_usd") or 0)
+                      for record in lanes)
+                  + sum(float((receipt.get("review_usage") or {}).get("cost_usd")
+                              or receipt.get("review_cost_usd") or 0)
+                        for receipt in receipts))
+    repairs = sum(int(record.get("result_repairs") or 0) for record in lanes)
+    lanes = lanes + receipts
+    extra = sorted(str(item.get("lane")) for item in lanes
+                   if planned and item.get("lane") not in planned)
+
+    gates = []
+    if not args.no_gates:
+        for command in case.get("gates") or []:
+            try:
+                done = subprocess.run(command, shell=True, cwd=repo, capture_output=True, text=True,
+                                      timeout=1800)
+                gates.append({"cmd": command, "exit": done.returncode})
+            except subprocess.TimeoutExpired:
+                gates.append({"cmd": command, "exit": 124})
+
+    criteria = spec_criteria(spec_path(repo))
+    summary = spec_summary(repo, [ac_id for ac_id, _, _ in criteria]) if criteria else {
+        "declared": [], "covered": [], "unproven": [], "missing": []}
+    holds = [record.get("holdout") or {} for record in lanes if record.get("holdout")]
+    holdout = max(holds, key=lambda item: item.get("ran_at") or 0) if holds else {}
+
+    row = {
+        "case": args.case,
+        "at": int(time.time()),
+        "repo": repo,
+        "plan": args.plan or "",
+        "wall_seconds": int(args.wall),
+        "lanes": len(lanes),
+        "extra_lanes": extra,
+        # A receipt's `cost_usd` already includes its critic (`usage` + `review_usage`), while a live
+        # record's `usage.cost_usd` does not — so the critic is reported beside the total, never added to
+        # it a second time.
+        "lane_usd": round(lane_usd, 6),
+        "critic_usd": round(critic_usd, 6),
+        "orchestrator_usd": round(float(args.orchestrator_usd), 6),
+        "cost_usd": round(lane_usd + float(args.orchestrator_usd), 6),
+        "repairs": repairs,
+        "gates": gates,
+        "pass": bool(gates) and all(not gate["exit"] for gate in gates),
+        "criteria": {"declared": len(summary.get("declared") or []),
+                     "covered": len(summary.get("covered") or []),
+                     "unproven": summary.get("unproven") or [],
+                     "missing": summary.get("missing") or []},
+        "holdout": {"ok": bool(holdout.get("ok")), "sha": holdout.get("sha") or "",
+                    "scenarios": len(holdout.get("scenarios") or [])} if holdout else {},
+        "receipts": len(receipts),
+        "note": args.note,
+    }
+    path = _eval_dir() / "results.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+    print(f"{args.case}: captured — {'pass' if row['pass'] else 'fail'} · "
+          f"{row['lanes']} lane(s) · ${row['cost_usd']:.4f} · criteria "
+          f"{row['criteria']['covered']}/{row['criteria']['declared']} · "
+          f"holdout {'ok' if row['holdout'].get('ok') else 'no'}")
+    return 0 if row["pass"] else 1
+
+
 def eval_table(argv: list) -> int:
     """Print every recorded result as a table, so two models on one case are one glance apart."""
     parser = argparse.ArgumentParser(prog="pi-lane eval table")
@@ -160,15 +294,19 @@ def eval_table(argv: list) -> int:
     if not rows:
         print("no eval results for that case")
         return 0
-    print(f"{'case':18s} {'model':34s} {'res':5s} {'wall':>6s} {'in':>8s} {'out':>7s} {'usd':>8s}  gates")
+    print(f"{'case':18s} {'arm':26s} {'res':5s} {'wall':>6s} {'lanes':>5s} {'usd':>8s} "
+          f"{'crit':>7s} {'hold':4s}  gates")
     for row in sorted(rows, key=lambda r: (r.get("case") or "", r.get("at") or 0)):
-        tokens = row.get("tokens") or {}
         failures = sum(1 for gate in row.get("gates") or [] if gate.get("exit"))
         gates = "ok" if not failures else f"{failures} fail"
-        print(f"{str(row.get('case'))[:18]:18s} {str(row.get('model'))[:34]:34s} "
+        criteria = row.get("criteria") or {}
+        arms = f"{criteria.get('covered', 0)}/{criteria.get('declared', 0)}" if criteria else "-"
+        holdout = "ok" if (row.get("holdout") or {}).get("ok") else "no"
+        arm = str(row.get("note") or row.get("plan") or row.get("model") or "")[:26]
+        print(f"{str(row.get('case'))[:18]:18s} {arm:26s} "
               f"{'pass' if row.get('pass') else 'fail':5s} {int(row.get('wall_seconds') or 0):5d}s "
-              f"{int(tokens.get('input') or 0):8d} {int(tokens.get('output') or 0):7d} "
-              f"{float(row.get('cost_usd') or 0):8.4f}  {gates}")
+              f"{int(row.get('lanes') or 0):5d} {float(row.get('cost_usd') or 0):8.4f} "
+              f"{float(row.get('critic_usd') or 0):7.4f} {holdout:4s}  {gates}  acs {arms}")
     return 0
 
 

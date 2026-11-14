@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.16.1
+version: 3.17.0
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -453,6 +453,28 @@ wall time, tokens, money and every gate's exit code. `pi-lane eval table [name]`
 Use it before claiming that a model, a brief or a prompt change helps: one task, one row per variant,
 the same gates. Rows are evidence; a bench table built by hand was wrong twice — once because the lane's
 own bill was not in it, once because a cut-off run's snapshot was read as a result.
+
+**A run that already happened is captured, not re-run:**
+
+```sh
+pi-lane eval capture <case> --repo ~/work/bench11-lane --plan bench11 \
+        --wall 2115 --orchestrator-usd 0.1009 --note "pi-team+SDD"
+pi-lane eval table <case>
+```
+
+It reads what the run left — lane records, the closed-lane receipts, the plan snapshot, the requirements
+file, the holdout verdict — re-runs the case's gates, and appends one row: wall, lanes, `lane_usd`,
+`critic_usd`, `orchestrator_usd`, `cost_usd`, repairs, per-gate exit codes, criteria covered/declared,
+holdout state. Two rules live in it:
+
+- **The two numbers the runner cannot know are flags.** `--wall` and `--orchestrator-usd` are named so
+  nobody leaves them at zero, and a row with them missing says so.
+- **A receipt's `cost_usd` already includes its critic** (`usage` + `review_usage`), while a live record's
+  `usage.cost_usd` does not. The critic is therefore reported beside the total and never added twice —
+  a doubled critic made one arm look 4 % dearer than it was.
+- Receipts carry the project name, not the repository path, so the name is the join; a run's extra lanes
+  (a `repair` opened outside the plan) belong in the row, and filtering receipts by the plan's lane list
+  hid exactly the work a comparison needs to see.
 
 ## Lane: verify
 

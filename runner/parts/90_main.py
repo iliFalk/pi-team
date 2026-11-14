@@ -41,10 +41,11 @@ def main() -> int:
         return check_lane(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "say":
         return say_in_thread(sys.argv[2:])
-    if len(sys.argv) > 2 and sys.argv[1] == "eval" and sys.argv[2] in ("add", "list", "run", "table"):
+    if len(sys.argv) > 2 and sys.argv[1] == "eval" and sys.argv[2] in ("add", "list", "run", "table", "capture"):
         sub = sys.argv[2]
         rest = sys.argv[3:]
-        return {"add": eval_add, "list": eval_list, "run": eval_run, "table": eval_table}[sub](rest)
+        return {"add": eval_add, "list": eval_list, "run": eval_run, "table": eval_table,
+                "capture": eval_capture}[sub](rest)
     if len(sys.argv) > 1 and sys.argv[1] == "continue":
         return continue_lane(sys.argv[2:])
 
