@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.0.0
+version: 3.0.1
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -273,20 +273,26 @@ A lane whose gates were not run does not close.
 
 | Step | Command | Field |
 |---|---|---|
+| record the check | `pi-lane gate <lane> … --cmd "…"` (or `pi-lane check <lane>`) | `checked_at` + `checked_sha` |
 | file for review | `pi-lane hand <lane>` | `handed_at` |
-| record the check | `pi-lane check <lane>` | `checked_at` + `checked_sha` |
 | close (plan) | `pi-lane close <lane>` | prints the plan, changes nothing |
 | close (execute) | `pi-lane close <lane> --yes` | `closed_at` |
 | close without merge | `--no-merge`; keep the worktree | `--keep` |
 
+**A hand needs a fresh check.** `pi-lane hand` refuses, exit 1, unless `checked_sha` equals the
+repository HEAD. The gate records the merged HEAD, so the order is: merge, gate, hand. A commit after
+the gate makes the pair stale, and the hand refuses until the gate runs again. `pi-lane check` records
+the worktree HEAD, which is not the tree the gates ran in, so a lane with only a `check` cannot be
+filed: merge it and gate it.
+
 `TO REVIEW` in the panel writes the same `handed_at` and says nothing; the check is what the queue's
 `SEND` asks for, and the panel offers `CLOSE` only while `checked_sha` equals the worktree HEAD — so a
-commit after the check hides the button again. Run `pi-lane check` as the last step of every check.
+commit after the check hides the button again.
 
 **Not merged is not delivered.** A lane's work lives on its branch until the orchestrator merges it, so
 "lane done" means nothing on its own. Before reporting a task finished: merge every lane the task
-needed, run `pi-lane gate` over them (it refuses while any of them is unmerged), and name any lane
-left unmerged instead of counting it as done.
+needed, run `pi-lane gate` over them (it refuses while any of them is unmerged), hand each one, and name
+any lane left unmerged instead of counting it as done.
 
 **Show the plan before closing.** Bare `pi-lane close` prints what will be merged and deleted; paste
 it into the chat, wait for his go, then run `--yes`. Close commits the lane's uncommitted work on its

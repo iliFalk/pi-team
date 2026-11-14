@@ -496,11 +496,43 @@ def say_in_thread(argv: list) -> int:
     return 0
 
 
+def _check_is_fresh(lane: str, record: dict):
+    """Return a refusal line when `checked_sha` no longer names HEAD of the tree the work lands in.
+
+    The pair has to hold, or a lane is filed on a check that never saw the tree: `pi-lane gate` runs the
+    gates in the merged tree and writes that HEAD, so a commit after the gate makes the pair stale and a
+    hand would take green for a tree nobody ran. Measured: a run merged a lane, ran the gate, then landed
+    two commits and filed the lane — three tests were red in the tree it called checked.
+    """
+    checked = str(record.get("checked_sha") or "")
+    if not checked:
+        return (f"{lane}: no check recorded — merge it and run "
+                f"`pi-lane gate {lane} --cmd \"…\"` first")
+    repo = str(record.get("repo") or "")
+    if not repo or not Path(repo).is_dir():
+        return f"{lane}: no repository to read HEAD from — the check {checked[:7]} cannot be confirmed"
+    rc, head, err = _git(repo, "rev-parse", "HEAD")
+    if rc != 0 or not head:
+        return f"{lane}: git says: {err or 'no HEAD'} — the check {checked[:7]} cannot be confirmed"
+    if checked == head:
+        return None
+    seen = f"repository HEAD {head[:7]}"
+    worktree = str(record.get("worktree") or "")
+    if worktree and Path(worktree).is_dir():
+        rc_w, sha_w, _ = _git(worktree, "rev-parse", "HEAD")
+        if rc_w == 0 and sha_w:
+            seen += f", worktree HEAD {sha_w[:7]}"
+    return (f"{lane}: refused — checked at {checked[:7]}, {seen}. The work moved after the check, so the "
+            f"check no longer covers the tree: read it again and record a fresh one "
+            f"(`pi-lane gate {lane} --cmd \"…\"`)")
+
+
 def hand_lane(argv: list) -> int:
     """File a finished lane for review: `handed_at`, the field the panel reads as TO REVIEW.
 
     Same field the panel's route writes, so an orchestrator in a chat session reaches the review
-    shelf without the desktop being open.
+    shelf without the desktop being open. Refuses a lane whose `checked_sha` is not HEAD of the tree
+    the work lands in — a hand is a claim that somebody read this exact work.
     """
     parser = argparse.ArgumentParser(prog="pi-lane hand")
     parser.add_argument("lane")
@@ -515,6 +547,10 @@ def hand_lane(argv: list) -> int:
         return 1
     if record.get("state") in ("running", "waiting"):
         print(f"{args.lane}: still {record.get('state')} — a lane is filed when it has finished", file=sys.stderr)
+        return 1
+    stale = _check_is_fresh(args.lane, record)
+    if stale:
+        print(stale, file=sys.stderr)
         return 1
     record["handed_at"] = int(time.time())
     write_record(lane_dir, record)
