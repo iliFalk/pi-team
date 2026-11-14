@@ -86,6 +86,8 @@ Report only defects that matter:
 P0 — the diff does not do what the brief says, a documented path is broken, work or data is lost,
      a test it claims green cannot pass, a secret is written, or a file it was told not to touch is edited.
 P1 — the RESULT claims what the diff does not show, or a declared file is missing or empty.
+     Also P1: the diff documents a command, a flag, an environment key or an image option that nothing in
+     it establishes — you cannot reach the vendor, so say you cannot confirm it instead of assuming it.
 Never report style, naming, formatting or taste. Empty lists mean the work is clean.
 
 Answer with one line as the last line of your answer:
@@ -1392,7 +1394,8 @@ def digest_lane(argv: list) -> int:
     return 0
 
 
-def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: str, question_timeout: int) -> int:
+def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: str, question_timeout: int,
+                repair: bool = True) -> int:
     """One `pi --mode rpc` turn: the lane's first task or a continuation of its session.
 
     Budget: `record["budget"]` caps the whole lane across continuations — `max_usd` and `max_turns` per
@@ -1604,6 +1607,21 @@ def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: s
         record["state"] = "done" if (exit_code == 0 and text) else "failed"
     write_record(lane_dir, record)
     question_path.unlink(missing_ok=True)
+    if repair and result_status != "ok" and not stop_reason and exit_code == 0 and text:
+        # One cheap turn beats a whole orchestrator round: the lane knows what it wrote, so it can turn its
+        # last line into the object the hand expects. Measured: a lane wrote `RESULT: PASS` and the
+        # orchestrator paid a continue and a turn to fix a format.
+        record["result_repairs"] = int(record.get("result_repairs") or 0) + 1
+        record["state"] = "running"
+        record["finished"] = None
+        write_record(lane_dir, record)
+        print(f"{lane}: result {result_status} — asking the lane to rewrite that one line", file=sys.stderr)
+        fix = ("Your last line must be exactly one line of JSON after the word RESULT:, for example "
+               'RESULT: {"files": ["a.py"], "verify": {"cmd": "python3 -m unittest discover -s tests", '
+               '"exit": 0}, "risks": [], "followups": []}. '
+               "Change nothing else and run no command: reply with the corrected last line only, valid "
+               "JSON, no code fence and no text after it.")
+        return run_session(lane_dir, record, lane, worktree, fix, question_timeout, repair=False)
     return exit_code
 
 
@@ -1922,6 +1940,58 @@ def eval_table(argv: list) -> int:
     return 0
 
 
+def status(argv: list) -> int:
+    """Everything an orchestrator otherwise gathers with five shell calls, in one table.
+
+    The run that cost 113k input tokens made 55 shell calls, half of them to ask the same four questions
+    per lane: is the gate fresh, does the claim hold, what did the critic say, what does the lane cost.
+    """
+    parser = argparse.ArgumentParser(prog="pi-lane status")
+    parser.add_argument("--repo", default="", help="only lanes of this repository")
+    args = parser.parse_args(argv)
+    wanted = os.path.realpath(args.repo) if args.repo else ""
+    rows = []
+    for record in lane_records():
+        if wanted and os.path.realpath(str(record.get("repo") or "")) != wanted:
+            continue
+        rows.append(record)
+    if not rows:
+        print("no lanes")
+        return 0
+    rows.sort(key=lambda r: r.get("started") or 0, reverse=True)
+    print(f"{'lane':18s} {'state':8s} {'gate':6s} {'claim':7s} {'result':7s} {'p0/p1':6s} {'usd':>8s} "
+          f"{'files':>5s} {'merged':6s}  stop")
+    for record in rows:
+        repo = str(record.get("repo") or "")
+        checked = str(record.get("checked_sha") or "")
+        gate = "none"
+        if checked and repo and Path(repo).is_dir():
+            rc, head, _ = _git(repo, "rev-parse", "HEAD")
+            gate = "ok" if rc == 0 and head == checked else "stale"
+        claim = record.get("verify_check") or {}
+        claim_state = "-" if not claim else ("match" if claim.get("match") else "MISMATCH")
+        status_value = str(record.get("result_status") or "-")
+        review = record.get("review") or {}
+        usage = record.get("usage") or {}
+        cost = float(usage.get("cost_usd") or 0) + float((review.get("usage") or {}).get("cost_usd") or 0)
+        worktree = str(record.get("worktree") or "")
+        dirty = 0
+        if worktree and Path(worktree).is_dir():
+            rc, out, _ = _git(worktree, "status", "--porcelain")
+            dirty = len([line for line in out.splitlines() if line.strip()]) if rc == 0 else 0
+        merged = "-"
+        branch = str(record.get("branch") or "")
+        if repo and branch and Path(repo).is_dir():
+            rc, _, _ = _git(repo, "merge-base", "--is-ancestor", branch, "HEAD")
+            merged = "yes" if rc == 0 else "no"
+        stop = str(record.get("stop_reason") or "-").split(" —")[0][:24]
+        pair = f"{len(review.get('p0') or [])}/{len(review.get('p1') or [])}"
+        print(f"{str(record.get('lane'))[:18]:18s} {str(record.get('state'))[:8]:8s} {gate:6s} "
+              f"{claim_state:7s} {status_value[:7]:7s} {pair:6s} "
+              f"{cost:8.4f} {dirty:5d} {merged:6s}  {stop}")
+    return 0
+
+
 def set_budget(argv: list) -> int:
     """Change a lane's caps. `max_usd` covers the whole lane, so a spent lane refuses a continuation."""
     parser = argparse.ArgumentParser(prog="pi-lane budget")
@@ -2035,6 +2105,8 @@ def main() -> int:
         return reap(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "resume":
         return resume_lane(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "status":
+        return status(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "ledger":
         return ledger(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "dry-merge":
@@ -2083,7 +2155,7 @@ def open_lane(argv: list) -> int:
             "pi-lane check <lane> (record that its work was read), "
             "pi-lane close <lane> [--no-merge] [--yes|--auto], "
             "pi-lane say <lane> \"text\", pi-lane answer <lane> \"value\", pi-lane list, "
-            "pi-lane ledger [lane …] (tokens and money per lane), "
+            "pi-lane status [--repo P] (gate, claim, critic and cost per lane), pi-lane ledger [lane …] (tokens and money per lane), "
             "pi-lane dry-merge <lane …> (branches merged in memory, conflicts named), "
             "pi-lane reap (mark lanes whose runner is gone), pi-lane resume <lane> (continue one in "
             "its own session), "

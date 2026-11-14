@@ -52,6 +52,7 @@ tokens, cost, `state`, `pass`, and every gate's exit code. `pi-lane eval table` 
 | liveness | `lane.json` `heartbeat` (every 15 s) and `orphaned_at` — a dead pid is a crash, not work |
 | the lane's own claim | `lane.json` `verify_check` — the RESULT's verify command and exit against what gate ran |
 | critic findings | `lane.json` `review` (`p0`, `p1`, `notes`, `usage`) and `review.json` |
+| the lane's own repair | `lane.json` `result_repairs` — how often the runner had to ask for a clean RESULT line |
 | machine-readable report | `lane.json` `result` and `result_status` — the lane's last `RESULT: {…}` line, parsed |
 | question | `question.json`: `id`, `method`, `title`, `options` |
 | changes | `git status --porcelain`, `git diff HEAD --stat` in the worktree |

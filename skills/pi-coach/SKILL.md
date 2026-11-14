@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.6.0
+version: 3.7.0
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -190,6 +190,24 @@ worktree is intact, so nothing may treat that as finished work or as free.
 3. `pi-lane resume <lane>` sends the last prompt again **in the same pi session**, which is on disk under
    the lane's session id: no re-read of the repository, and `usage` and `budget` carry over. It refuses a
    live lane, a closed lane and a lane whose worktree is gone.
+
+## Contracts between slices — merge the shapes first
+
+Two of seven repair rounds in one measured run were seams: one lane returned a dict and its sibling expected
+a list, another mismatched a signature with `resolve.py`. Neither lane was wrong in its own files, and the
+critic could not see it, because the seam lives between two diffs. Worktrees isolate writes, not meaning.
+
+Close it with one lane before the slices start:
+
+1. Open a `contract` lane. Its brief names one file `<package>/_contract.py` with every shared function and
+   its full signature and return shape, bodies raising `NotImplementedError`, plus `tests/test_contract.py`
+   that imports each name and asserts the shape of one return value.
+2. Wait for it, merge it into the main branch, run the gates. This happens before any slice exists.
+3. Every slice brief then says: "implement the signatures declared in `<package>/_contract.py`; do not change
+   them; `tests/test_contract.py` must stay green", and its `RESULT.verify.cmd` names that suite.
+
+A seam that survives is then visible as a failing contract test in the slice's own worktree, which is the
+cheapest possible place to find it. Template: `templates/contract-brief.md`.
 
 ## Lane: autonomy — `auto` or `ask`
 
