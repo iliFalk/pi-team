@@ -41,6 +41,8 @@ them; the panel draws empty nodes.
 | last text, last tool, turns | `events.jsonl`, last message of the run |
 | tokens and cost | `lane.json` `usage` — the runner adds every message's `usage` while it reads it |
 | caps and why it stopped | `lane.json` `budget` (`max_usd`, `max_turns`, `idle_timeout`) and `stop_reason` |
+| declared write-set | `lane.json` `touches` — the globs a lane may write; an intersecting pair in flight is refused |
+| machine-readable report | `lane.json` `result` and `result_status` — the lane's last `RESULT: {…}` line, parsed |
 | question | `question.json`: `id`, `method`, `title`, `options` |
 | changes | `git status --porcelain`, `git diff HEAD --stat` in the worktree |
 | plan | `.thinkrail/context/todos/<session-id>.json` of the worktree |

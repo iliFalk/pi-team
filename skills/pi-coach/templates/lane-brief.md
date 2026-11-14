@@ -28,6 +28,12 @@ task description, not a slice, and it is paid for as input tokens by every lane 
     ## Report
         files changed with one line each · the gate output verbatim · assumptions · what you skipped
 
+    ## Last line — the machine-readable report
+        End with exactly this shape, one line, after your prose:
+        RESULT: {"files": ["<path>", …], "verify": {"cmd": "<the gate command>", "exit": <code>},
+                 "risks": ["<what could break>"], "followups": ["<what the next lane must know>"]}
+        Nothing else after it. `pi-lane hand` reads this line; a lane without it cannot be filed.
+
 Rules that keep it small:
 
 1. **The slice, never the whole request.** The orchestrator already read the task; a lane that reads it

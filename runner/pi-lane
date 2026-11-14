@@ -208,6 +208,130 @@ def assistant_text(event: dict) -> str:
     return "\n".join(p for p in parts if p).strip()
 
 
+RESULT_MARKER = "RESULT:"
+
+
+def parse_result(text: str) -> tuple:
+    """Read the lane's machine-readable report: the last `RESULT: {...}` in its final text.
+
+    Returns `(result, status)` with status `ok`, `missing` or `invalid`. The prose stays for a person;
+    this object is what an orchestrator reads without paying for the whole report again.
+    """
+    if not text:
+        return None, "missing"
+    index = text.upper().rfind(RESULT_MARKER)
+    if index < 0:
+        return None, "missing"
+    tail = text[index + len(RESULT_MARKER):].strip().strip("`").strip()
+    start = tail.find("{")
+    if start < 0:
+        return None, "invalid"
+    depth = 0
+    end = -1
+    for position, char in enumerate(tail[start:], start=start):
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                end = position
+                break
+    if end < 0:
+        return None, "invalid"
+    try:
+        result = json.loads(tail[start:end + 1])
+    except ValueError:
+        return None, "invalid"
+    if not isinstance(result, dict):
+        return None, "invalid"
+    files = result.get("files")
+    if not isinstance(files, list) or not all(isinstance(item, str) for item in files):
+        return None, "invalid"
+    for key in ("risks", "followups"):
+        if key in result and not isinstance(result[key], list):
+            return None, "invalid"
+    verify = result.get("verify")
+    if verify is not None and not (isinstance(verify, dict) and "exit" in verify):
+        return None, "invalid"
+    return result, "ok"
+
+
+def normalise_touch(pattern: str) -> str:
+    """One declared write-set as a repository-relative glob."""
+    cleaned = str(pattern or "").strip().replace("\\\\", "/")
+    while cleaned.startswith("./"):
+        cleaned = cleaned[2:]
+    return cleaned.lstrip("/")
+
+
+def touch_overlap(left: list, right: list) -> list:
+    """The globs of two lanes that can name the same file. Worktrees stop write races, not semantics."""
+    hits: set = set()
+    for first in left:
+        for second in right:
+            if first == second:
+                hits.add(first)
+                continue
+            plain_first = first.rstrip("*").rstrip("/")
+            plain_second = second.rstrip("*").rstrip("/")
+            if not plain_first or not plain_second:
+                continue
+            if plain_first.startswith(plain_second) or plain_second.startswith(plain_first):
+                hits.add(first if len(first) <= len(second) else second)
+    return sorted(hits)
+
+
+def dry_merge(argv: list) -> int:
+    """Merge branches in memory with `git merge-tree` and report what would conflict.
+
+    A real merge of a lane whose sibling touched the same lines either conflicts or, worse, drops one
+    side's reasoning. This answers the question before anything lands.
+    """
+    parser = argparse.ArgumentParser(prog="pi-lane dry-merge")
+    parser.add_argument("lanes", nargs="+")
+    args = parser.parse_args(argv)
+    records = []
+    for name in args.lanes:
+        record = read_json(hermes_home() / "lanes" / name / "lane.json")
+        if record is None:
+            print(f"no such lane: {name}", file=sys.stderr)
+            return 1
+        records.append(record)
+    repos = {str(r.get("repo") or "") for r in records}
+    if len(repos) != 1:
+        print("dry-merge: lanes come from different repositories", file=sys.stderr)
+        return 1
+    repo = repos.pop()
+    if not repo:
+        print("dry-merge: a lane has no repository", file=sys.stderr)
+        return 1
+    conflicts = 0
+    pairs = [(records[0].get("branch"), "HEAD")]
+    for previous, following in zip(records, records[1:]):
+        pairs.append((previous.get("branch"), following.get("branch")))
+    
+    for first, second in pairs:
+        done = subprocess.run(
+            ["git", "-C", repo, "merge-tree", "--write-tree", str(first), str(second)],
+            capture_output=True, text=True, check=False,
+        )
+        label = f"{first} into {second}"
+        if done.returncode == 0:
+            print(f"clean     {label}")
+            continue
+        conflicts += 1
+        names = sorted({
+            line.split(" in ")[-1].strip()
+            for line in done.stdout.splitlines()
+            if line.startswith("CONFLICT")
+        })
+        print(f"CONFLICT  {label}" + (f": {', '.join(names[:8])}" if names else ""))
+        for line in done.stdout.splitlines():
+            if line.startswith("CONFLICT"):
+                print(f"          {line}")
+    return 1 if conflicts else 0
+
+
 def assistant_texts(lane_dir) -> list:
     """The lane's own final texts, oldest first, read from the tail of its event stream."""
     path = Path(lane_dir) / "events.jsonl"
@@ -541,6 +665,8 @@ def hand_lane(argv: list) -> int:
     """
     parser = argparse.ArgumentParser(prog="pi-lane hand")
     parser.add_argument("lane")
+    parser.add_argument("--allow-missing-result", action="store_true",
+                        help="file a lane whose last text carried no valid RESULT object")
     args = parser.parse_args(argv)
     lane_dir = hermes_home() / "lanes" / args.lane
     record = read_json(lane_dir / "lane.json")
@@ -556,6 +682,12 @@ def hand_lane(argv: list) -> int:
     stale = _check_is_fresh(args.lane, record)
     if stale:
         print(stale, file=sys.stderr)
+        return 1
+    if str(record.get("result_status") or "") != "ok" and not args.allow_missing_result:
+        print(f"{args.lane}: no valid RESULT — its last text must end with "
+              f"RESULT: {{\"files\": [\"…\"], \"verify\": {{\"cmd\": \"…\", \"exit\": 0}}}}, so the "
+              f"orchestrator reads the report as data. `--allow-missing-result` files it anyway",
+              file=sys.stderr)
         return 1
     record["handed_at"] = int(time.time())
     write_record(lane_dir, record)
@@ -909,6 +1041,23 @@ def digest_lane(argv: list) -> int:
               f"{int(usage.get('turns') or 0)} turns")
     if record.get("stop_reason"):
         print(f"stopped   {record['stop_reason']}")
+    touches = record.get("touches") or []
+    if touches:
+        print(f"touches   {', '.join(touches)}")
+    status = str(record.get("result_status") or "")
+    if status:
+        result = record.get("result") or {}
+        line = f"result    {status}"
+        if result:
+            line += f" · {len(result.get('files') or [])} file(s)"
+            verify = result.get("verify") or {}
+            if verify:
+                line += f" · verify exit {verify.get('exit')}"
+            if result.get("risks"):
+                line += f" · {len(result['risks'])} risk(s)"
+        print(line)
+        if result.get("followups"):
+            print("next      " + "; ".join(str(item) for item in result["followups"][:4]))
     if record.get("last_error"):
         print(f"error     {str(record.get('last_error'))[:200]}")
     if repo and branch:
@@ -1099,6 +1248,12 @@ def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: s
     record["finished"] = int(time.time())
     record["exit"] = exit_code
     record["usage"] = usage
+    result, result_status = parse_result(text)
+    record["result"] = result
+    record["result_status"] = result_status
+    if result_status != "ok":
+        print(f"{lane}: result {result_status} — a lane ends with a RESULT: {{\"files\": [...]}} line",
+              file=sys.stderr)
     if stop_reason:
         record["stop_reason"] = stop_reason
         record["state"] = "stopped"
@@ -1267,6 +1422,8 @@ def main() -> int:
         return wait_all(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "ledger":
         return ledger(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "dry-merge":
+        return dry_merge(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "budget":
         return set_budget(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "review":
@@ -1304,6 +1461,7 @@ def main() -> int:
             "pi-lane close <lane> [--no-merge] [--yes], "
             "pi-lane say <lane> \"text\", pi-lane answer <lane> \"value\", pi-lane list, "
             "pi-lane ledger [lane …] (tokens and money per lane), "
+            "pi-lane dry-merge <lane …> (branches merged in memory, conflicts named), "
             "pi-lane budget <lane> [--max-usd N] [--max-turns N] [--idle-timeout S]"
         ),
     )
@@ -1322,6 +1480,11 @@ def main() -> int:
                         help="stop the lane after this many assistant messages in one run (0 = no cap)")
     parser.add_argument("--idle-timeout", type=int, default=DEFAULT_IDLE_TIMEOUT,
                         help="stop the lane after this many seconds without an event (0 = no cap)")
+    parser.add_argument("--touch", action="append", default=[], metavar="GLOB",
+                        help="a path or glob this lane owns; repeatable. Two lanes in flight with an "
+                             "intersecting write-set are refused")
+    parser.add_argument("--allow-overlap", action="store_true",
+                        help="let this lane start although a lane in flight names the same file")
     args = parser.parse_args()
 
     if not LANE_RE.match(args.lane):
@@ -1380,6 +1543,26 @@ def main() -> int:
             f"pi-lane: note — feature {args.feature} already has a lane in flight: {', '.join(in_flight)}",
             file=sys.stderr,
         )
+
+    # Declared write-sets: worktrees stop write races, not semantic ones. Two lanes in flight that
+    # name the same file merge into a conflict, or the second silently replaces the first's reasoning.
+    my_touches = [path for path in (normalise_touch(item) for item in args.touch) if path]
+    if my_touches:
+        for record in lane_records():
+            if record.get("repo") != repo or record.get("lane") == lane:
+                continue
+            if str(record.get("state")) not in ("running", "waiting"):
+                continue
+            theirs = [normalise_touch(item) for item in (record.get("touches") or [])]
+            shared = touch_overlap(my_touches, theirs)
+            if not shared:
+                continue
+            message = (f"write-set overlaps lane {record.get('lane')}: {', '.join(shared[:6])} — "
+                       f"a slice that must touch a shared file starts after that lane merges")
+            if args.allow_overlap:
+                print(f"pi-lane: warning — {message}", file=sys.stderr)
+            else:
+                fail(message + " (override with --allow-overlap)")
     lane_dir = hermes_home() / "lanes" / lane
     lane_dir.mkdir(parents=True, exist_ok=True)
     events_path = lane_dir / "events.jsonl"
@@ -1421,6 +1604,7 @@ def main() -> int:
         "pid": os.getpid(),
         "started": int(time.time()),
         "exit": None,
+        "touches": my_touches,
         "budget": {
             "max_usd": args.max_usd,
             "max_turns": args.max_turns,

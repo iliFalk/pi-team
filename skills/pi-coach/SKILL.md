@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.0.3
+version: 3.1.0
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -119,6 +119,9 @@ each was a restatement of the whole task. A slice brief names its slice and stop
 - **Names, not descriptions.** A contract line is `<symbol> <signature>`. The reasoning stays with the
   orchestrator.
 - **The gate verbatim**, so a lane self-checks instead of being re-run.
+- **A `RESULT:` line last**, one line of JSON (`files`, `verify`, `risks`, `followups`). The runner
+  parses it into the record, `digest` prints it, and `hand` refuses a lane without it — so the report is
+  data, not prose the orchestrator pays to read.
 - **Thinking level by kind of work:** `--thinking low` for docs, compose, config and glue; `medium` for
   code that must reason about existing behaviour.
 
@@ -129,6 +132,7 @@ fat brief is visible in the log instead of only in the bill.
 
 ```sh
 pi-lane <lane> "<task>" --project <project> --feature <feature> [--provider P] [--model M] [--thinking L]
+pi-lane <lane> "<task>" --repo <path> --touch 'music/' --touch 'tests/test_cli.py' --max-usd 0.10
 ```
 
 1. Cuts `<repo>/.worktrees/<lane>` on branch `lane/<lane>`.
@@ -211,10 +215,14 @@ lanes editing the same component or the same token block merge into a conflict, 
 merge silently replaces the first one's reasoning. A slice that must touch a shared file is sequential
 by definition — put it in a lane that starts after the merge.
 
-- Write the file list into every brief ("these files and nothing else"). A lane that wanders outside
-  its list makes the boundary meaningless.
+- Write the file list into every brief ("these files and nothing else") **and into `--touch`**. The
+  runner refuses a lane whose declared write-set intersects that of a lane still in flight (exit 2),
+  and names the shared path; a slice that must touch a shared file starts after that lane merges.
+  `--allow-overlap` overrides with a warning, and then the merge is your problem.
 - Merge in dependency order, one lane at a time, and re-run the gates after each merge that touches a
   gate input. Two lanes that both change `src/index.css` are a dependency, not a pair.
+- Run `pi-lane dry-merge <lane …>` before the first merge: it merges the branches in memory and names
+  every file that would conflict, without touching the tree.
 - Parallelism buys wall time, not money: N lanes read the context N times, so tokens grow roughly
   linearly while the clock does not. Use it when the slices are real, not to look fast.
 - A question parks its own lane only. `wait --all` returns `3` for the first one that asks, so answer
@@ -308,6 +316,9 @@ repository HEAD. The gate records the merged HEAD, so the order is: merge, gate,
 the gate makes the pair stale, and the hand refuses until the gate runs again. `pi-lane check` records
 the worktree HEAD, which is not the tree the gates ran in, so a lane with only a `check` cannot be
 filed: merge it and gate it.
+
+**A hand needs a RESULT too.** The lane's last text must end with `RESULT: {…}`. Without it the hand
+refuses — `--allow-missing-result` files it anyway, and then the report is prose again.
 
 `TO REVIEW` in the panel writes the same `handed_at` and says nothing; the check is what the queue's
 `SEND` asks for, and the panel offers `CLOSE` only while `checked_sha` equals the worktree HEAD — so a
