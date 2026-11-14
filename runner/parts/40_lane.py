@@ -178,6 +178,16 @@ def lane_blockers(name: str, record: dict, stage: str, *, allow_missing_result: 
         blockers.append(f"the RESULT names no {', '.join(acs['unreported'])} — its `acs` list must carry "
                         "every criterion the lane answers")
     if stage == "close":
+        plan_id = str(record.get("plan") or "")
+        hold = record.get("holdout") or {}
+        if plan_id and not hold:
+            blockers.append(f"no holdout for plan {plan_id} — write the scenarios in "
+                            f"$HERMES_HOME/holdout/{plan_id}/ and run `pi-lane holdout {plan_id}`")
+        elif plan_id and not hold.get("ok"):
+            failed = [item.get("name") for item in (hold.get("scenarios") or []) if item.get("exit")]
+            blockers.append(f"the holdout failed: {', '.join(failed) or 'no scenario ran'}")
+        elif plan_id and facts["head"] and hold.get("sha") and hold["sha"] != facts["head"]:
+            blockers.append(f"the holdout ran at {str(hold['sha'])[:7]}, HEAD is {facts['head'][:7]}")
         if facts["review"] not in ("ok", "skipped"):
             blockers.append("no critic review")
         elif facts["p0"]:

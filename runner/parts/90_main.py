@@ -9,6 +9,8 @@ def main() -> int:
         return plan(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "spec":
         return spec(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "holdout":
+        return holdout(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "report":
         return report(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "status":

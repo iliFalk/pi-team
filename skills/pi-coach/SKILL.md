@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.14.0
+version: 3.16.0
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -324,6 +324,31 @@ pi-lane spec cover  --repo <path>       # which id a test or a gate script names
 - The search proves a trace, not a good test. The location is printed so the critic and the orchestrator
   read the line; a comment naming AC3 is a trace too, and that gap is the critic's business.
 
+## Holdout: the acceptance the writer never sees
+
+The gate lives in the repository, so the agent that writes the code reads it. Measured: a lane named its
+tests after the criteria and asserted something else, and the gate stayed green while `sync` never called
+`scan`. The holdout is the other half — scenarios outside the repository, written before any lane opens,
+run against the merged tree.
+
+```sh
+# $HERMES_HOME/holdout/<plan>/01-dry-run-changes-nothing.py   (template: templates/holdout.md)
+pi-lane holdout <plan>            # every scenario in the merged tree; writes holdout_check on the lanes
+pi-lane holdout <plan> --json     # ok, sha, scenarios
+```
+
+- **A scenario is a program**: `HOLDOUT_REPO` in the environment, exit 0 = the behaviour holds, any other
+  code = it does not, the last 15 lines of output = the evidence. One behaviour per file, numbered.
+- **It refuses like the gate**: no scenario in the folder, or a lane branch not merged into HEAD, and it
+  exits 1 without recording anything. It runs in the merged tree, never a worktree.
+- **`close --auto` refuses without a green holdout at HEAD**, and the refusal names the plan id and the
+  folder to write. A holdout older than HEAD is stale, exactly like a gate stamp.
+- **The lane never receives it.** Not in the brief, not in the repository, not in a message: a writer that
+  reads the acceptance tunes to it. Write the scenarios before the lanes open, from the requirements file
+  and nothing else.
+- `report` prints `holdout ok at <sha>`, `holdout FAILED` or `holdout not run` under every lane that
+  carries a plan.
+
 ## Lane: autonomy — `auto` or `ask`
 
 `--autonomy auto` is the default (`PI_TEAM_AUTONOMY` overrides it). The lane never parks: the runner
@@ -623,6 +648,15 @@ templates with it, and say how far the line count moved.
   plan, gates, the criteria layer and every refusal for zero dollars, and each run has its own
   `mktemp` `HERMES_HOME`. Two defects were found there that a syntax check cannot see: the burst-loss in
   the event loop, and `wait --all` reading a missing record as finished.
+- **A prompt is not parallelism.** A solo orchestrator told, in capitals, to spawn three subagents in ONE
+  `delegate_task` call spawned them one per call and waited for each — the manifest read `task_count: 1`,
+  and the run was sequential with extra ceremony. Measured twice: a model decides its own concurrency, so
+  a topology that must be parallel has to be enforced by the runtime (`pi-lane plan` with `waves`), never
+  requested in a brief.
+- **A subagent's bill is not in its parent's row.** `session_model_usage` carried the orchestrator only
+  (37 calls, $0.060 for a half-run); the children wrote no separate usage row, so the arm's true cost is
+  unmeasured. Counting the parent alone makes any subagent topology look cheap — sum the child sessions
+  before quoting a number, and treat a missing row as a hole in the record, not as zero.
 - **A stale stub runner resurrects its record.** A killed sandbox lane that is still alive keeps rewriting
   `lane.json` by path, so the next case run reads `running` after a clean `done`. Kill the stub processes
   before wiping a sandbox `HERMES_HOME`, or the case answers for the previous run.

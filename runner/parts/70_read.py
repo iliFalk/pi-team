@@ -219,6 +219,14 @@ def report(argv: list) -> int:
         cost = float(usage.get("cost_usd") or 0) + float(review_usage.get("cost_usd") or 0)
         pair = f"{facts['p0']}/{facts['p1']}"
         notes = [f"    {reason}" for reason in (close_blockers or hand_blockers)]
+        hold = record.get("holdout") or {}
+        if record.get("plan"):
+            if hold.get("ok"):
+                notes.append(f"    holdout ok at {str(hold.get('sha'))[:7]}")
+            elif hold:
+                notes.append("    holdout FAILED")
+            else:
+                notes.append("    holdout not run")
         acs = facts.get("acs") or {}
         if acs.get("declared"):
             note = f"    acs {len(acs['covered'])}/{len(acs['declared'])}"
