@@ -8,7 +8,23 @@ import json
 import os
 import sys
 
-prompt = sys.stdin.readline()
+raw = sys.argv[1:]
+critic = any("You review one slice" in str(part) for part in raw)
+prompt = "" if critic else sys.stdin.readline()
+
+if critic:
+    # Echo the criteria map and the holdout line back, so a case can prove the critic was given them.
+    blob = " ".join(str(part) for part in raw)
+    seen = [piece.strip() for piece in blob.split() if piece.strip().startswith("AC")]
+    hold = "holdout" if "hidden acceptance" in blob.lower() else "no-holdout"
+    text = ('REVIEW: {"p0": [], "p1": [], "notes": ["seen %s %s"]}'
+            % (",".join(seen[:4]) or "no-acs", hold))
+    sys.stdout.write(json.dumps({"type": "message_end",
+                                 "message": {"role": "assistant",
+                                             "content": [{"type": "text", "text": text}]}}) + "\n")
+    sys.stdout.write(json.dumps({"type": "agent_end"}) + "\n")
+    sys.stdout.flush()
+    sys.exit(0)
 
 lane = os.path.basename(os.getcwd().split(".worktrees/")[-1]) or "stub"
 with open(os.path.join(os.getcwd(), f"stub_{lane}.txt"), "w", encoding="utf-8") as handle:

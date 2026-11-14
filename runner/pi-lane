@@ -82,6 +82,12 @@ HOW THE GATE CHECKED THAT CLAIM:
 GIT STATUS IN THE LANE'S WORKTREE:
 {status}
 
+CRITERIA THIS LANE ANSWERED, AND WHERE EACH ONE IS PROVEN:
+{acs}
+
+THE HIDDEN ACCEPTANCE (holdout), IF IT RAN:
+{holdout}
+
 DIFF AGAINST THE BRANCH IT WAS CUT FROM:
 {diff}
 
@@ -89,6 +95,9 @@ Report only defects that matter:
 P0 — the diff does not do what the brief says, a documented path is broken, work or data is lost,
      a test it claims green cannot pass, a secret is written, or a file it was told not to touch is edited.
 P1 — the RESULT claims what the diff does not show, or a declared file is missing or empty.
+     Also P1: a declared criterion whose test does not assert it — open the test named above and read the
+     body, because a test that carries the id in its name and asserts something else is the defect this
+     review exists for — and a criterion with no proof at all.
      Also P1: the diff documents a command, a flag, an environment key or an image option that nothing in
      it establishes — you cannot reach the vendor, so say you cannot confirm it instead of assuming it.
 Never report style, naming, formatting or taste. Empty lists mean the work is clean.
@@ -386,9 +395,38 @@ def run_review(lane_dir: Path, record: dict, lane: str) -> dict | None:
     rc, status, _ = _git(str(worktree), "status", "--porcelain")
     if len(diff) > 60000:
         diff = diff[:60000] + "\n… diff cut at 60000 characters\n"
+    # The critic cannot judge a criterion it cannot find. Hand it the id, the test named for it and the
+    # line, plus the hidden acceptance when one ran: a name in a test proves a trace, not a proof.
+    facts = lane_facts(lane, record)
+    acs_map = facts.get("acs") or {}
+    if acs_map.get("declared"):
+        lines = []
+        for ac_id in acs_map["declared"]:
+            where = (acs_map.get("where") or {}).get(ac_id)
+            if where:
+                lines.append(f"  {ac_id}: {where}")
+            elif ac_id in (acs_map.get("unproven") or []):
+                lines.append(f"  {ac_id}: MENTIONED ONLY at {(acs_map.get('mentioned') or {}).get(ac_id)}")
+            else:
+                lines.append(f"  {ac_id}: no proof")
+        acs_text = "\n".join(lines)
+    else:
+        acs_text = "(the lane declares none)"
+    hold = record.get("holdout") or {}
+    if hold:
+        failed = [item.get("name") for item in (hold.get("scenarios") or []) if item.get("exit")]
+        holdout_text = (f"{'green' if hold.get('ok') else 'RED'} at {str(hold.get('sha'))[:7]}, "
+                        f"{len(hold.get('scenarios') or [])} scenario(s)"
+                        + (f", failed: {', '.join(failed)}" if failed else "")
+                        + f", folder {hold.get('dir')}")
+    else:
+        holdout_text = "(none was run for this plan)"
+
     prompt = REVIEW_PROMPT.format(
         brief=" ".join(str(record.get("task") or "").split())[:4000],
         touches=", ".join(record.get("touches") or []) or "(none declared)",
+        acs=acs_text,
+        holdout=holdout_text,
         result=json.dumps(record.get("result"), ensure_ascii=False) if record.get("result") else "(none)",
         claim=(json.dumps(record.get("verify_check"), ensure_ascii=False)
                if record.get("verify_check") else "(the gate has not run on this lane yet)"),

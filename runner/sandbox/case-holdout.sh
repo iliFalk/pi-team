@@ -62,6 +62,18 @@ assert hold.get("sha") == head, (hold.get("sha"), head)
 assert [s["name"] for s in hold["scenarios"]] == ["01-ok.py"], hold["scenarios"]
 PY
 
+echo "== the critic is handed the criteria map and the holdout"
+"$RUNNER" gate alpha --cmd "python3 -m unittest discover -s tests" >/dev/null 2>&1
+"$RUNNER" hand alpha >"$SCR/hand.txt" 2>&1; rc=$?
+grep -q "critic" "$SCR/hand.txt" && ok "hand ran the critic" || bad "hand: rc=$rc $(tail -3 "$SCR/hand.txt")"
+python3 - "$SCR" <<'PY' && ok "the critic saw the AC site and the holdout line" || bad "review.json has no map"
+import json, os, sys
+review = json.load(open(os.path.join(sys.argv[1], "home/lanes/alpha/review.json")))
+notes = " ".join(review.get("notes") or [])
+assert "AC1" in notes, notes
+assert "holdout" in notes, notes
+PY
+
 echo "== a new commit makes the holdout stale"
 git -C "$REPO" -c user.email=t@t.t -c user.name=t commit -q --allow-empty -m "after the holdout"
 out=$("$RUNNER" close alpha --auto 2>&1); rc=$?

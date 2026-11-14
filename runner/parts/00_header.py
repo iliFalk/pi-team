@@ -79,6 +79,12 @@ HOW THE GATE CHECKED THAT CLAIM:
 GIT STATUS IN THE LANE'S WORKTREE:
 {status}
 
+CRITERIA THIS LANE ANSWERED, AND WHERE EACH ONE IS PROVEN:
+{acs}
+
+THE HIDDEN ACCEPTANCE (holdout), IF IT RAN:
+{holdout}
+
 DIFF AGAINST THE BRANCH IT WAS CUT FROM:
 {diff}
 
@@ -86,6 +92,9 @@ Report only defects that matter:
 P0 — the diff does not do what the brief says, a documented path is broken, work or data is lost,
      a test it claims green cannot pass, a secret is written, or a file it was told not to touch is edited.
 P1 — the RESULT claims what the diff does not show, or a declared file is missing or empty.
+     Also P1: a declared criterion whose test does not assert it — open the test named above and read the
+     body, because a test that carries the id in its name and asserts something else is the defect this
+     review exists for — and a criterion with no proof at all.
      Also P1: the diff documents a command, a flag, an environment key or an image option that nothing in
      it establishes — you cannot reach the vendor, so say you cannot confirm it instead of assuming it.
 Never report style, naming, formatting or taste. Empty lists mean the work is clean.

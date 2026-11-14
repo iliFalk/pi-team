@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.16.0
+version: 3.16.1
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -314,8 +314,10 @@ pi-lane spec cover  --repo <path>       # which id a test or a gate script names
   MENTIONED: `spec cover` exits 1, `hand` refuses, and `gate` refuses to stamp the run.
 - **A named test can still prove the wrong thing.** Measured: `library.sync` never called `store.scan`
   while `test_ac20_sync_prints_the_summary` carried AC20 and passed — the criterion said "runs ingest →
-  resolve → scan", the test checked the printed summary. Name coverage cannot see that; a critic reading
-  the criterion against the test body can, so hand it the map.
+  resolve → scan", the test checked the printed summary. Name coverage cannot see that, so the runner
+  hands the critic the map: `hand` puts one line per declared id into the prompt — `AC7:
+  tests/test_library.py:377`, `AC9: MENTIONED ONLY at …`, `AC7: no proof` — with the holdout's state
+  beside it, and a criterion whose named test does not assert it is a P1 finding.
 - **`gate` refuses a stamp.** Before it runs a single command it looks for every declared id in the
   merged tree and refuses `checked_sha` while one is named nowhere — a criterion nobody proves is a
   requirement nobody checks, and the gate is the last place that can say so before a merge. The summary

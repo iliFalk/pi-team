@@ -35,9 +35,38 @@ def run_review(lane_dir: Path, record: dict, lane: str) -> dict | None:
     rc, status, _ = _git(str(worktree), "status", "--porcelain")
     if len(diff) > 60000:
         diff = diff[:60000] + "\n… diff cut at 60000 characters\n"
+    # The critic cannot judge a criterion it cannot find. Hand it the id, the test named for it and the
+    # line, plus the hidden acceptance when one ran: a name in a test proves a trace, not a proof.
+    facts = lane_facts(lane, record)
+    acs_map = facts.get("acs") or {}
+    if acs_map.get("declared"):
+        lines = []
+        for ac_id in acs_map["declared"]:
+            where = (acs_map.get("where") or {}).get(ac_id)
+            if where:
+                lines.append(f"  {ac_id}: {where}")
+            elif ac_id in (acs_map.get("unproven") or []):
+                lines.append(f"  {ac_id}: MENTIONED ONLY at {(acs_map.get('mentioned') or {}).get(ac_id)}")
+            else:
+                lines.append(f"  {ac_id}: no proof")
+        acs_text = "\n".join(lines)
+    else:
+        acs_text = "(the lane declares none)"
+    hold = record.get("holdout") or {}
+    if hold:
+        failed = [item.get("name") for item in (hold.get("scenarios") or []) if item.get("exit")]
+        holdout_text = (f"{'green' if hold.get('ok') else 'RED'} at {str(hold.get('sha'))[:7]}, "
+                        f"{len(hold.get('scenarios') or [])} scenario(s)"
+                        + (f", failed: {', '.join(failed)}" if failed else "")
+                        + f", folder {hold.get('dir')}")
+    else:
+        holdout_text = "(none was run for this plan)"
+
     prompt = REVIEW_PROMPT.format(
         brief=" ".join(str(record.get("task") or "").split())[:4000],
         touches=", ".join(record.get("touches") or []) or "(none declared)",
+        acs=acs_text,
+        holdout=holdout_text,
         result=json.dumps(record.get("result"), ensure_ascii=False) if record.get("result") else "(none)",
         claim=(json.dumps(record.get("verify_check"), ensure_ascii=False)
                if record.get("verify_check") else "(the gate has not run on this lane yet)"),
