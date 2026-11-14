@@ -40,8 +40,10 @@ Rules that keep it small:
    again pays for the same tokens a second and a third time.
 2. **Facts, not exploration.** Name the runtime, the tools, the state of the tree, and the commands.
    Two `ls` calls per lane disappear when the brief states what is there.
-3. **Names, not descriptions.** A contract line is `<key> <type or signature>`; a paragraph explaining
-   the design belongs in the orchestrator's head, not in three briefs.
+3. **Names, not descriptions.** A contract line is `<symbol> <signature>` — and the signature carries the
+   return shape: `-> list[dict]` with the dict keys named, or `-> dict` with its keys named. Two measured
+   repair rounds came from a sibling that returned a dict where the first lane expected a list; the brief
+   named the function and not its result. The reasoning stays with the orchestrator.
 4. **The gate belongs in the brief**, verbatim, so a lane self-checks instead of being re-run.
 5. **Thinking level by kind of work:** `--thinking low` for documentation, compose files, config and
    glue; `--thinking medium` for code that must reason about existing behaviour.

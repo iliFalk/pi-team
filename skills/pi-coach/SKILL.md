@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.9.0
+version: 3.9.1
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
