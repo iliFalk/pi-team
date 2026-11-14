@@ -902,7 +902,7 @@ def digest_lane(argv: list) -> int:
         print(f"handed    yes")
     if record.get("checked_at"):
         print(f"checked   {str(record.get('checked_sha'))[:7]} · {'; '.join(record.get('gate_cmds') or [])}")
-    usage = record.get("usage") or {}
+    usage = record.get("usage") or _usage_from_session(str(record.get("worktree") or "")) or {}
     if usage:
         print(f"usage     in {int(usage.get('input') or 0)} · out {int(usage.get('output') or 0)} · "
               f"cache {int(usage.get('cache_read') or 0)} · ${float(usage.get('cost_usd') or 0):.4f} · "
@@ -1184,11 +1184,43 @@ def set_budget(argv: list) -> int:
     return 0
 
 
+def _usage_from_session(worktree: str) -> dict | None:
+    """Sum a lane's usage from its pi session files, for records written before the runner kept it."""
+    if not worktree:
+        return None
+    folder = hermes_home().parent / ".pi" / "agent" / "sessions" / f"--{worktree.strip('/').replace('/', '-')}--"
+    if not folder.is_dir():
+        return None
+    total = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0, "reasoning": 0,
+             "cost_usd": 0.0, "turns": 0}
+    seen = False
+    for path in sorted(folder.glob("*.jsonl")):
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            message = event.get("message") if isinstance(event.get("message"), dict) else None
+            usage = (message or {}).get("usage")
+            if not isinstance(usage, dict):
+                continue
+            seen = True
+            total["input"] += int(usage.get("input") or 0)
+            total["output"] += int(usage.get("output") or 0)
+            total["cache_read"] += int(usage.get("cacheRead") or 0)
+            total["cache_write"] += int(usage.get("cacheWrite") or 0)
+            total["reasoning"] += int(usage.get("reasoning") or 0)
+            total["cost_usd"] = round(total["cost_usd"] + float((usage.get("cost") or {}).get("total") or 0), 6)
+            total["turns"] += 1
+    return total if seen else None
+
+
 def ledger(argv: list) -> int:
     """Print tokens and money per lane from the records, plus the total of the run.
 
     The lane's own `pi` bill used to live only in `~/.pi/agent/sessions`, so a run could not be
-    totalled and a lane arm looked cheaper than it was.
+    totalled and a lane arm looked cheaper than it was. A record written before the runner kept the
+    usage is billed from that session file instead, and marked with `~`.
     """
     parser = argparse.ArgumentParser(prog="pi-lane ledger")
     parser.add_argument("lanes", nargs="*")
@@ -1199,10 +1231,16 @@ def ledger(argv: list) -> int:
         print("no lanes")
         return 0
     rows.sort(key=lambda r: r.get("started") or 0)
-    print(f"{'lane':20s} {'state':8s} {'input':>9s} {'output':>8s} {'cache':>9s} {'usd':>8s} {'min':>5s}  model")
+    print(f"{'lane':20s} {'state':8s} {'input':>9s} {'output':>8s} {'cache':>9s} {'usd':>9s} {'min':>5s}  model")
     total = {"input": 0, "output": 0, "cache": 0, "usd": 0.0}
+    from_session = 0
     for record in rows:
         usage = record.get("usage") or {}
+        mark = ""
+        if not usage:
+            usage = _usage_from_session(str(record.get("worktree") or "")) or {}
+            mark = "~" if usage else ""
+            from_session += 1 if mark else 0
         started = record.get("started") or 0
         finished = record.get("finished") or 0
         minutes = int((finished - started) // 60) if finished and started else 0
@@ -1216,9 +1254,11 @@ def ledger(argv: list) -> int:
             total[key] += values[key]
         model = str(record.get("model") or "")
         print(f"{str(record.get('lane')):20s} {str(record.get('state')):8s} {values['input']:9d} "
-              f"{values['output']:8d} {values['cache']:9d} {values['usd']:8.4f} {minutes:5d}  {model}")
+              f"{values['output']:8d} {values['cache']:9d} {values['usd']:8.4f}{mark:1s} {minutes:4d}  {model}")
     print(f"{'total':20s} {'':8s} {total['input']:9d} {total['output']:8d} {total['cache']:9d} "
           f"{total['usd']:8.4f}")
+    if from_session:
+        print("~ billed from the pi session file: the record was written before the runner kept usage")
     return 0
 
 
