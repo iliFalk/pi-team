@@ -1,5 +1,5 @@
 name: pi-team
-version: 1.0.0
+version: 1.1.0
 kind: backend
 description: "pi coding lanes in the desktop: projects, features and lanes in one panel, with each lane's task, diff, plan and thread, plus the pi-coach procedure that runs a lane."
 author: "iliFalk"
