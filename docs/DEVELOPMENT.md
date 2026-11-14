@@ -44,6 +44,7 @@ them; the panel draws empty nodes.
 | declared write-set | `lane.json` `touches` — the globs a lane may write; an intersecting pair in flight is refused |
 | autonomy | `lane.json` `autonomy` (`auto`/`ask`) and `auto_answers` — what the runner decided for the lane |
 | liveness | `lane.json` `heartbeat` (every 15 s) and `orphaned_at` — a dead pid is a crash, not work |
+| the lane's own claim | `lane.json` `verify_check` — the RESULT's verify command and exit against what gate ran |
 | critic findings | `lane.json` `review` (`p0`, `p1`, `notes`, `usage`) and `review.json` |
 | machine-readable report | `lane.json` `result` and `result_status` — the lane's last `RESULT: {…}` line, parsed |
 | question | `question.json`: `id`, `method`, `title`, `options` |

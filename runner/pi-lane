@@ -73,6 +73,9 @@ FILES THE LANE DECLARED:
 WHAT THE LANE CLAIMS (its RESULT line):
 {result}
 
+HOW THE GATE CHECKED THAT CLAIM:
+{claim}
+
 GIT STATUS IN THE LANE'S WORKTREE:
 {status}
 
@@ -348,6 +351,8 @@ def run_review(lane_dir: Path, record: dict, lane: str) -> dict | None:
         brief=" ".join(str(record.get("task") or "").split())[:4000],
         touches=", ".join(record.get("touches") or []) or "(none declared)",
         result=json.dumps(record.get("result"), ensure_ascii=False) if record.get("result") else "(none)",
+        claim=(json.dumps(record.get("verify_check"), ensure_ascii=False)
+               if record.get("verify_check") else "(the gate has not run on this lane yet)"),
         status=status[:4000] or "(clean)",
         diff=diff or "(no changes against the base)",
     )
@@ -887,6 +892,8 @@ def hand_lane(argv: list) -> int:
                         help="file the lane without the critic pass on another model")
     parser.add_argument("--accept-p0", action="store_true",
                         help="file the lane although the critic reported P0 findings")
+    parser.add_argument("--accept-claim", action="store_true",
+                        help="file the lane although its RESULT claim does not match the gate")
     args = parser.parse_args(argv)
     lane_dir = hermes_home() / "lanes" / args.lane
     record = read_json(lane_dir / "lane.json")
@@ -907,6 +914,12 @@ def hand_lane(argv: list) -> int:
         print(f"{args.lane}: no valid RESULT — its last text must end with "
               f"RESULT: {{\"files\": [\"…\"], \"verify\": {{\"cmd\": \"…\", \"exit\": 0}}}}, so the "
               f"orchestrator reads the report as data. `--allow-missing-result` files it anyway",
+              file=sys.stderr)
+        return 1
+    verify_check = record.get("verify_check") or {}
+    if verify_check and not verify_check.get("match") and not args.accept_claim:
+        print(f"{args.lane}: verify claim does not match the gate — {verify_check.get('why')}. "
+              f"Fix it and run `pi-lane gate` again, or file it anyway with `--accept-claim`",
               file=sys.stderr)
         return 1
     review = None
@@ -971,9 +984,17 @@ def list_lanes(argv: list) -> int:
             shelf = "closed"
         elif r.get("handed_at"):
             shelf = "review"
+        elif str(r.get("state")) in ("running", "waiting"):
+            shelf = str(r.get("state"))
         else:
-            shelf = str(r.get("state") or "?")
-        print(f"{r.get('lane')}\t{shelf}\t{r.get('project') or '-'}\t{(r.get('task') or '')[:60]}")
+            shelf = "idle"
+        usage = r.get("usage") or {}
+        review = r.get("review") or {}
+        cost = float(usage.get("cost_usd") or 0) + float((review.get("usage") or {}).get("cost_usd") or 0)
+        p0 = len(review.get("p0") or [])
+        stop = str(r.get("stop_reason") or "-").split(" —")[0]
+        print(f"{r.get('lane')}\t{shelf}\t{r.get('project') or '-'}\t${cost:.4f}\tP0 {p0}\t"
+              f"{r.get('autonomy') or '-'}\t{stop}\t{(r.get('task') or '')[:60]}")
     return 0
 
 
@@ -1201,6 +1222,7 @@ def gate_lanes(argv: list) -> int:
         return 1
 
     started = time.time()
+    results = []
     for command in args.cmd:
         print(f"$ {command}   (in {workdir})")
         try:
@@ -1217,12 +1239,38 @@ def gate_lanes(argv: list) -> int:
         if done.returncode != 0:
             print(f"gate failed, nothing recorded: {command}", file=sys.stderr)
             return 1
+        results.append((command, done.returncode))
 
     for lane, record in records.items():
         record["checked_at"] = int(time.time())
         record["checked_sha"] = head
         record["gate_cmds"] = list(args.cmd)
         record["gate_seconds"] = int(time.time() - started)
+        # A RESULT claims a verify command and its exit code. The gate is the tree the work lands in, so
+        # compare the claim with what actually ran there: a lane that says "green" about a command nobody
+        # ran, or about a command that failed here, is the defect the critic cannot see.
+        claim = (record.get("result") or {}).get("verify") or {}
+        claimed_cmd = " ".join(str(claim.get("cmd") or "").split())
+        check = {"claimed": claim, "gate": [{"cmd": c, "exit": e} for c, e in results], "match": True, "why": ""}
+        if not claimed_cmd:
+            check["match"] = False
+            check["why"] = "the lane claimed no verify command"
+        else:
+            same = [exit_code for cmd, exit_code in results if " ".join(cmd.split()) == claimed_cmd]
+            if not same:
+                check["match"] = False
+                check["why"] = "the claimed command is not one of the gate commands"
+            else:
+                try:
+                    claimed_exit = int(claim.get("exit"))
+                except (TypeError, ValueError):
+                    claimed_exit = None
+                if claimed_exit is None or claimed_exit != int(same[0]):
+                    check["match"] = False
+                    check["why"] = f"claimed exit {claim.get('exit')}, the gate ran it with exit {same[0]}"
+        record["verify_check"] = check
+        if not check["match"]:
+            print(f"{lane}: verify claim does not match the gate — {check['why']}", file=sys.stderr)
         write_record(hermes_home() / "lanes" / lane, record)
     print(f"gate ok — checked {len(records)} lane(s) at {head[:7]}")
     return 0
@@ -1295,6 +1343,13 @@ def digest_lane(argv: list) -> int:
               f"{int(usage.get('turns') or 0)} turns")
     if record.get("stop_reason"):
         print(f"stopped   {record['stop_reason']}")
+    check = record.get("verify_check") or {}
+    if check:
+        print(f"verify    {'match' if check.get('match') else 'MISMATCH'}"
+              + (f" — {check.get('why')}" if check.get("why") else ""))
+    if record.get("autonomy"):
+        extra = f" · {record['auto_answers']} auto-answer(s)" if record.get("auto_answers") else ""
+        print(f"autonomy  {record.get('autonomy')}{extra}")
     touches = record.get("touches") or []
     if touches:
         print(f"touches   {', '.join(touches)}")

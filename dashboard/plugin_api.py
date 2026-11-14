@@ -568,6 +568,30 @@ def _agent_name() -> str:
     return match.group(1) if match else "agent"
 
 
+def _lane_usage(record: dict, events: dict) -> dict:
+    """The lane's own bill, not the last message: the record keeps the running total.
+
+    The event stream only knows the final message, so the card used to show $0.001 for a lane that spent
+    $0.064. The critic's own spend is added, because it is money the same lane caused.
+    """
+    usage = record.get("usage") or {}
+    review = (record.get("review") or {}).get("usage") or {}
+    if usage:
+        tokens = (int(usage.get("input") or 0), int(usage.get("output") or 0), int(usage.get("cache_read") or 0))
+        lane_cost = float(usage.get("cost_usd") or 0)
+    else:
+        fallback = events["usage"]
+        tokens = (int(fallback.get("input") or 0), int(fallback.get("output") or 0),
+                  int(fallback.get("cacheRead") or 0))
+        lane_cost = float(fallback.get("total") or 0)
+    return {
+        "input": tokens[0],
+        "output": tokens[1],
+        "cacheRead": tokens[2],
+        "total": round(lane_cost + float(review.get("cost_usd") or 0), 6),
+    }
+
+
 def _lane_entry(lane_dir: Path) -> Optional[Dict[str, Any]]:
     record = _read_json(lane_dir / "lane.json")
     if record is None:
@@ -620,8 +644,22 @@ def _lane_entry(lane_dir: Path) -> Optional[Dict[str, Any]]:
         # The event stream is the first witness; the record knows the reason when it is empty.
         "last_error": events["last_error"] or str(record.get("last_error") or ""),
         "turns": events["turns"],
-        "usage": events["usage"],
+        "usage": _lane_usage(record, events),
         "stderr": "",
+        "stop_reason": str(record.get("stop_reason") or ""),
+        "autonomy": str(record.get("autonomy") or ""),
+        "auto_answers": int(record.get("auto_answers") or 0),
+        "review": {
+            "status": str(record.get("review_status") or ""),
+            "p0": len((record.get("review") or {}).get("p0") or []),
+            "p1": len((record.get("review") or {}).get("p1") or []),
+            "first": str(((record.get("review") or {}).get("p0") or [""])[0])[:240],
+            "cost": float(((record.get("review") or {}).get("usage") or {}).get("cost_usd") or 0),
+        },
+        "verify": {
+            "match": bool((record.get("verify_check") or {}).get("match", True)),
+            "why": str((record.get("verify_check") or {}).get("why") or "")[:240],
+        },
     }
 
     # Why a lane stopped: the runner's own stderr is the only place that says it.

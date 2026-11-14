@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.4.0
+version: 3.5.0
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -349,6 +349,12 @@ repository HEAD. The gate records the merged HEAD, so the order is: merge, gate,
 the gate makes the pair stale, and the hand refuses until the gate runs again. `pi-lane check` records
 the worktree HEAD, which is not the tree the gates ran in, so a lane with only a `check` cannot be
 filed: merge it and gate it.
+
+**The gate checks the lane's own claim.** A `RESULT` names a verify command and its exit code. `gate`
+compares both with what it actually ran in the merged tree and writes `verify_check` on the record; a
+claim naming a command the gate never ran, or an exit code that differs, makes `hand` refuse. File it
+anyway with `--accept-claim`, and know why you did. Measured: a lane that claimed
+`python3 -m unittest discover -s tests` while the gate ran only `true` was refused.
 
 **A hand needs a RESULT too.** The lane's last text must end with `RESULT: {…}`. Without it the hand
 refuses — `--allow-missing-result` files it anyway, and then the report is prose again.

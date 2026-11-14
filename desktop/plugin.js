@@ -3009,6 +3009,46 @@ function LaneStatus({ ctx }) {
           })
         : null,
 
+      // A capped or crashed lane says why, in the same block as an error: the runner already wrote the
+      // reason, and a bare `stopped` word leaves him guessing which cap fired.
+      lane.stop_reason
+        ? jsxs('div', {
+            className: 'shrink-0 px-2.5 pt-0.5',
+            children: [
+              jsx('div', {
+                className: 'text-[0.5625rem] uppercase tracking-wide',
+                style: { color: BAD_TEXT },
+                children: 'stopped'
+              }),
+              jsx('div', {
+                className:
+                  'overflow-y-auto whitespace-pre-wrap break-words font-mono text-[0.625rem] leading-snug',
+                style: { maxHeight: ERROR_H, color: BAD_TEXT },
+                children: lane.stop_reason
+              })
+            ]
+          })
+        : null,
+      // The critic's P0 blocks the hand, so the card says it in the same place a failure speaks.
+      lane.review && lane.review.p0
+        ? jsxs('div', {
+            className: 'shrink-0 px-2.5 pt-0.5',
+            children: [
+              jsx('div', {
+                className: 'text-[0.5625rem] uppercase tracking-wide',
+                style: { color: BAD_TEXT },
+                children: `review · p0 ${lane.review.p0}`
+              }),
+              jsx('div', {
+                className:
+                  'overflow-y-auto whitespace-pre-wrap break-words font-mono text-[0.625rem] leading-snug',
+                style: { maxHeight: ERROR_H, color: BAD_TEXT },
+                children: lane.review.first || '—'
+              })
+            ]
+          })
+        : null,
+
       // A closed lane that did not end well still says why, even after its worktree is gone.
       lane.shelved && isBad(lane)
         ? jsxs('div', {
