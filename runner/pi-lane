@@ -669,6 +669,28 @@ def lane_blockers(name: str, record: dict, stage: str, *, allow_missing_result: 
 
 
 # --- 50_run.py ---------------------------------------------------------
+def _read_lines(fd: int, pending: bytes, timeout: float):
+    """One OS read of a pi event pipe, split into whole lines.
+
+    `select` answers for the OS pipe, never for what Python has already buffered. A pi that writes
+    two events in one burst — the normal case at the end of a turn, `message_end` then `agent_end` —
+    left the second line inside the reader's buffer while select reported the pipe empty, and the
+    lane hung until its idle timeout with the work already done. Measured with a stub pi: the first
+    read carried both lines, the loop saw one and waited. Reading the bytes here keeps one buffer
+    and one truth: an incomplete tail stays in `pending` until its newline arrives.
+
+    Returns (lines, pending, eof).
+    """
+    ready, _, _ = select.select([fd], [], [], timeout)
+    if not ready:
+        return [], pending, False
+    chunk = os.read(fd, 65536)
+    if not chunk:
+        return [], b"", True
+    *complete, pending = (pending + chunk).split(b"\n")
+    return [raw.decode("utf-8", "replace") for raw in complete if raw.strip()], pending, False
+
+
 def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: str, question_timeout: int,
                 repair: bool = True) -> int:
     """One `pi --mode rpc` turn: the lane's first task or a continuation of its session.
@@ -717,8 +739,12 @@ def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: s
         last_activity = time.monotonic()
         last_beat = time.monotonic()
 
+        fd = proc.stdout.fileno()
+        pending = b""
         while True:
-            ready, _, _ = select.select([proc.stdout], [], [], POLL_SECONDS)
+            lines, pending, eof = _read_lines(fd, pending, POLL_SECONDS)
+            if eof:
+                break
 
             if time.monotonic() - last_beat >= 15:
                 # Liveness without noise: `reap` and the panel tell a slow lane from a dead one by
@@ -727,13 +753,10 @@ def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: s
                 write_record(lane_dir, record)
                 last_beat = time.monotonic()
 
-            if ready:
+            for line in lines:
                 last_activity = time.monotonic()
-                line = proc.stdout.readline()
-                if not line:
-                    break
-                if _keep_event(line):
-                    events.write(line)
+                if _keep_event(line + "\n"):
+                    events.write(line + "\n")
                     events.flush()
                 try:
                     event = json.loads(line)
@@ -839,23 +862,28 @@ def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: s
                 break
 
         # pi in RPC mode is a server: it stays alive after `agent_end`. Drain
-        # whatever is already in the pipe, then stop it ourselves.
+        # whatever is already in the pipe, then stop it ourselves. Same byte reader as the loop,
+        # so a line that arrived with the one we broke on is not lost.
         while True:
-            ready, _, _ = select.select([proc.stdout], [], [], 0.2)
-            if not ready:
+            lines, pending, eof = _read_lines(fd, pending, 0.2)
+            if not lines or eof:
                 break
-            line = proc.stdout.readline()
-            if not line:
-                break
-            if _keep_event(line):
-                events.write(line)
+            for line in lines:
+                if _keep_event(line + "\n"):
+                    events.write(line + "\n")
+            events.flush()
 
         try:
             proc.stdin.close()
         except OSError:
             pass
         if proc.poll() is None:
-            proc.terminate()
+            # A pi that exits on stdin EOF has a clean exit code coming; terminating it in that gap
+            # recorded a finished lane as `failed`. Give the exit a moment before the signal.
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                proc.terminate()
             try:
                 proc.wait(timeout=10)
             except subprocess.TimeoutExpired:
@@ -1571,21 +1599,46 @@ def gate_lanes(argv: list) -> int:
     was never merged, so a green run here would bless work that is not in the tree. And lanes from
     different repositories cannot share one gate run, because one command set would answer for both.
     On success it writes `checked_at` and `checked_sha` — the same pair the panel reads to offer
-    CLOSE.
+    CLOSE. With `--plan` the lanes and the commands come from the plan snapshot: the run carried
+    the gates in its plan file, so nobody retypes them and nobody forgets one.
     """
     parser = argparse.ArgumentParser(prog="pi-lane gate")
-    parser.add_argument("lanes", nargs="+")
+    parser.add_argument("lanes", nargs="*", help="the lanes to stamp; --plan finds them by plan id")
+    parser.add_argument("--plan", default="",
+                        help="take the lanes and the commands from the plan snapshot at $HERMES_HOME/plans/<id>")
     parser.add_argument("--cmd", action="append", default=[], help="a gate command; repeatable")
     parser.add_argument("--cwd", default="", help="run here instead of the repository root")
     parser.add_argument("--timeout", type=int, default=1800, help="seconds per command")
     args = parser.parse_args(argv)
-    if not args.cmd:
-        print("pi-lane gate: pass at least one --cmd \"<command>\"", file=sys.stderr)
+
+    lanes = list(args.lanes)
+    plan_cmds = []
+    if args.plan:
+        snapshot = read_json(hermes_home() / "plans" / args.plan / "plan.json")
+        if snapshot is None:
+            print(f"plan {args.plan}: no snapshot in {hermes_home() / 'plans'}", file=sys.stderr)
+            return 1
+        if lanes:
+            print("pi-lane gate: name lanes or pass --plan, not both", file=sys.stderr)
+            return 2
+        plan_cmds = [str(command) for command in (snapshot.get("gates") or [])]
+    cmds = plan_cmds + [command for command in args.cmd if command not in plan_cmds]
+    if not cmds:
+        # Answer about the plan before the lanes: the gate commands are the deterministic half,
+        # and a lane's record appears a moment after `plan` returns.
+        print("pi-lane gate: pass at least one --cmd \"<command>\" "
+              "or a plan that carries gates", file=sys.stderr)
         return 2
+    if args.plan and not lanes:
+        lanes = [str(record.get("lane")) for record in lane_records()
+                 if record.get("plan") == args.plan and not record.get("closed_at")]
+        if not lanes:
+            print(f"plan {args.plan}: no open lane carries it", file=sys.stderr)
+            return 1
 
     records = {}
     repos = set()
-    for lane in args.lanes:
+    for lane in lanes:
         record = read_json(hermes_home() / "lanes" / lane / "lane.json")
         if record is None:
             print(f"{lane}: no such lane", file=sys.stderr)
@@ -1626,7 +1679,7 @@ def gate_lanes(argv: list) -> int:
 
     started = time.time()
     results = []
-    for command in args.cmd:
+    for command in cmds:
         print(f"$ {command}   (in {workdir})")
         try:
             done = subprocess.run(command, shell=True, cwd=workdir, capture_output=True, text=True,
@@ -1647,7 +1700,7 @@ def gate_lanes(argv: list) -> int:
     for lane, record in records.items():
         record["checked_at"] = int(time.time())
         record["checked_sha"] = head
-        record["gate_cmds"] = list(args.cmd)
+        record["gate_cmds"] = list(cmds)
         record["gate_seconds"] = int(time.time() - started)
         # A RESULT claims a verify command and its exit code. The gate is the tree the work lands in, so
         # compare the claim with what actually ran there: a lane that says "green" about a command nobody
@@ -2225,6 +2278,8 @@ still run in parallel.
 
     {
       "repo": "/home/ilja/work/bench10-lane",
+      "id": "music-sdd",
+      "gates": ["python3 -m unittest discover -s tests", "music sync --dry-run --root fixture"],
       "provider": "opencode-go",
       "model": "deepseek-v4.1-flash",
       "autonomy": "auto",
@@ -2238,6 +2293,11 @@ still run in parallel.
 `brief` is a file path (relative to the plan file), `task` is inline text. A plan with `waves` opens wave 1,
 waits for it to settle, then opens the next — the dependency order, spelled out instead of remembered. A plan
 without `waves` opens every lane at once.
+
+`gates` are the commands that decide the run. They live in the plan and nowhere else, because a gate runs in
+the MERGED tree: a command attached to one lane would answer for the whole repository. `pi-lane plan` writes
+the plan to `$HERMES_HOME/plans/<id>/plan.json`, so `pi-lane gate --plan <id>` finds both the commands and
+every lane that carries the id — after a `/tmp` cleanup has eaten the file the run was opened from.
 """
 import argparse
 import json
@@ -2322,6 +2382,55 @@ def _wait_names(names: list, timeout: int, grace: int = 30) -> list:
         time.sleep(2)
 
 
+PLAN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def _plan_gates(spec: dict, lanes: list) -> list:
+    """The commands that decide the run, read from the plan and nowhere else.
+
+    A gate runs in the MERGED tree, so a command attached to one lane would answer for the whole
+    repository — that is why a lane-level `gates` is refused instead of merged. Silence is worse:
+    a key that is read by nobody is a lie in the file.
+    """
+    gates = spec.get("gates") or []
+    if not isinstance(gates, list):
+        raise SystemExit("plan: gates must be a list of commands")
+    out = []
+    for command in gates:
+        text = str(command).strip()
+        if not text:
+            raise SystemExit("plan: an empty gate command")
+        if text not in out:
+            out.append(text)
+    for name, _, entry in lanes:
+        if entry.get("gates"):
+            raise SystemExit(f"plan: lane {name} carries gates — gates belong to the plan, "
+                             "because a gate runs in the merged tree")
+    return out
+
+
+def _write_plan_snapshot(plan_id: str, spec: dict, repo: str, gates: list, lanes: list) -> Path:
+    """Keep the run's own copy of the plan, so `/tmp` cannot take the gates with it.
+
+    The orchestrator writes its plan under `<parent>/.run/<repo>/`, and one cleanup cut a task file
+    out from under a live run. `gate --plan <id>` reads this snapshot, never the file the run was
+    opened from.
+    """
+    folder = hermes_home() / "plans" / plan_id
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / "plan.json"
+    snapshot = {
+        "id": plan_id,
+        "repo": repo,
+        "gates": list(gates),
+        "lanes": [name for name, _, _ in lanes],
+        "waves": spec.get("waves") or None,
+        "opened_at": int(time.time()),
+    }
+    path.write_text(json.dumps(snapshot, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
 def plan(argv: list) -> int:
     parser = argparse.ArgumentParser(prog="pi-lane plan")
     parser.add_argument("file")
@@ -2352,7 +2461,12 @@ def plan(argv: list) -> int:
         if sorted(flat) != sorted(known):
             print("plan: waves and lanes do not name the same lanes", file=sys.stderr)
             return 1
+    gates = _plan_gates(spec, lanes)
     plan_id = str(spec.get("id") or f"{Path(repo).name}-{time.strftime('%H%M%S')}")
+    if not PLAN_ID_RE.match(plan_id):
+        print("plan: an id holds letters, digits, dot, dash and underscore only", file=sys.stderr)
+        return 1
+    snapshot = _write_plan_snapshot(plan_id, spec, repo, gates, lanes)
     by_name = {name: (task, entry) for name, task, entry in lanes}
     opened = []
     for wave in waves:
@@ -2373,6 +2487,10 @@ def plan(argv: list) -> int:
         print(f"plan {plan_id}: opened {len(opened)} lane(s) in {Path(repo).name}")
         for item in opened:
             print(f"  {item['lane']:16s} pid {item['pid']}")
+        if gates:
+            print(f"gates: {len(gates)}, kept in {snapshot} — `pi-lane gate --plan {plan_id}`")
+        else:
+            print("gates: none — a plan without gates leaves the checks to the orchestrator's memory")
         print("check them with `pi-lane status` or `pi-lane report`")
     return 0
 

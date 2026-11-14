@@ -1,3 +1,25 @@
+def _read_lines(fd: int, pending: bytes, timeout: float):
+    """One OS read of a pi event pipe, split into whole lines.
+
+    `select` answers for the OS pipe, never for what Python has already buffered. A pi that writes
+    two events in one burst — the normal case at the end of a turn, `message_end` then `agent_end` —
+    left the second line inside the reader's buffer while select reported the pipe empty, and the
+    lane hung until its idle timeout with the work already done. Measured with a stub pi: the first
+    read carried both lines, the loop saw one and waited. Reading the bytes here keeps one buffer
+    and one truth: an incomplete tail stays in `pending` until its newline arrives.
+
+    Returns (lines, pending, eof).
+    """
+    ready, _, _ = select.select([fd], [], [], timeout)
+    if not ready:
+        return [], pending, False
+    chunk = os.read(fd, 65536)
+    if not chunk:
+        return [], b"", True
+    *complete, pending = (pending + chunk).split(b"\n")
+    return [raw.decode("utf-8", "replace") for raw in complete if raw.strip()], pending, False
+
+
 def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: str, question_timeout: int,
                 repair: bool = True) -> int:
     """One `pi --mode rpc` turn: the lane's first task or a continuation of its session.
@@ -46,8 +68,12 @@ def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: s
         last_activity = time.monotonic()
         last_beat = time.monotonic()
 
+        fd = proc.stdout.fileno()
+        pending = b""
         while True:
-            ready, _, _ = select.select([proc.stdout], [], [], POLL_SECONDS)
+            lines, pending, eof = _read_lines(fd, pending, POLL_SECONDS)
+            if eof:
+                break
 
             if time.monotonic() - last_beat >= 15:
                 # Liveness without noise: `reap` and the panel tell a slow lane from a dead one by
@@ -56,13 +82,10 @@ def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: s
                 write_record(lane_dir, record)
                 last_beat = time.monotonic()
 
-            if ready:
+            for line in lines:
                 last_activity = time.monotonic()
-                line = proc.stdout.readline()
-                if not line:
-                    break
-                if _keep_event(line):
-                    events.write(line)
+                if _keep_event(line + "\n"):
+                    events.write(line + "\n")
                     events.flush()
                 try:
                     event = json.loads(line)
@@ -168,23 +191,28 @@ def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: s
                 break
 
         # pi in RPC mode is a server: it stays alive after `agent_end`. Drain
-        # whatever is already in the pipe, then stop it ourselves.
+        # whatever is already in the pipe, then stop it ourselves. Same byte reader as the loop,
+        # so a line that arrived with the one we broke on is not lost.
         while True:
-            ready, _, _ = select.select([proc.stdout], [], [], 0.2)
-            if not ready:
+            lines, pending, eof = _read_lines(fd, pending, 0.2)
+            if not lines or eof:
                 break
-            line = proc.stdout.readline()
-            if not line:
-                break
-            if _keep_event(line):
-                events.write(line)
+            for line in lines:
+                if _keep_event(line + "\n"):
+                    events.write(line + "\n")
+            events.flush()
 
         try:
             proc.stdin.close()
         except OSError:
             pass
         if proc.poll() is None:
-            proc.terminate()
+            # A pi that exits on stdin EOF has a clean exit code coming; terminating it in that gap
+            # recorded a finished lane as `failed`. Give the exit a moment before the signal.
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                proc.terminate()
             try:
                 proc.wait(timeout=10)
             except subprocess.TimeoutExpired:

@@ -8,7 +8,8 @@ a function returns. Budget: 1 500 characters.
 
     ## Your files — these and nothing else
         <package>/_contract.py        every shared name, with its full signature and return shape
-        tests/test_contract.py        imports each name and asserts the shape of one return value
+        tests/test_contract.py        one test per name: `inspect.signature` and the shape of one return
+                                      value — an import alone proves nothing
 
     ## Facts
         the repository holds <state: .gitkeep only / the modules below already>
@@ -21,8 +22,11 @@ a function returns. Budget: 1 500 characters.
         <module-level constant or key>  <meaning>
 
     ## Done means
-        python3 -m unittest discover -s tests prints OK, and one test per declared name asserts that
-        calling it raises NotImplementedError, so the shape is fixed before any slice fills it.
+        python3 -m unittest discover -s tests prints OK, and one test per declared name asserts BOTH:
+        `inspect.signature(<name>)` equals the declared parameters — their names, order, defaults and
+        annotations — and calling it raises NotImplementedError. An import that passes while the
+        arguments are wrong is the seam this lane exists to close: the first slice codes against the
+        signature it reads, and the mismatch lands in the merge, not here.
 
     ## Report
         the declared names with their signatures, the test output verbatim, and what the slices must not

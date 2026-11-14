@@ -5,21 +5,46 @@ def gate_lanes(argv: list) -> int:
     was never merged, so a green run here would bless work that is not in the tree. And lanes from
     different repositories cannot share one gate run, because one command set would answer for both.
     On success it writes `checked_at` and `checked_sha` — the same pair the panel reads to offer
-    CLOSE.
+    CLOSE. With `--plan` the lanes and the commands come from the plan snapshot: the run carried
+    the gates in its plan file, so nobody retypes them and nobody forgets one.
     """
     parser = argparse.ArgumentParser(prog="pi-lane gate")
-    parser.add_argument("lanes", nargs="+")
+    parser.add_argument("lanes", nargs="*", help="the lanes to stamp; --plan finds them by plan id")
+    parser.add_argument("--plan", default="",
+                        help="take the lanes and the commands from the plan snapshot at $HERMES_HOME/plans/<id>")
     parser.add_argument("--cmd", action="append", default=[], help="a gate command; repeatable")
     parser.add_argument("--cwd", default="", help="run here instead of the repository root")
     parser.add_argument("--timeout", type=int, default=1800, help="seconds per command")
     args = parser.parse_args(argv)
-    if not args.cmd:
-        print("pi-lane gate: pass at least one --cmd \"<command>\"", file=sys.stderr)
+
+    lanes = list(args.lanes)
+    plan_cmds = []
+    if args.plan:
+        snapshot = read_json(hermes_home() / "plans" / args.plan / "plan.json")
+        if snapshot is None:
+            print(f"plan {args.plan}: no snapshot in {hermes_home() / 'plans'}", file=sys.stderr)
+            return 1
+        if lanes:
+            print("pi-lane gate: name lanes or pass --plan, not both", file=sys.stderr)
+            return 2
+        plan_cmds = [str(command) for command in (snapshot.get("gates") or [])]
+    cmds = plan_cmds + [command for command in args.cmd if command not in plan_cmds]
+    if not cmds:
+        # Answer about the plan before the lanes: the gate commands are the deterministic half,
+        # and a lane's record appears a moment after `plan` returns.
+        print("pi-lane gate: pass at least one --cmd \"<command>\" "
+              "or a plan that carries gates", file=sys.stderr)
         return 2
+    if args.plan and not lanes:
+        lanes = [str(record.get("lane")) for record in lane_records()
+                 if record.get("plan") == args.plan and not record.get("closed_at")]
+        if not lanes:
+            print(f"plan {args.plan}: no open lane carries it", file=sys.stderr)
+            return 1
 
     records = {}
     repos = set()
-    for lane in args.lanes:
+    for lane in lanes:
         record = read_json(hermes_home() / "lanes" / lane / "lane.json")
         if record is None:
             print(f"{lane}: no such lane", file=sys.stderr)
@@ -60,7 +85,7 @@ def gate_lanes(argv: list) -> int:
 
     started = time.time()
     results = []
-    for command in args.cmd:
+    for command in cmds:
         print(f"$ {command}   (in {workdir})")
         try:
             done = subprocess.run(command, shell=True, cwd=workdir, capture_output=True, text=True,
@@ -81,7 +106,7 @@ def gate_lanes(argv: list) -> int:
     for lane, record in records.items():
         record["checked_at"] = int(time.time())
         record["checked_sha"] = head
-        record["gate_cmds"] = list(args.cmd)
+        record["gate_cmds"] = list(cmds)
         record["gate_seconds"] = int(time.time() - started)
         # A RESULT claims a verify command and its exit code. The gate is the tree the work lands in, so
         # compare the claim with what actually ran there: a lane that says "green" about a command nobody

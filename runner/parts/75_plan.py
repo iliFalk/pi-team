@@ -9,6 +9,8 @@ still run in parallel.
 
     {
       "repo": "/home/ilja/work/bench10-lane",
+      "id": "music-sdd",
+      "gates": ["python3 -m unittest discover -s tests", "music sync --dry-run --root fixture"],
       "provider": "opencode-go",
       "model": "deepseek-v4.1-flash",
       "autonomy": "auto",
@@ -22,6 +24,11 @@ still run in parallel.
 `brief` is a file path (relative to the plan file), `task` is inline text. A plan with `waves` opens wave 1,
 waits for it to settle, then opens the next — the dependency order, spelled out instead of remembered. A plan
 without `waves` opens every lane at once.
+
+`gates` are the commands that decide the run. They live in the plan and nowhere else, because a gate runs in
+the MERGED tree: a command attached to one lane would answer for the whole repository. `pi-lane plan` writes
+the plan to `$HERMES_HOME/plans/<id>/plan.json`, so `pi-lane gate --plan <id>` finds both the commands and
+every lane that carries the id — after a `/tmp` cleanup has eaten the file the run was opened from.
 """
 import argparse
 import json
@@ -106,6 +113,55 @@ def _wait_names(names: list, timeout: int, grace: int = 30) -> list:
         time.sleep(2)
 
 
+PLAN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def _plan_gates(spec: dict, lanes: list) -> list:
+    """The commands that decide the run, read from the plan and nowhere else.
+
+    A gate runs in the MERGED tree, so a command attached to one lane would answer for the whole
+    repository — that is why a lane-level `gates` is refused instead of merged. Silence is worse:
+    a key that is read by nobody is a lie in the file.
+    """
+    gates = spec.get("gates") or []
+    if not isinstance(gates, list):
+        raise SystemExit("plan: gates must be a list of commands")
+    out = []
+    for command in gates:
+        text = str(command).strip()
+        if not text:
+            raise SystemExit("plan: an empty gate command")
+        if text not in out:
+            out.append(text)
+    for name, _, entry in lanes:
+        if entry.get("gates"):
+            raise SystemExit(f"plan: lane {name} carries gates — gates belong to the plan, "
+                             "because a gate runs in the merged tree")
+    return out
+
+
+def _write_plan_snapshot(plan_id: str, spec: dict, repo: str, gates: list, lanes: list) -> Path:
+    """Keep the run's own copy of the plan, so `/tmp` cannot take the gates with it.
+
+    The orchestrator writes its plan under `<parent>/.run/<repo>/`, and one cleanup cut a task file
+    out from under a live run. `gate --plan <id>` reads this snapshot, never the file the run was
+    opened from.
+    """
+    folder = hermes_home() / "plans" / plan_id
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / "plan.json"
+    snapshot = {
+        "id": plan_id,
+        "repo": repo,
+        "gates": list(gates),
+        "lanes": [name for name, _, _ in lanes],
+        "waves": spec.get("waves") or None,
+        "opened_at": int(time.time()),
+    }
+    path.write_text(json.dumps(snapshot, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
 def plan(argv: list) -> int:
     parser = argparse.ArgumentParser(prog="pi-lane plan")
     parser.add_argument("file")
@@ -136,7 +192,12 @@ def plan(argv: list) -> int:
         if sorted(flat) != sorted(known):
             print("plan: waves and lanes do not name the same lanes", file=sys.stderr)
             return 1
+    gates = _plan_gates(spec, lanes)
     plan_id = str(spec.get("id") or f"{Path(repo).name}-{time.strftime('%H%M%S')}")
+    if not PLAN_ID_RE.match(plan_id):
+        print("plan: an id holds letters, digits, dot, dash and underscore only", file=sys.stderr)
+        return 1
+    snapshot = _write_plan_snapshot(plan_id, spec, repo, gates, lanes)
     by_name = {name: (task, entry) for name, task, entry in lanes}
     opened = []
     for wave in waves:
@@ -157,5 +218,9 @@ def plan(argv: list) -> int:
         print(f"plan {plan_id}: opened {len(opened)} lane(s) in {Path(repo).name}")
         for item in opened:
             print(f"  {item['lane']:16s} pid {item['pid']}")
+        if gates:
+            print(f"gates: {len(gates)}, kept in {snapshot} — `pi-lane gate --plan {plan_id}`")
+        else:
+            print("gates: none — a plan without gates leaves the checks to the orchestrator's memory")
         print("check them with `pi-lane status` or `pi-lane report`")
     return 0

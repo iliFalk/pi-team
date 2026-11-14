@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.10.0
+version: 3.11.0
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -119,6 +119,9 @@ each was a restatement of the whole task. A slice brief names its slice and stop
 - **Names, not descriptions.** A contract line is `<symbol> <signature>`. The reasoning stays with the
   orchestrator.
 - **The gate verbatim**, so a lane self-checks instead of being re-run.
+- **Every MUST becomes a command**, not a sentence: a test in `tests/test_must.py` or a script under
+  `gates/`, named in `RESULT.verify`. Measured, one run spent the orchestrator's own turns on python probes
+  and a `--dry-run` by hand — work a gate does for cents, and work nobody repeats when the next round starts.
 - **A `RESULT:` line last**, one line of JSON (`files`, `verify`, `risks`, `followups`). The runner
   parses it into the record, `digest` prints it, and `hand` refuses a lane without it — so the report is
   data, not prose the orchestrator pays to read.
@@ -166,6 +169,24 @@ made 85 shell calls in a run, another 136, and every brief it wrote it paid for 
 settles, then opens the next. The dependency order lives in the plan instead of in the prompt, and a lane
 whose record does not exist yet counts as pending, not as finished.
 
+**The plan carries the gates.** `"gates": ["python3 -m unittest discover -s tests", "music sync --dry-run"]`
+is the run's own list of commands that decide it, and `pi-lane gate --plan <id>` runs them:
+
+```sh
+pi-lane gate --plan music-sdd          # lanes and commands both come from the plan
+pi-lane gate --plan music-sdd --cmd "npm run build"   # one extra command, appended
+```
+
+- A gate runs in the MERGED tree, so the commands belong to the plan and not to a lane: a lane-level
+  `gates` is refused at open instead of merged, because the key would be read by nobody.
+- `pi-lane plan` writes the plan to `$HERMES_HOME/plans/<id>/plan.json` with the gates, the lane names and
+  the waves. `gate --plan` reads that snapshot, never the file the run was opened from: `/tmp` cleanups eat
+  the source, and one run lost its task text mid-flight that way.
+- Lanes are found by `plan` on their record, so `--plan` needs no lane names. Name lanes and `--plan`
+  together and the verb refuses (exit 2); an unknown id exits 1; a plan without gates is refused with a
+  message that names `--cmd`.
+- `id` holds letters, digits, dot, dash and underscore, and defaults to `<repo>-<HHMMSS>`.
+
 ## Lane: wait
 
 ```sh
@@ -212,7 +233,9 @@ Close it with one lane before the slices start:
 
 1. Open a `contract` lane. Its brief names one file `<package>/_contract.py` with every shared function and
    its full signature and return shape, bodies raising `NotImplementedError`, plus `tests/test_contract.py`
-   that imports each name and asserts the shape of one return value.
+   that asserts, per name, `inspect.signature` — the parameters, their order, defaults and annotations — and
+   the shape of one return value. An import alone proves nothing: a name that imports with the wrong
+   arguments passes it and fails the first sibling that calls it.
 2. Wait for it, merge it into the main branch, run the gates. This happens before any slice exists.
 3. Every slice brief then says: "implement the signatures declared in `<package>/_contract.py`; do not change
    them; `tests/test_contract.py` must stay green", and its `RESULT.verify.cmd` names that suite.
@@ -337,6 +360,7 @@ Then run the real gates and record them:
 
 ```sh
 pi-lane gate <lane> [<lane> …] --cmd "python3 -m unittest discover -s tests" --cmd "npm run build"
+pi-lane gate --plan <id>            # the commands and the lanes come from the plan's own snapshot
 ```
 
 It runs every command in the **merged tree** — the repository root, not a lane worktree — prints each
@@ -467,6 +491,15 @@ git before it runs. The order is the point: commit after merge turns the merge i
   write that can be refused, read the tool result before building facts from it.
 - **A probe lane is a live row in his panel**: remove the worktree, prune, close with `--no-merge
   --yes`, and confirm zero lanes before calling the panel ready.
+- **`select` answers for the pipe, never for what Python already buffered.** A pi that writes
+  `message_end` and `agent_end` in one burst left the second line inside the reader's buffer, so the loop
+  saw one event and then waited until the idle timeout with the work already done. Measured with a stub
+  pi that writes both lines in one flush: the lane stayed `running` for 24 minutes. The runner now reads
+  bytes from the pipe and splits lines itself (`_read_lines`); never go back to `readline()` behind
+  `select`, and prove any change to that loop with the burst stub.
+- **A stale stub runner resurrects its record.** A killed sandbox lane that is still alive keeps rewriting
+  `lane.json` by path, so the next case run reads `running` after a clean `done`. Kill the stub processes
+  before wiping a sandbox `HERMES_HOME`, or the case answers for the previous run.
 
 The rest — runner edits, route testing, panel rendering, shipping to another machine — is in
 `references/pitfalls.md`.

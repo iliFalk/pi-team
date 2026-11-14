@@ -24,6 +24,8 @@ task description, not a slice, and it is paid for as input tokens by every lane 
 
     ## Done means
         <measurable statement: which command prints what>
+        Each MUST of the task becomes an executable check in THIS worktree: a test in
+        tests/test_must.py or a script under gates/. Name them in RESULT.verify.
 
     ## Report
         files changed with one line each · the gate output verbatim · assumptions · what you skipped
@@ -45,7 +47,12 @@ Rules that keep it small:
    repair rounds came from a sibling that returned a dict where the first lane expected a list; the brief
    named the function and not its result. The reasoning stays with the orchestrator.
 4. **The gate belongs in the brief**, verbatim, so a lane self-checks instead of being re-run.
-5. **Thinking level by kind of work:** `--thinking low` for documentation, compose files, config and
+5. **A MUST is a command, not a sentence.** Every MUST line of the task turns into a test in
+   `tests/test_must.py` or a script under `gates/`, and the brief names it. The manual probe it
+   replaces is the orchestrator's most expensive habit: measured, one run paid for python one-liners
+   and a `--dry-run` by hand while the gate could have run them for cents, and a MUST that only the
+   orchestrator remembers is dropped in the next round.
+6. **Thinking level by kind of work:** `--thinking low` for documentation, compose files, config and
    glue; `--thinking medium` for code that must reason about existing behaviour.
 
 Worked example, 1 698 characters:
