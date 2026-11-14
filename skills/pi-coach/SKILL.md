@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.12.0
+version: 3.13.0
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -49,6 +49,16 @@ key itself: Hermes never exports one to a shell, so the runner asks Hermes's sec
 falls back to the profile file for `OPENCODE_API_KEY`, `DEEPSEEK_API_KEY`, `NVIDIA_API_KEY`,
 `OPENROUTER_API_KEY` and `ANTHROPIC_API_KEY`. It never prints a value.
 
+Two rules make that loading work, and both were learned from a lane that died with
+`No API key found for opencode-go` while `.env` was complete:
+
+- **One key present is not all keys present.** Never return early because some known key is already
+  exported: a gateway exports the one key its own provider needs, so a lane for a second provider found
+  `NVIDIA_API_KEY`, skipped the file, and started with nothing. The file is always read.
+- **Hermes and pi spell one key differently.** `OPENCODE_GO_API_KEY` in `.env` is `OPENCODE_API_KEY` to
+  `pi`, so a complete environment still answers `credentials_not_configured`. Keep the alias table in
+  the runner and apply it after every load.
+
 Defaults: provider `nvidia`, model `nvidia/nemotron-3.5-super-vl-120b-a12b`, thinking `medium`.
 
 **Which instructions a lane obeys.** The repository's `AGENTS.md` (and the copies above it) and
@@ -89,8 +99,21 @@ pi-lane <lane> "<task>" --project <project> --feature <feature>
 ```
 
 `pi-project list` and `pi-feature list <project>` show the registry. A throwaway run can bypass it
-with `--repo <path>`. The demo fixture `demo` is `~/work/demo-app`: one static page, no build, and
-one visible surface per feature — a README-only repository yields an empty worktree.
+with `--repo <path>`. The demo fixture `demo` is `~/work/demo-app`: `index.html`, `app.js` and
+`styles.css` — one static page, no build, one visible surface per feature. A README-only repository
+yields an empty worktree and a panel that looks broken.
+
+**`pi-project agents [<project>…] [--check]`** writes the coding block into `<repo>/AGENTS.md` or
+refreshes the copy already there. `--check` prints `current`, `outdated`, `missing`, `identical` or
+`no markers` per project and changes nothing, so it is safe to run alone. Three details bite:
+
+- The template is read from the **live** skill directory
+  (`~/.hermes/skills/software-development/pi-coach/templates/ponytail-block.md`), so editing only the
+  repository copy feeds the tool nothing.
+- The block spans `<!-- ponytail v1 … -->` to `<!-- /ponytail -->`; anything after the end marker is the
+  project's own rules and survives. A copy written before that marker existed ends at its last level row.
+- Placing it in a repository is still a manual, attended action for Ilja: it edits an agent-instruction
+  file, and an unattended request for one expires unanswered.
 
 **Placeholders.** The panel creates the row, the agent finishes it:
 
@@ -144,6 +167,11 @@ pi-lane <lane> "<task>" --project <p> --feature <f> --acs AC1,AC3   # the criter
 3. Starts `pi --mode rpc --session-id <repo>-<lane> …` and sends `{"type":"prompt","message":"<task>"}`.
 4. Parks every extension dialog in `question.json`, state `waiting`, and relays `answer.json`.
 5. Writes `done`, or `failed` when pi exited non-zero or wrote no assistant text.
+
+**The event log drops the streaming deltas.** `message_update` is the largest share of every
+`events.jsonl` and nothing reads it — the runner, the backend and the panel all work from
+`message_end`, `tool_execution_*` and the question events. `PI_LANE_KEEP_DELTAS=1` restores them for a
+debugging session; a file whose delta count is not zero means an older runner.
 
 `--question-timeout SECONDS` (default 1800) cancels an unanswered question. Run several lanes in
 separate calls. Two guards fire before the worktree is touched: the same lane name with a live pid in
@@ -202,7 +230,8 @@ pi-lane wait <lane> [--timeout SECONDS] [--interval 2] [--json]
 | `124` | still `running` after `--timeout` | wait again; do not restart the lane |
 
 `--json` prints one object (`state`, `files`, `insertions`, `deletions`, `closed`, `question`), and the
-verb prints one line per state change, not one per poll.
+verb prints one line per state change, not one per poll. `wait --all --json` prints one object per lane,
+and `{"lanes": [], "state": "empty"}` when it was given nothing to follow.
 
 Wait on a whole batch with the names you started: `pi-lane wait --all tokens material screens`. It
 returns `3` as soon as ANY of them asks a question, `1` if any failed, `0` when all are done, `124` on
@@ -412,6 +441,10 @@ pi-lane review            # the review shelf, with task, what the lane said, and
 pi-lane digest <lane>     # one lane as a record: task, commits, diff size, gate result, leftovers
 ```
 
+`GET /lanes` is a polled payload and carries a head, not the body: `task` is cut at ~300 characters and
+the full text stays on `/lanes/<lane>`. A cap applied inside the shared entry builder shortens the card
+too, so a card drawing a truncated brief is a route change nobody measured.
+
 This is the economy that matters: a message in a chat costs a full agent turn with its whole context,
 and the same facts cost one call with `pi-lane review`. Keep the record on disk rich — it is what a
 later "write a skill from this" reads — and spend tokens on synthesis only when somebody asks for it.
@@ -458,6 +491,15 @@ three verbs and every defect of one afternoon came from that.
 | close (execute) | `pi-lane close <lane> --yes` | `closed_at` |
 | close without a word | `pi-lane close <lane> --auto` | merges only when the gate sits at HEAD, the critic has no P0 and the merge is clean |
 | close without merge | `--no-merge`; keep the worktree | `--keep` |
+| close with a chosen wording | `pi-lane close <lane> --reason "…"` | the `reason` in the receipt |
+
+A close commits the lane's work on its branch as `Lane <name>: <first line of the task>`, merges
+`--no-ff`, appends one receipt line to `$HERMES_HOME/lanes/closed.jsonl` — lane, project, group,
+branch, state, `closed_at`, reason, merge sha with subject and date, files, insertions, deletions, and
+now `usage`, `cost_usd`, `review_p0/p1`, `autonomy` — then removes the worktree, the branch, the lane
+folder AND the lane's own `pi` session under
+`~/.pi/agent/sessions/--<worktree path, slashes as dashes>--`. Everything that must survive goes into
+that line or into git before the close runs.
 
 **A hand needs a fresh check.** `pi-lane hand` refuses, exit 1, unless `checked_sha` equals the
 repository HEAD. The gate records the merged HEAD, so the order is: merge, gate, hand. A commit after
@@ -512,6 +554,26 @@ git before it runs. The order is the point: commit after merge turns the merge i
 8. A lane that touches the panel follows `references/panel.md`; an invented value contradicts it
    even when the lane's own tests pass.
 
+## Handoff to the next chat
+
+A handoff is a FILE in the repository, not a long message in the chat: `HANDOFF.md` at the root,
+committed, so the next session opens the project and starts there instead of re-reading a transcript.
+
+- Four things and no history: the state (branch, the files with hash and install path, the gate
+  results, which client holds which build), what the version does in three lines, the rules that break
+  easily with their numbers, and what to fix before the next milestone.
+- Name files and commands, never the story. "`README.md` still shows a header control that no longer
+  exists" is usable; "we fixed the header twice" is not.
+- Do not let it cite its own commit: write the deployed files' hashes, which are stable, and name the
+  commit they came from.
+
+**Three copies of this skill exist, and the live one is what a run obeys**: the repository copy
+(`~/work/pi-team/skills/pi-coach/`, ships with the plugin), the live copy
+(`~/.hermes/skills/software-development/pi-coach/`, read by the agent and by `pi-project agents` for its
+template), and the plugin copy (`~/.hermes/plugins/pi-team/skills/pi-coach/`). Before trusting a rule,
+read the `version:` line of each; after editing this file, copy it to both other places, copy the
+templates with it, and say how far the line count moved.
+
 ## Pitfalls that cost the most
 
 - **Commit before you merge, or the cleanup eats the work** — a lane never commits, so its work sits
@@ -539,6 +601,11 @@ git before it runs. The order is the point: commit after merge turns the merge i
   A missing record is now `pending` for a 30 s grace, then `gone` with exit 1 — the same rule `plan`'s
   own wave wait already used. A wait that answers "settled" about work that never started is worse than
   a timeout: it hides.
+- **Prove a runner change in `runner/sandbox/`, not with a real lane.** A stub `pi` answers one turn with
+  a valid `RESULT` and then waits like a server; `case-plan-gate.sh` and `case-spec.sh` drive it through
+  plan, gates, the criteria layer and every refusal for zero dollars, and each run has its own
+  `mktemp` `HERMES_HOME`. Two defects were found there that a syntax check cannot see: the burst-loss in
+  the event loop, and `wait --all` reading a missing record as finished.
 - **A stale stub runner resurrects its record.** A killed sandbox lane that is still alive keeps rewriting
   `lane.json` by path, so the next case run reads `running` after a clean `done`. Kill the stub processes
   before wiping a sandbox `HERMES_HOME`, or the case answers for the previous run.

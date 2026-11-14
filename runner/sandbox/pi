@@ -1,0 +1,30 @@
+#!/usr/bin/env python3
+"""A fake `pi` for sandbox runs: one assistant turn with a RESULT line, then it waits like a server.
+
+No provider, no tokens. Used to prove runner changes (plan, gate, close, caps) for zero dollars.
+It writes one file into the worktree so a lane has something to merge.
+"""
+import json
+import os
+import sys
+
+prompt = sys.stdin.readline()
+
+lane = os.path.basename(os.getcwd().split(".worktrees/")[-1]) or "stub"
+with open(os.path.join(os.getcwd(), f"stub_{lane}.txt"), "w", encoding="utf-8") as handle:
+    handle.write("stub work\n")
+
+acs = [piece.strip().upper() for piece in (os.environ.get("STUB_ACS") or "").split(",") if piece.strip()]
+text = ("Edited one file.\n"
+        'RESULT: {"files": ["stub_%s.txt"], "verify": {"cmd": "python3 -m unittest discover -s tests", '
+        '"exit": 0}%s, "risks": [], "followups": []}'
+        % (lane, ', "acs": ' + json.dumps(acs) if acs else ""))
+
+event = {"type": "message_end",
+         "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}}
+sys.stdout.write(json.dumps(event) + "\n")
+sys.stdout.write(json.dumps({"type": "agent_end"}) + "\n")
+sys.stdout.flush()
+# RPC mode is a server: stay alive until the runner terminates us.
+for _line in sys.stdin:
+    pass
