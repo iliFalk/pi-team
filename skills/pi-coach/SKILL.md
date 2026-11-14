@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.7.0
+version: 3.8.0
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -292,6 +292,14 @@ re-open with `pi-lane <lane> "…"` — that cuts a SECOND worktree and looks li
 
 **Ask before continuing.** His note in a thread is a thought, not an order: put the exact prompt in
 the question and run `continue` only after his yes.
+
+## Running a whole bench arm
+
+`pi-bench --repo ~/work/bench9-lane --prompt-file /tmp/p.txt --task-file /tmp/task.txt` runs one
+`hermes chat` arm and writes the transcript, the start and the end into `<parent>/.run/<repo>/` — outside
+the repository, so `git status` stays clean for the lanes. The log belongs there, not in `/tmp`: a
+tmp cleanup cut a 800-line transcript to `exit=0` while the run was live, and the causes of three
+repair rounds went with it.
 
 ## Lane: replay a task as an eval case
 

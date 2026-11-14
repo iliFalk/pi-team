@@ -342,10 +342,19 @@ def run_review(lane_dir: Path, record: dict, lane: str) -> dict | None:
         print(f"{lane}: review — git says: {err}", file=sys.stderr)
         return None
     if not diff.strip():
-        # Nothing to read is not a finding: a lane merged before this record kept its base gives an
-        # empty diff, and a critic asked about nothing invents a P0.
+        # Nothing to read is not a finding, and it must not deadlock the close: record an honest skipped
+        # review so `hand` and `close --auto` see that the critic looked and found no work to judge.
         print(f"{lane}: review — no diff against {str(base)[:7] or 'HEAD'}; skipped", file=sys.stderr)
-        return None
+        payload = {"status": "skipped", "p0": [], "p1": [], "notes": ["the lane changed nothing"],
+                   "provider": DEFAULT_REVIEW_PROVIDER, "model": "none", "seconds": 0,
+                   "usage": {"input": 0, "output": 0, "cache_read": 0, "cost_usd": 0.0, "turns": 0},
+                   "at": int(time.time())}
+        (lane_dir / "review.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+                                              encoding="utf-8")
+        record["review"] = payload
+        record["review_status"] = "skipped"
+        write_record(lane_dir, record)
+        return payload
     rc, status, _ = _git(str(worktree), "status", "--porcelain")
     if len(diff) > 60000:
         diff = diff[:60000] + "\n… diff cut at 60000 characters\n"
@@ -601,7 +610,8 @@ def _auto_close_blockers(name: str, record: dict) -> list:
     elif checked != head:
         blockers.append(f"the gate ran at {checked[:7]}, HEAD is {head[:7]}")
     review = record.get("review") or {}
-    if str(record.get("review_status") or "") != "ok":
+    review_status = str(record.get("review_status") or "")
+    if review_status not in ("ok", "skipped"):
         blockers.append("no critic review")
     elif review.get("p0"):
         blockers.append(f"the critic reported {len(review['p0'])} P0")
@@ -758,6 +768,18 @@ def close_lanes(argv: list) -> int:
             "merge_insertions": record.get("merge_insertions", 0),
             "merge_deletions": record.get("merge_deletions", 0),
             "base": default,
+            # The bill dies with the lane: `close` deletes the record and the pi session, so the receipt
+            # is the only place left to say what the lane cost. Measured: after a close, the spend was
+            # unrecoverable and a run could not be totalled.
+            "usage": record.get("usage") or {},
+            "review_usage": (record.get("review") or {}).get("usage") or {},
+            "cost_usd": round(
+                float((record.get("usage") or {}).get("cost_usd") or 0)
+                + float(((record.get("review") or {}).get("usage") or {}).get("cost_usd") or 0), 6),
+            "result_status": record.get("result_status") or "",
+            "review_p0": len((record.get("review") or {}).get("p0") or []),
+            "review_p1": len((record.get("review") or {}).get("p1") or []),
+            "autonomy": record.get("autonomy") or "",
         }
         (root / "closed.jsonl").open("a", encoding="utf-8").write(
             json.dumps(receipt, ensure_ascii=False) + "\n"
@@ -2060,11 +2082,9 @@ def ledger(argv: list) -> int:
     args = parser.parse_args(argv)
     wanted = set(args.lanes)
     rows = [r for r in lane_records() if not wanted or str(r.get("lane")) in wanted]
-    if not rows:
-        print("no lanes")
-        return 0
-    rows.sort(key=lambda r: r.get("started") or 0)
-    print(f"{'lane':20s} {'state':8s} {'input':>9s} {'output':>8s} {'cache':>9s} {'usd':>9s} {'rev':>7s} {'min':>5s}  model")
+    if rows:
+        rows.sort(key=lambda r: r.get("started") or 0)
+        print(f"{'lane':20s} {'state':8s} {'input':>9s} {'output':>8s} {'cache':>9s} {'usd':>9s} {'rev':>7s} {'min':>5s}  model")
     total = {"input": 0, "output": 0, "cache": 0, "usd": 0.0, "rev": 0.0}
     from_session = 0
     for record in rows:
@@ -2091,10 +2111,36 @@ def ledger(argv: list) -> int:
         print(f"{str(record.get('lane')):20s} {str(record.get('state')):8s} {values['input']:9d} "
               f"{values['output']:8d} {values['cache']:9d} {values['usd']:8.4f}{mark:1s} "
               f"{values['rev']:6.4f} {minutes:4d}  {model}")
-    print(f"{'total':20s} {'':8s} {total['input']:9d} {total['output']:8d} {total['cache']:9d} "
-          f"{total['usd']:8.4f} {total['rev']:6.4f}")
+    if rows:
+        print(f"{'total':20s} {'':8s} {total['input']:9d} {total['output']:8d} {total['cache']:9d} "
+              f"{total['usd']:8.4f} {total['rev']:6.4f}")
     if from_session:
         print("~ billed from the pi session file: the record was written before the runner kept usage")
+    # A closed lane's bill survives only in its receipt, because `close` deletes the record and the pi
+    # session. Read it back, or a finished run cannot be totalled at all.
+    receipts = []
+    closed_path = hermes_home() / "lanes" / "closed.jsonl"
+    if closed_path.is_file():
+        for line in closed_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            try:
+                receipt = json.loads(line)
+            except ValueError:
+                continue
+            if wanted and str(receipt.get("lane")) not in wanted:
+                continue
+            if receipt.get("cost_usd"):
+                receipts.append(receipt)
+    if receipts:
+        print()
+        print(f"{'closed':20s} {'usd':>8s} {'p0/p1':6s}  merge")
+        closed_total = 0.0
+        for receipt in receipts[-20:]:
+            closed_total += float(receipt.get("cost_usd") or 0)
+            pair = f"{receipt.get('review_p0', 0)}/{receipt.get('review_p1', 0)}"
+            print(f"{str(receipt.get('lane'))[:20]:20s} {float(receipt.get('cost_usd') or 0):8.4f} "
+                  f"{pair:6s}  {str(receipt.get('merge_sha') or '')[:7]} {receipt.get('closed_date')}"
+                  f" · {receipt.get('project')}")
+        print(f"{'closed total':20s} {closed_total:8.4f}")
     return 0
 
 

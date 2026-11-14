@@ -33,6 +33,13 @@ Project → Feature → Lane. The project is one repository. The feature is what
 lane is one slice of it. Projects and features exist before the first lane, because the registry holds
 them; the panel draws empty nodes.
 
+## The receipt
+
+`pi-lane close` appends one line per lane to `$HERMES_HOME/lanes/closed.jsonl` and deletes the record, the
+worktree and the lane's pi session. That line therefore carries what would otherwise die: `usage`,
+`review_usage`, `cost_usd`, `result_status`, `review_p0`, `review_p1`, `autonomy` beside the merge facts.
+`pi-lane ledger` reads the last twenty receipts back, so a finished run can still be totalled.
+
 ## The eval store
 
 `$HERMES_HOME/eval/cases.json` holds the cases — the whole task text, the gate commands and an
