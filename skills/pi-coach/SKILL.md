@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.0.2
+version: 3.0.3
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -142,6 +142,12 @@ separate calls. Two guards fire before the worktree is touched: the same lane na
 the same repository is refused (exit 2), and a second lane in one feature is allowed with a note.
 There are no lock files — the record and its pid are the truth, and a dead pid means free.
 
+**Caps, or the lane spends the night.** `--max-usd`, `--max-turns` (assistant messages in one run) and
+`--idle-timeout` (seconds without an event, default 1800) end the run with state `stopped` and a
+`stop_reason` on the record. `max_usd` covers the whole lane, so `continue` refuses once the bill is
+reached, and `pi-lane budget <lane> --max-usd N` raises it. Measured: one library slice took six
+continuations and $0.064 with nothing to stop it.
+
 **Phrase the task as an order.** A lane that reads and narrates a plan ends `done` with an empty
 worktree. Say "Edit these files now, do not describe a plan" and name the files.
 
@@ -274,7 +280,9 @@ A lane whose gates were not run does not close.
 A lane run pays two bills, and the second one is easy to forget:
 
 1. The orchestrator's own turns, from the Hermes session in `state.db`.
-2. Every lane's `pi` session: `~/.pi/agent/sessions/<cwd-slug>/*.jsonl`, field `usage.cost.total`.
+2. Every lane's own `pi` bill — `pi-lane ledger` prints it per lane and in total, read from `usage` in
+   each record. The runner adds each message's `usage` while it reads the stream; the same numbers sit
+   in `~/.pi/agent/sessions/<cwd-slug>/*.jsonl` as `usage.cost.total`.
 
 A solo arm has only the first bill. Count the orchestrator alone, and lanes look two times cheaper
 than they are: measured on one task, orchestrator $0.088 plus lanes $0.101 against solo $0.098.

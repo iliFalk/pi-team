@@ -144,7 +144,7 @@ Disclosed because you should know before you install:
 | Panel is there, no data, no error | the backend half was imported before Hermes restarted — `systemctl --user restart hermes-serve` |
 | Buttons do nothing | `plugins.entries.pi-team.allow_gateway_injection` is off — step 4 above |
 | `start here` and nothing else | no project yet — press `+`, or run `~/.hermes/scripts/pi-team-demo` to see the card with data |
-| A lane reads `stopped` | its `pi` process died; the record keeps the last event and `stderr.txt` says why |
+| A lane reads `stopped` | a cap fired or its `pi` process died — `lane.json` says `stop_reason`, `stderr.txt` says why |
 
 ## Development
 

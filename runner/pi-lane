@@ -47,6 +47,11 @@ ALIASES = {"OPENCODE_GO_API_KEY": "OPENCODE_API_KEY"}
 DEFAULT_PROVIDER = "nvidia"
 DEFAULT_MODEL = "nvidia/nemotron-3.5-super-vl-120b-a12b"
 DEFAULT_THINKING = "medium"
+# A lane that loops on a failing test must not run all night: the idle cap catches the stuck case
+# without a word from anybody, and the money and turn caps are opt-in because a big slice is allowed.
+DEFAULT_MAX_USD = 0.0
+DEFAULT_MAX_TURNS = 0
+DEFAULT_IDLE_TIMEOUT = 1800
 LANE_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
@@ -897,6 +902,13 @@ def digest_lane(argv: list) -> int:
         print(f"handed    yes")
     if record.get("checked_at"):
         print(f"checked   {str(record.get('checked_sha'))[:7]} · {'; '.join(record.get('gate_cmds') or [])}")
+    usage = record.get("usage") or {}
+    if usage:
+        print(f"usage     in {int(usage.get('input') or 0)} · out {int(usage.get('output') or 0)} · "
+              f"cache {int(usage.get('cache_read') or 0)} · ${float(usage.get('cost_usd') or 0):.4f} · "
+              f"{int(usage.get('turns') or 0)} turns")
+    if record.get("stop_reason"):
+        print(f"stopped   {record['stop_reason']}")
     if record.get("last_error"):
         print(f"error     {str(record.get('last_error'))[:200]}")
     if repo and branch:
@@ -915,7 +927,12 @@ def digest_lane(argv: list) -> int:
 
 
 def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: str, question_timeout: int) -> int:
-    """One `pi --mode rpc` turn: the lane's first task or a continuation of its session."""
+    """One `pi --mode rpc` turn: the lane's first task or a continuation of its session.
+
+    Budget: `record["budget"]` caps the whole lane across continuations — `max_usd` and `max_turns` per
+    run, `idle_timeout` seconds without an event. A breach ends the run with state `stopped` and a
+    `stop_reason`, so a lane that loops on a failing test cannot spend the night.
+    """
     events_path = lane_dir / "events.jsonl"
     stderr_path = lane_dir / "stderr.txt"
     question_path = lane_dir / "question.json"
@@ -928,6 +945,16 @@ def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: s
     text = ""
     exit_code = 0
     finished = False
+    budget = record.get("budget") or {}
+    max_usd = float(budget.get("max_usd") or 0)
+    max_turns = int(budget.get("max_turns") or 0)
+    idle_timeout = int(budget.get("idle_timeout") or 0)
+    usage = dict(record.get("usage") or {
+        "input": 0, "output": 0, "cache_read": 0, "cache_write": 0,
+        "reasoning": 0, "cost_usd": 0.0, "turns": 0,
+    })
+    turns_here = 0
+    stop_reason = ""
 
     with stderr_path.open("a", encoding="utf-8") as stderr_handle, events_path.open(
         "a", encoding="utf-8"
@@ -942,11 +969,13 @@ def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: s
 
         question: dict | None = None
         question_since = 0.0
+        last_activity = time.monotonic()
 
         while True:
             ready, _, _ = select.select([proc.stdout], [], [], POLL_SECONDS)
 
             if ready:
+                last_activity = time.monotonic()
                 line = proc.stdout.readline()
                 if not line:
                     break
@@ -963,6 +992,26 @@ def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: s
                     said = assistant_text(event)
                     if said:
                         text = said
+                    message = event.get("message") or {}
+                    raw = message.get("usage")
+                    if isinstance(raw, dict):
+                        # The lane's own bill, kept with the record: the panel read it out of the
+                        # session file, and nothing wrote it down, so a run could not be totalled.
+                        turns_here += 1
+                        usage["input"] += int(raw.get("input") or 0)
+                        usage["output"] += int(raw.get("output") or 0)
+                        usage["cache_read"] += int(raw.get("cacheRead") or 0)
+                        usage["cache_write"] += int(raw.get("cacheWrite") or 0)
+                        usage["reasoning"] += int(raw.get("reasoning") or 0)
+                        usage["cost_usd"] = round(float(usage.get("cost_usd") or 0)
+                                                  + float((raw.get("cost") or {}).get("total") or 0), 6)
+                        usage["turns"] = int(usage.get("turns") or 0) + 1
+                        record["usage"] = usage
+                        write_record(lane_dir, record)
+                        if max_usd and usage["cost_usd"] >= max_usd:
+                            stop_reason = f"max_usd {usage['cost_usd']:.4f} >= {max_usd:g}"
+                        elif max_turns and turns_here >= max_turns:
+                            stop_reason = f"max_turns {turns_here} >= {max_turns}"
                 elif kind == "extension_ui_request" and event.get("method") in DIALOG_METHODS:
                     question = {
                         "id": event.get("id"),
@@ -1008,6 +1057,16 @@ def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: s
                     record["state"] = "running"
                     write_record(lane_dir, record)
 
+            if stop_reason:
+                break
+            if (
+                idle_timeout
+                and question is None
+                and not finished
+                and (time.monotonic() - last_activity) > idle_timeout
+            ):
+                stop_reason = f"idle {idle_timeout}s without an event"
+                break
             if finished or proc.poll() is not None:
                 break
 
@@ -1039,7 +1098,14 @@ def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: s
 
     record["finished"] = int(time.time())
     record["exit"] = exit_code
-    record["state"] = "done" if (exit_code == 0 and text) else "failed"
+    record["usage"] = usage
+    if stop_reason:
+        record["stop_reason"] = stop_reason
+        record["state"] = "stopped"
+        print(f"{lane}: stopped — {stop_reason}", file=sys.stderr)
+    else:
+        record.pop("stop_reason", None)
+        record["state"] = "done" if (exit_code == 0 and text) else "failed"
     write_record(lane_dir, record)
     question_path.unlink(missing_ok=True)
     return exit_code
@@ -1064,6 +1130,13 @@ def continue_lane(argv: list) -> int:
     if str(record.get("state")) == "running" and pid_alive(record.get("pid")):
         print(f"{args.lane}: still running", file=sys.stderr)
         return 1
+    budget = record.get("budget") or {}
+    limit = float(budget.get("max_usd") or 0)
+    spent = float((record.get("usage") or {}).get("cost_usd") or 0)
+    if limit and spent >= limit:
+        print(f"{args.lane}: budget spent — ${spent:.4f} of ${limit:g}; raise it with "
+              f"`pi-lane budget {args.lane} --max-usd N` or close the lane", file=sys.stderr)
+        return 1
     worktree = Path(str(record.get("worktree") or ""))
     if not worktree.is_dir():
         print(f"{args.lane}: its worktree is gone", file=sys.stderr)
@@ -1086,9 +1159,76 @@ def continue_lane(argv: list) -> int:
     return run_session(lane_dir, record, args.lane, worktree, args.text, args.question_timeout)
 
 
+def set_budget(argv: list) -> int:
+    """Change a lane's caps. `max_usd` covers the whole lane, so a spent lane refuses a continuation."""
+    parser = argparse.ArgumentParser(prog="pi-lane budget")
+    parser.add_argument("lane")
+    parser.add_argument("--max-usd", type=float, default=None)
+    parser.add_argument("--max-turns", type=int, default=None)
+    parser.add_argument("--idle-timeout", type=int, default=None)
+    args = parser.parse_args(argv)
+    lane_dir = hermes_home() / "lanes" / args.lane
+    record = read_json(lane_dir / "lane.json")
+    if record is None:
+        print(f"no such lane: {args.lane}", file=sys.stderr)
+        return 1
+    budget = dict(record.get("budget") or {})
+    for key, value in (
+        ("max_usd", args.max_usd), ("max_turns", args.max_turns), ("idle_timeout", args.idle_timeout),
+    ):
+        if value is not None:
+            budget[key] = value
+    record["budget"] = budget
+    write_record(lane_dir, record)
+    print(f"{args.lane}: budget {json.dumps(budget)}")
+    return 0
+
+
+def ledger(argv: list) -> int:
+    """Print tokens and money per lane from the records, plus the total of the run.
+
+    The lane's own `pi` bill used to live only in `~/.pi/agent/sessions`, so a run could not be
+    totalled and a lane arm looked cheaper than it was.
+    """
+    parser = argparse.ArgumentParser(prog="pi-lane ledger")
+    parser.add_argument("lanes", nargs="*")
+    args = parser.parse_args(argv)
+    wanted = set(args.lanes)
+    rows = [r for r in lane_records() if not wanted or str(r.get("lane")) in wanted]
+    if not rows:
+        print("no lanes")
+        return 0
+    rows.sort(key=lambda r: r.get("started") or 0)
+    print(f"{'lane':20s} {'state':8s} {'input':>9s} {'output':>8s} {'cache':>9s} {'usd':>8s} {'min':>5s}  model")
+    total = {"input": 0, "output": 0, "cache": 0, "usd": 0.0}
+    for record in rows:
+        usage = record.get("usage") or {}
+        started = record.get("started") or 0
+        finished = record.get("finished") or 0
+        minutes = int((finished - started) // 60) if finished and started else 0
+        values = {
+            "input": int(usage.get("input") or 0),
+            "output": int(usage.get("output") or 0),
+            "cache": int(usage.get("cache_read") or 0),
+            "usd": float(usage.get("cost_usd") or 0),
+        }
+        for key in total:
+            total[key] += values[key]
+        model = str(record.get("model") or "")
+        print(f"{str(record.get('lane')):20s} {str(record.get('state')):8s} {values['input']:9d} "
+              f"{values['output']:8d} {values['cache']:9d} {values['usd']:8.4f} {minutes:5d}  {model}")
+    print(f"{'total':20s} {'':8s} {total['input']:9d} {total['output']:8d} {total['cache']:9d} "
+          f"{total['usd']:8.4f}")
+    return 0
+
+
 def main() -> int:
     if len(sys.argv) > 2 and sys.argv[1] == "wait" and "--all" in sys.argv[2:]:
         return wait_all(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "ledger":
+        return ledger(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "budget":
+        return set_budget(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "review":
         return review_queue(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "digest":
@@ -1122,7 +1262,9 @@ def main() -> int:
             "pi-lane hand <lane> (file for review), "
             "pi-lane check <lane> (record that its work was read), "
             "pi-lane close <lane> [--no-merge] [--yes], "
-            "pi-lane say <lane> \"text\", pi-lane answer <lane> \"value\", pi-lane list"
+            "pi-lane say <lane> \"text\", pi-lane answer <lane> \"value\", pi-lane list, "
+            "pi-lane ledger [lane …] (tokens and money per lane), "
+            "pi-lane budget <lane> [--max-usd N] [--max-turns N] [--idle-timeout S]"
         ),
     )
     parser.add_argument("lane")
@@ -1134,6 +1276,12 @@ def main() -> int:
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--thinking", default=DEFAULT_THINKING)
     parser.add_argument("--question-timeout", type=int, default=1800)
+    parser.add_argument("--max-usd", type=float, default=DEFAULT_MAX_USD,
+                        help="stop the lane when its bill reaches this many dollars (0 = no cap)")
+    parser.add_argument("--max-turns", type=int, default=DEFAULT_MAX_TURNS,
+                        help="stop the lane after this many assistant messages in one run (0 = no cap)")
+    parser.add_argument("--idle-timeout", type=int, default=DEFAULT_IDLE_TIMEOUT,
+                        help="stop the lane after this many seconds without an event (0 = no cap)")
     args = parser.parse_args()
 
     if not LANE_RE.match(args.lane):
@@ -1233,6 +1381,11 @@ def main() -> int:
         "pid": os.getpid(),
         "started": int(time.time()),
         "exit": None,
+        "budget": {
+            "max_usd": args.max_usd,
+            "max_turns": args.max_turns,
+            "idle_timeout": args.idle_timeout,
+        },
     }
     write_record(lane_dir, record)
     return run_session(lane_dir, record, lane, worktree, args.task, args.question_timeout)

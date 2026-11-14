@@ -38,7 +38,9 @@ them; the panel draws empty nodes.
 | Field | Source |
 |---|---|
 | state | `lane.json`: `running`, `waiting`, `done`, `failed`, `stopped` |
-| last text, last tool, turns, tokens, cost | `events.jsonl`, last message of the run |
+| last text, last tool, turns | `events.jsonl`, last message of the run |
+| tokens and cost | `lane.json` `usage` — the runner adds every message's `usage` while it reads it |
+| caps and why it stopped | `lane.json` `budget` (`max_usd`, `max_turns`, `idle_timeout`) and `stop_reason` |
 | question | `question.json`: `id`, `method`, `title`, `options` |
 | changes | `git status --porcelain`, `git diff HEAD --stat` in the worktree |
 | plan | `.thinkrail/context/todos/<session-id>.json` of the worktree |
