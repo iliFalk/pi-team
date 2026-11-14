@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.9.1
+version: 3.10.0
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -154,6 +154,17 @@ continuations and $0.064 with nothing to stop it.
 
 **Phrase the task as an order.** A lane that reads and narrates a plan ends `done` with an empty
 worktree. Say "Edit these files now, do not describe a plan" and name the files.
+
+## Lane: open a whole run from one file
+
+`pi-lane plan run.json` opens every lane the file names, one detached process each, so they still run in
+parallel. The file carries what four shell calls carried before — repo, provider, model, autonomy — plus
+per lane `name`, `task` (inline) or `brief` (a path), `touch` and `thinking`. Measured: one orchestrator
+made 85 shell calls in a run, another 136, and every brief it wrote it paid for twice.
+
+`"waves": [["contract"], ["pipeline", "library", "shell"]]` opens wave one, waits until every lane in it
+settles, then opens the next. The dependency order lives in the plan instead of in the prompt, and a lane
+whose record does not exist yet counts as pending, not as finished.
 
 ## Lane: wait
 

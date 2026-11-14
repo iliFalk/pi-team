@@ -41,6 +41,7 @@ def open_lane(argv: list) -> int:
     parser.add_argument("--review-provider", default=DEFAULT_REVIEW_PROVIDER,
                         help="which provider the critic at `hand` uses (another vendor by default)")
     parser.add_argument("--review-model", default=DEFAULT_REVIEW_MODEL)
+    parser.add_argument("--plan", default="", help="the plan that opened this lane; `pi-lane plan` sets it")
     parser.add_argument("--autonomy", choices=("auto", "ask"), default=DEFAULT_AUTONOMY,
                         help="auto: the lane answers its own dialogs; ask: a dialog parks it in waiting")
     args = parser.parse_args(argv)
@@ -167,6 +168,7 @@ def open_lane(argv: list) -> int:
         "review_provider": args.review_provider,
         "review_model": args.review_model,
         "autonomy": args.autonomy,
+        "plan": args.plan or None,
         "budget": {
             "max_usd": args.max_usd,
             "max_turns": args.max_turns,
