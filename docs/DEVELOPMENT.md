@@ -151,6 +151,16 @@ copy it into the project again; never edit a copy in place.
 2. On the gateway machine remove the agent plugin with `hermes plugins remove pi-team` if the backend
    is no longer needed. Lane records stay under `~/.hermes/lanes` until they are deleted.
 
+## Editing the runner
+
+`runner/pi-lane` is GENERATED. Edit `runner/parts/*.py` — one topic per file, numbered in build order —
+then run `python3 runner/build.py`. The built file is what installs into `~/.hermes/scripts`, because the
+plugin copies files there and a package would not survive the copy.
+
+`python3 runner/build.py --check` fails when the built file is older than the parts, and it runs in the
+pre-ship list below. The parts hold: constants, store and records, text parsing, the critic, lane facts
+and blockers, the run loop, lifecycle verbs, the gate, reading verbs, opening a lane, and `main` last.
+
 ## Checks
 
 - `node --check desktop/plugin.js` — the file must stay plain, uncompiled ESM.
