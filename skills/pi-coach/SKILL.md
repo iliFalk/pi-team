@@ -494,7 +494,8 @@ git before it runs. The order is the point: commit after merge turns the merge i
 - **`select` answers for the pipe, never for what Python already buffered.** A pi that writes
   `message_end` and `agent_end` in one burst left the second line inside the reader's buffer, so the loop
   saw one event and then waited until the idle timeout with the work already done. Measured with a stub
-  pi that writes both lines in one flush: the lane stayed `running` for 24 minutes. The runner now reads
+  pi that writes both lines in one flush: the lane stayed `running` until the sandbox was killed nine
+  minutes later, with `done` work on disk and a 1800 s idle timeout ahead of it. The runner now reads
   bytes from the pipe and splits lines itself (`_read_lines`); never go back to `readline()` behind
   `select`, and prove any change to that loop with the burst stub.
 - **A stale stub runner resurrects its record.** A killed sandbox lane that is still alive keeps rewriting
