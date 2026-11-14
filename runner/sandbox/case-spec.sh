@@ -2,20 +2,20 @@
 # Prove the requirement layer: spec check / cover / tasks, lane acs, and the gate's refusal.
 # Same stub pi as case.sh; zero provider spend.
 set -u
-HERE=$(cd "$(dirname "$0")" && pwd)
-SCR=$(mktemp -d)
-export HERMES_HOME="$SCR/home"
+SCR="$HOME/.hermes/cache/scratch/pi-gate-plan"
+export HERMES_HOME="$SCR/home-spec"
 export PATH="$SCR/bin:$PATH"
 export STUB_ACS="AC1,AC2"
-RUNNER="${PI_LANE:-$HOME/.hermes/scripts/pi-lane}"
+RUNNER="$HOME/.hermes/scripts/pi-lane"
 REPO="$SCR/spec-repo"
-mkdir -p "$SCR/bin" "$HERMES_HOME/lanes" "$REPO/spec" "$REPO/tests"
-cp "$HERE/pi" "$SCR/bin/pi"; chmod +x "$SCR/bin/pi"
-echo "sandbox $SCR"
 fail=0
 ok()  { echo "OK   $*"; }
 bad() { echo "FAIL $*"; fail=1; }
 
+pkill -f 'scripts/pi-lane (alpha|beta)' 2>/dev/null
+sleep 0.5
+rm -rf "$HERMES_HOME" "$REPO"
+mkdir -p "$HERMES_HOME/lanes" "$REPO/spec" "$REPO/tests"
 
 cd "$REPO" || exit 1
 git init -q .; git config user.email t@t.t; git config user.name t
@@ -27,7 +27,7 @@ AC1  WHEN `music sync` runs on a fixture tree THE SYSTEM SHALL print `added N, m
 AC2  WHEN a track is already in the index THE SYSTEM SHALL NOT download it again.
 AC3  WHILE the resolver fails THE SYSTEM SHALL record the reason and continue the batch.
 MD
-printf 'AC1 lives here: def test_ac1_counts():\n' > tests/test_must.py
+printf 'import unittest\n\n\nclass Must(unittest.TestCase):\n    def test_ac1_counts(self):\n        self.assertTrue(True)\n' > tests/test_must.py
 git add -A && git commit -qm init
 
 echo "== spec check"
@@ -46,9 +46,19 @@ out=$("$RUNNER" spec cover --repo "$REPO" 2>&1); rc=$?
 out=$("$RUNNER" spec cover --repo "$REPO" --acs AC1 2>&1); rc=$?
 [ $rc -eq 0 ] && echo "$out" | grep -q "coverage 1/1" && ok "--acs narrows to one lane's slice" || bad "cover --acs: rc=$rc $out"
 printf 'AC2 named in a gate script\nAC3 recorded\n' > gate-probe.txt
-mkdir -p gates && printf '#!/bin/sh\n# AC2 AC3\ntrue\n' > gates/check.sh
+mkdir -p gates && printf '#!/bin/sh\necho "checking AC2 and AC3"\ntrue\n' > gates/check.sh
 out=$("$RUNNER" spec cover --repo "$REPO" 2>&1); rc=$?
-[ $rc -eq 0 ] && echo "$out" | grep -q "coverage 3/3" && ok "gates/ counts as a proof" || bad "cover after gates/: rc=$rc $out"
+[ $rc -eq 0 ] && echo "$out" | grep -q "coverage 3/3" && ok "a gate script line counts as a proof" || bad "cover after gates/: rc=$rc $out"
+
+echo "== a mention is not a proof"
+printf 'import unittest\n\n\nclass Must(unittest.TestCase):\n    def test_other(self):  # AC3\n        self.assertTrue(True)\n' > "$REPO/tests/test_must.py"
+rm -rf "$REPO/gates"
+out=$("$RUNNER" spec cover --repo "$REPO" 2>&1); rc=$?
+[ $rc -eq 1 ] && echo "$out" | grep -q "AC1 *MENTIONED\|AC1 *NOT COVERED" && echo "$out" | grep -q "AC3 *MENTIONED" \
+  && ok "a comment naming the id does not cover it" || bad "comment counted as proof: rc=$rc $out"
+printf 'import unittest\n\n\nclass Must(unittest.TestCase):\n    def test_ac1_counts(self):\n        self.assertTrue(True)\n    def test_ac3_recorded(self):\n        self.assertTrue(True)\n' > "$REPO/tests/test_must.py"
+out=$("$RUNNER" spec cover --repo "$REPO" --acs AC1,AC3 2>&1); rc=$?
+[ $rc -eq 0 ] && echo "$out" | grep -q "coverage 2/2" && ok "the id in the test name covers it" || bad "named test not accepted: rc=$rc $out"
 
 echo "== spec tasks"
 cat > "$SCR/plan-spec.json" <<JSON
@@ -86,7 +96,7 @@ ok "both lanes done and each record names its criteria"
 for l in alpha beta; do git -C "$REPO/.worktrees/$l" add -A; git -C "$REPO/.worktrees/$l" -c user.email=t@t.t -c user.name=t commit -qm "lane $l"; done
 git merge -q --no-ff lane/alpha lane/beta -m "merge lanes"
 out=$("$RUNNER" gate --plan spec-run 2>&1); rc=$?
-[ $rc -eq 1 ] && echo "$out" | grep -q "criteria covered nowhere" && echo "$out" | grep -q "AC1" \
+[ $rc -eq 1 ] && echo "$out" | grep -q "criteria not proven" && echo "$out" | grep -q "AC1" \
   && ok "gate refuses while a declared criterion is covered nowhere" || bad "gate: rc=$rc $out"
 python3 - "$l" <<'PY'
 import json, os

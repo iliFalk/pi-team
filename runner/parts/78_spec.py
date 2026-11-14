@@ -96,41 +96,73 @@ def _cover_files(repo: str):
         yield path
 
 
-def spec_covered(repo: str, ids: list) -> dict:
-    """Which of these ids appears in a test or a gate script, and where.
+def _ac_pattern(ac_id: str):
+    return re.compile(rf"(?<![A-Za-z0-9]){re.escape(ac_id)}(?![0-9])", re.IGNORECASE)
 
-    One match is proof of a trace, not of a good test: the location is printed so the critic and the
-    orchestrator can read the line. A missing id is the failure this exists for.
+
+def _def_name(line: str) -> str:
+    """The name a `def` or `class` line declares, else an empty string."""
+    match = re.match(r"\s*(?:async\s+)?(?:def|class)\s+([A-Za-z_]\w*)", line)
+    return match.group(1) if match else ""
+
+
+def _is_comment(line: str) -> bool:
+    stripped = line.strip()
+    return (not stripped or stripped.startswith("#") or stripped.startswith("//")
+            or stripped.startswith("*") or stripped.startswith('"') or stripped.startswith("'")
+            or stripped.startswith("--"))
+
+
+def spec_scan(repo: str, ids: list) -> dict:
+    """Where each id is PROVEN, and where it is only mentioned.
+
+    A mention is not a proof. Measured on one run: `library.sync` never called `store.scan` while the
+    criterion that says it must was "covered" — the id sat in a comment beside a test that proved
+    something else, and the run needed a fifth lane after closing. So an id counts only when it carries
+    a test of its own: `def test_ac3_resolver_failure_is_recorded`, case-insensitive, in the name. In a
+    `gates/` script — a file that exists to check criteria — a line that is not a comment counts.
     """
-    wanted = {ac_id: [] for ac_id in ids}
-    if not wanted:
-        return {}
-    patterns = {ac_id: re.compile(rf"(?<![A-Za-z0-9]){re.escape(ac_id)}(?![0-9])", re.IGNORECASE)
-                for ac_id in wanted}
+    proof = {ac_id: "" for ac_id in ids}
+    mention = {ac_id: "" for ac_id in ids}
+    if not ids:
+        return {"proof": proof, "mention": mention}
+    patterns = {ac_id: _ac_pattern(ac_id) for ac_id in ids}
     for path in _cover_files(repo):
+        under_gates = "gates" in path.parts
         try:
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        for ac_id, pattern in patterns.items():
-            if not wanted[ac_id] and pattern.search(text):
-                try:
-                    relative = str(path.relative_to(Path(repo)))
-                except ValueError:
-                    relative = str(path)
-                line = next((number for number, body in enumerate(text.splitlines(), 1)
-                             if pattern.search(body)), 1)
-                wanted[ac_id] = [f"{relative}:{line}"]
-    return wanted
+        try:
+            relative = str(path.relative_to(Path(repo)))
+        except ValueError:
+            relative = str(path)
+        for number, line in enumerate(text.splitlines(), 1):
+            if _is_comment(line):
+                continue
+            name = _def_name(line)
+            for ac_id, pattern in patterns.items():
+                if not pattern.search(line):
+                    continue
+                site = f"{relative}:{number}"
+                if pattern.search(name) or under_gates:
+                    if not proof[ac_id]:
+                        proof[ac_id] = site
+                elif not mention[ac_id]:
+                    mention[ac_id] = site
+    return {"proof": proof, "mention": mention}
 
 
 def spec_summary(repo: str, ids: list) -> dict:
-    """The one shape every reader uses: declared, covered, missing."""
-    found = spec_covered(repo, ids)
-    covered = [ac_id for ac_id in ids if found.get(ac_id)]
-    missing = [ac_id for ac_id in ids if not found.get(ac_id)]
-    return {"declared": list(ids), "covered": covered, "missing": missing,
-            "where": {k: v[0] for k, v in found.items() if v}}
+    """The one shape every reader uses: declared, covered (proven), unproven, missing."""
+    scan = spec_scan(repo, ids)
+    proof, mention = scan["proof"], scan["mention"]
+    covered = [ac_id for ac_id in ids if proof.get(ac_id)]
+    unproven = [ac_id for ac_id in ids if not proof.get(ac_id) and mention.get(ac_id)]
+    missing = [ac_id for ac_id in ids if not proof.get(ac_id) and not mention.get(ac_id)]
+    return {"declared": list(ids), "covered": covered, "unproven": unproven, "missing": missing,
+            "where": {ac_id: proof[ac_id] for ac_id in covered},
+            "mentioned": {ac_id: mention[ac_id] for ac_id in unproven}}
 
 
 def spec_check(argv: list) -> int:
@@ -174,15 +206,20 @@ def spec_cover(argv: list) -> int:
             print(f"spec: not in {path}: {', '.join(unknown)}", file=sys.stderr)
             return 1
     summary = spec_summary(repo, wanted)
+    unresolved = summary["missing"] + summary["unproven"]
     if args.json:
         print(json.dumps(summary, ensure_ascii=False))
-        return 0 if not summary["missing"] else 1
+        return 0 if not unresolved else 1
     for ac_id in summary["covered"]:
-        print(f"{ac_id:6s} covered  {summary['where'][ac_id]}")
+        print(f"{ac_id:6s} covered   {summary['where'][ac_id]}")
+    for ac_id in summary["unproven"]:
+        print(f"{ac_id:6s} MENTIONED — {summary['mentioned'][ac_id]} names it, but no test carries it "
+              "in its name and no gate script calls it")
     for ac_id in summary["missing"]:
         print(f"{ac_id:6s} NOT COVERED — no test or gate script names it in {', '.join(COVER_DIRS)}/")
-    print(f"coverage {len(summary['covered'])}/{len(wanted)}")
-    return 0 if not summary["missing"] else 1
+    print(f"coverage {len(summary['covered'])}/{len(wanted)}"
+          + (f" · {len(summary['unproven'])} mentioned only" if summary["unproven"] else ""))
+    return 0 if not unresolved else 1
 
 
 def spec_tasks(argv: list) -> int:

@@ -224,6 +224,8 @@ def report(argv: list) -> int:
             note = f"    acs {len(acs['covered'])}/{len(acs['declared'])}"
             if acs.get("missing"):
                 note += f" · covered nowhere: {', '.join(acs['missing'])}"
+            if acs.get("unproven"):
+                note += f" · mentioned only: {', '.join(acs['unproven'])}"
             if acs.get("unreported"):
                 note += f" · missing from the RESULT: {', '.join(acs['unreported'])}"
             notes.append(note)

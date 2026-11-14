@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.13.1
+version: 3.14.0
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -307,9 +307,15 @@ pi-lane spec cover  --repo <path>       # which id a test or a gate script names
   whole run.
 - **The lane claims them back.** `RESULT` gains `"acs": ["AC1", "AC4"]`; a lane that answers for
   criteria and reports none is a blocker at `hand`, not a note.
-- **The proof is a name.** `spec cover` searches `tests/`, `gates/` and the root `test_*.py` for each
-  id and prints file and line. The convention that keeps the search honest is in the test's own name:
-  `def test_ac3_resolver_failure_is_recorded(self):  # AC3`.
+- **The proof is a NAME, not a mention.** `spec cover` prints three groups: covered, MENTIONED, not
+  covered. An id counts only when it carries a test of its own — `def test_ac3_resolver_failure_is_recorded`,
+  case-insensitive, inside the function or class name — or when a `gates/` script line that is not a
+  comment names it. An id in a comment, a docstring or beside a test that proves something else is
+  MENTIONED: `spec cover` exits 1, `hand` refuses, and `gate` refuses to stamp the run.
+- **A named test can still prove the wrong thing.** Measured: `library.sync` never called `store.scan`
+  while `test_ac20_sync_prints_the_summary` carried AC20 and passed — the criterion said "runs ingest →
+  resolve → scan", the test checked the printed summary. Name coverage cannot see that; a critic reading
+  the criterion against the test body can, so hand it the map.
 - **`gate` refuses a stamp.** Before it runs a single command it looks for every declared id in the
   merged tree and refuses `checked_sha` while one is named nowhere — a criterion nobody proves is a
   requirement nobody checks, and the gate is the last place that can say so before a merge. The summary

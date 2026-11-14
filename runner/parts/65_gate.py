@@ -93,11 +93,11 @@ def gate_lanes(argv: list) -> int:
             continue
         summary = spec_summary(workdir, declared)
         coverage[lane] = summary
-        if summary["missing"]:
-            uncovered[lane] = summary["missing"]
+        if summary["missing"] or summary.get("unproven"):
+            uncovered[lane] = summary["missing"] + (summary.get("unproven") or [])
     if uncovered:
         for lane, missing in sorted(uncovered.items()):
-            print(f"{lane}: criteria covered nowhere in {workdir}: {', '.join(missing)}", file=sys.stderr)
+            print(f"{lane}: criteria not proven in {workdir}: {', '.join(missing)}", file=sys.stderr)
         print("refusing: name each criterion in a test or a gate script, or fix the declared ids",
               file=sys.stderr)
         return 1
@@ -235,6 +235,8 @@ def digest_lane(argv: list) -> int:
         note = f"acs       {len(acs_check.get('covered') or [])}/{len(acs_check['declared'])}"
         if acs_check.get("missing"):
             note += " · covered nowhere: " + ", ".join(acs_check["missing"])
+        if acs_check.get("unproven"):
+            note += " · mentioned only: " + ", ".join(acs_check["unproven"])
         print(note)
     if record.get("autonomy"):
         extra = f" · {record['auto_answers']} auto-answer(s)" if record.get("auto_answers") else ""

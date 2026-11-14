@@ -144,6 +144,7 @@ def lane_facts(name: str, record: dict) -> dict:
             "covered": [], "missing": declared, "where": {}}
         facts["acs"] = {
             "declared": declared, "covered": summary["covered"], "missing": summary["missing"],
+            "unproven": summary.get("unproven") or [], "mentioned": summary.get("mentioned") or {},
             "where": summary.get("where") or {}, "reported": reported,
             "unreported": [ac_id for ac_id in declared if ac_id not in reported],
             "root": root,
@@ -169,6 +170,10 @@ def lane_blockers(name: str, record: dict, stage: str, *, allow_missing_result: 
     acs = facts.get("acs") or {}
     if acs.get("missing"):
         blockers.append(f"criteria covered nowhere in {acs.get('root')}: {', '.join(acs['missing'])}")
+    if acs.get("unproven"):
+        sites = ", ".join(f"{ac_id} ({acs['mentioned'][ac_id]})" for ac_id in acs["unproven"])
+        blockers.append(f"criteria mentioned but not proven: {sites} — the id belongs in the test's own "
+                        "name, a comment is not a proof")
     if acs.get("unreported"):
         blockers.append(f"the RESULT names no {', '.join(acs['unreported'])} — its `acs` list must carry "
                         "every criterion the lane answers")
