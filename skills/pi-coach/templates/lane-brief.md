@@ -22,10 +22,17 @@ task description, not a slice, and it is paid for as input tokens by every lane 
         <symbol or key>    <signature or meaning>
         <symbol or key>
 
+    ## Criteria this slice answers
+        AC<n> <the criterion, quoted from spec/requirements.md> — prove it in tests/test_must.py
+        AC<n> <…>
+        Read spec/requirements.md before you start; do not reword a criterion, quote it.
+
     ## Done means
         <measurable statement: which command prints what>
         Each MUST of the task becomes an executable check in THIS worktree: a test in
         tests/test_must.py or a script under gates/. Name them in RESULT.verify.
+        Every criterion above is named in the test that proves it, in this form:
+        def test_ac3_resolver_failure_is_recorded(self):  # AC3
 
     ## Report
         files changed with one line each · the gate output verbatim · assumptions · what you skipped
@@ -33,8 +40,10 @@ task description, not a slice, and it is paid for as input tokens by every lane 
     ## Last line — the machine-readable report
         End with exactly this shape, one line, after your prose:
         RESULT: {"files": ["<path>", …], "verify": {"cmd": "<the gate command>", "exit": <code>},
-                 "risks": ["<what could break>"], "followups": ["<what the next lane must know>"]}
-        Nothing else after it. `pi-lane hand` reads this line; a lane without it cannot be filed.
+                 "acs": ["AC<n>", …], "risks": ["<what could break>"],
+                 "followups": ["<what the next lane must know>"]}
+        `acs` repeats every criterion from the section above. `pi-lane gate` refuses to stamp the run
+        while one of them is named in no test and no gate script, and `hand` refuses without the line.
 
 Rules that keep it small:
 

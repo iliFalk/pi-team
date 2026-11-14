@@ -107,6 +107,8 @@ def lane_facts(name: str, record: dict) -> dict:
         "p0": len((record.get("review") or {}).get("p0") or []),
         "p1": len((record.get("review") or {}).get("p1") or []),
         "merged": False, "conflict": False, "dirty": 0,
+        "acs": {"declared": [], "covered": [], "missing": [], "where": {}, "reported": [],
+                "unreported": []},
     }
     if repo and Path(repo).is_dir():
         rc, head, _ = _git(repo, "rev-parse", "HEAD")
@@ -130,6 +132,22 @@ def lane_facts(name: str, record: dict) -> dict:
     if worktree and Path(worktree).is_dir():
         rc, out, _ = _git(worktree, "status", "--porcelain")
         facts["dirty"] = len([line for line in out.splitlines() if line.strip()]) if rc == 0 else 0
+
+    # Criteria: declared on the record, reported in the RESULT, proven by a test or a gate script.
+    # Before the merge the proof can only live in the lane's own worktree, so that is where it is
+    # looked for; after the merge the repository is the tree that counts, and so is the gate.
+    declared = _ac_list(record.get("acs") or [])
+    if declared:
+        reported = _ac_list((record.get("result") or {}).get("acs") or [])
+        root = repo if facts["merged"] else (worktree if worktree and Path(worktree).is_dir() else repo)
+        summary = spec_summary(root, declared) if root and Path(root).is_dir() else {
+            "covered": [], "missing": declared, "where": {}}
+        facts["acs"] = {
+            "declared": declared, "covered": summary["covered"], "missing": summary["missing"],
+            "where": summary.get("where") or {}, "reported": reported,
+            "unreported": [ac_id for ac_id in declared if ac_id not in reported],
+            "root": root,
+        }
     return facts
 
 
@@ -148,6 +166,12 @@ def lane_blockers(name: str, record: dict, stage: str, *, allow_missing_result: 
         blockers.append("no valid RESULT — the lane's last text must end with RESULT: {\"files\": […], …}")
     if facts["claim"] == "mismatch" and not accept_claim:
         blockers.append(f"the verify claim does not match the gate — {facts['claim_why']}")
+    acs = facts.get("acs") or {}
+    if acs.get("missing"):
+        blockers.append(f"criteria covered nowhere in {acs.get('root')}: {', '.join(acs['missing'])}")
+    if acs.get("unreported"):
+        blockers.append(f"the RESULT names no {', '.join(acs['unreported'])} — its `acs` list must carry "
+                        "every criterion the lane answers")
     if stage == "close":
         if facts["review"] not in ("ok", "skipped"):
             blockers.append("no critic review")

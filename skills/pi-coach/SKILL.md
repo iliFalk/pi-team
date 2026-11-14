@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.11.0
+version: 3.12.0
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -136,6 +136,7 @@ fat brief is visible in the log instead of only in the bill.
 ```sh
 pi-lane <lane> "<task>" --project <project> --feature <feature> [--provider P] [--model M] [--thinking L]
 pi-lane <lane> "<task>" --repo <path> --touch 'music/' --touch 'tests/test_cli.py' --max-usd 0.10
+pi-lane <lane> "<task>" --project <p> --feature <f> --acs AC1,AC3   # the criteria it answers
 ```
 
 1. Cuts `<repo>/.worktrees/<lane>` on branch `lane/<lane>`.
@@ -162,7 +163,7 @@ worktree. Say "Edit these files now, do not describe a plan" and name the files.
 
 `pi-lane plan run.json` opens every lane the file names, one detached process each, so they still run in
 parallel. The file carries what four shell calls carried before — repo, provider, model, autonomy — plus
-per lane `name`, `task` (inline) or `brief` (a path), `touch` and `thinking`. Measured: one orchestrator
+per lane `name`, `task` (inline) or `brief` (a path), `touch`, `acs` and `thinking`. Measured: one orchestrator
 made 85 shell calls in a run, another 136, and every brief it wrote it paid for twice.
 
 `"waves": [["contract"], ["pipeline", "library", "shell"]]` opens wave one, waits until every lane in it
@@ -242,6 +243,40 @@ Close it with one lane before the slices start:
 
 A seam that survives is then visible as a failing contract test in the slice's own worktree, which is the
 cheapest possible place to find it. Template: `templates/contract-brief.md`.
+
+## Requirements: the criteria a run answers for
+
+A task says what to build; a brief says what a slice owns; nothing said what proves it. So a plan can be
+green and the acceptance still be prose. Three files close that:
+
+| File | Written by | Holds |
+|---|---|---|
+| `spec/requirements.md` | the orchestrator, before any lane | one line per criterion, `AC<n>  WHEN … THE SYSTEM SHALL …` |
+| `spec/design.md` | the contract lane | data model, decisions with their reason, boundaries |
+| `spec/tasks.md` | `pi-lane spec tasks` | lane → the files it owns → the criteria it answers |
+
+```sh
+pi-lane spec tasks run.json --write     # generate tasks.md from the plan, refuse an unknown id
+pi-lane spec check  --repo <path>       # ids, duplicates, SHALL, an EARS trigger
+pi-lane spec cover  --repo <path>       # which id a test or a gate script names, and where
+```
+
+- **The plan assigns the criteria.** `{"name": "pipeline", "acs": ["AC1", "AC4"]}` puts them on the
+  record, and `plan` refuses an id that `spec/requirements.md` does not define, or any lane that declares
+  criteria while that file is missing. A typo in an id is otherwise invisible until the gate refuses the
+  whole run.
+- **The lane claims them back.** `RESULT` gains `"acs": ["AC1", "AC4"]`; a lane that answers for
+  criteria and reports none is a blocker at `hand`, not a note.
+- **The proof is a name.** `spec cover` searches `tests/`, `gates/` and the root `test_*.py` for each
+  id and prints file and line. The convention that keeps the search honest is in the test's own name:
+  `def test_ac3_resolver_failure_is_recorded(self):  # AC3`.
+- **`gate` refuses a stamp.** Before it runs a single command it looks for every declared id in the
+  merged tree and refuses `checked_sha` while one is named nowhere — a criterion nobody proves is a
+  requirement nobody checks, and the gate is the last place that can say so before a merge. The summary
+  lands on the record as `acs_check`; `report` prints `acs 2/2` under the lane and `digest` prints it
+  beside `verify`.
+- The search proves a trace, not a good test. The location is printed so the critic and the orchestrator
+  read the line; a comment naming AC3 is a trace too, and that gap is the critic's business.
 
 ## Lane: autonomy — `auto` or `ask`
 
@@ -498,6 +533,12 @@ git before it runs. The order is the point: commit after merge turns the merge i
   minutes later, with `done` work on disk and a 1800 s idle timeout ahead of it. The runner now reads
   bytes from the pipe and splits lines itself (`_read_lines`); never go back to `readline()` behind
   `select`, and prove any change to that loop with the burst stub.
+- **`wait --all` read a missing record as `gone` and answered "all settled — 0/2 done", exit 0.**
+  A record is written a moment after `plan` spawns its lane, so a wait started right after the open
+  returned success for two lanes that had not begun. Measured on the stub sandbox, reproduced every run.
+  A missing record is now `pending` for a 30 s grace, then `gone` with exit 1 — the same rule `plan`'s
+  own wave wait already used. A wait that answers "settled" about work that never started is worse than
+  a timeout: it hides.
 - **A stale stub runner resurrects its record.** A killed sandbox lane that is still alive keeps rewriting
   `lane.json` by path, so the next case run reads `running` after a clean `done`. Kill the stub processes
   before wiping a sandbox `HERMES_HOME`, or the case answers for the previous run.

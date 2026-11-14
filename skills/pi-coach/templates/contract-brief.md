@@ -10,6 +10,8 @@ a function returns. Budget: 1 500 characters.
         <package>/_contract.py        every shared name, with its full signature and return shape
         tests/test_contract.py        one test per name: `inspect.signature` and the shape of one return
                                       value — an import alone proves nothing
+        spec/design.md                what a signature cannot say: data model, decisions with reason,
+                                      boundaries — fill templates/design.md
 
     ## Facts
         the repository holds <state: .gitkeep only / the modules below already>

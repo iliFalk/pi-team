@@ -218,9 +218,17 @@ def report(argv: list) -> int:
             nxt = "fix"
         cost = float(usage.get("cost_usd") or 0) + float(review_usage.get("cost_usd") or 0)
         pair = f"{facts['p0']}/{facts['p1']}"
+        notes = [f"    {reason}" for reason in (close_blockers or hand_blockers)]
+        acs = facts.get("acs") or {}
+        if acs.get("declared"):
+            note = f"    acs {len(acs['covered'])}/{len(acs['declared'])}"
+            if acs.get("missing"):
+                note += f" · covered nowhere: {', '.join(acs['missing'])}"
+            if acs.get("unreported"):
+                note += f" · missing from the RESULT: {', '.join(acs['unreported'])}"
+            notes.append(note)
         lines.append((f"{name:16s} {str(record.get('state')):8s} {facts['gate']:6s} {facts['claim']:8s} "
-                      f"{facts['result']:7s} {pair:6s} {cost:8.4f}  {nxt}",
-                      [f"    {reason}" for reason in (close_blockers or hand_blockers)]))
+                      f"{facts['result']:7s} {pair:6s} {cost:8.4f}  {nxt}", notes))
     print(f"run      {Path(repo).name or '?'} · {len(records)} lane(s)")
     print(f"ready    close {ready} · hand {hand_only} · blocked {blocked}")
     print(f"spend    lanes {spend['lane']:.4f} + critic {spend['critic']:.4f} = "

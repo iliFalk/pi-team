@@ -83,6 +83,25 @@ def gate_lanes(argv: list) -> int:
         print("merge them first — a gate here would bless work that is not in the tree", file=sys.stderr)
         return 1
 
+    # A criterion nobody proves is a requirement nobody checks, and the gate is the last place that
+    # can say so before a merge. Cheap and first: it reads files, it does not run a suite.
+    coverage = {}
+    uncovered = {}
+    for lane, record in records.items():
+        declared = _ac_list(record.get("acs") or [])
+        if not declared:
+            continue
+        summary = spec_summary(workdir, declared)
+        coverage[lane] = summary
+        if summary["missing"]:
+            uncovered[lane] = summary["missing"]
+    if uncovered:
+        for lane, missing in sorted(uncovered.items()):
+            print(f"{lane}: criteria covered nowhere in {workdir}: {', '.join(missing)}", file=sys.stderr)
+        print("refusing: name each criterion in a test or a gate script, or fix the declared ids",
+              file=sys.stderr)
+        return 1
+
     started = time.time()
     results = []
     for command in cmds:
@@ -130,6 +149,8 @@ def gate_lanes(argv: list) -> int:
                 if claimed_exit is None or claimed_exit != int(same[0]):
                     check["match"] = False
                     check["why"] = f"claimed exit {claim.get('exit')}, the gate ran it with exit {same[0]}"
+        if lane in coverage:
+            record["acs_check"] = coverage[lane]
         record["verify_check"] = check
         if not check["match"]:
             print(f"{lane}: verify claim does not match the gate — {check['why']}", file=sys.stderr)
@@ -209,6 +230,12 @@ def digest_lane(argv: list) -> int:
     if check:
         print(f"verify    {'match' if check.get('match') else 'MISMATCH'}"
               + (f" — {check.get('why')}" if check.get("why") else ""))
+    acs_check = record.get("acs_check") or {}
+    if acs_check.get("declared"):
+        note = f"acs       {len(acs_check.get('covered') or [])}/{len(acs_check['declared'])}"
+        if acs_check.get("missing"):
+            note += " · covered nowhere: " + ", ".join(acs_check["missing"])
+        print(note)
     if record.get("autonomy"):
         extra = f" · {record['auto_answers']} auto-answer(s)" if record.get("auto_answers") else ""
         print(f"autonomy  {record.get('autonomy')}{extra}")

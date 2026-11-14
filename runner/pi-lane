@@ -284,6 +284,22 @@ def _json_after(text: str, marker: str):
     return None
 
 
+def _ac_list(values) -> list:
+    """Criterion ids from `--acs` values: `AC3`, `AC1,AC3`, repeated flags, any case."""
+    out = []
+    for value in values or []:
+        for piece in str(value).replace(";", ",").split(","):
+            text = piece.strip().upper()
+            if text and text not in out:
+                out.append(text)
+    return out
+
+
+def _ac_problems(ids) -> list:
+    """Ids that cannot name a criterion; every reader refuses these before it searches anything."""
+    return [ac_id for ac_id in ids or [] if not AC_ID_RE.match(ac_id)]
+
+
 def parse_result(text: str) -> tuple:
     """Read the lane's machine-readable report: the last `RESULT: {...}` in its final text.
 
@@ -304,6 +320,15 @@ def parse_result(text: str) -> tuple:
     verify = result.get("verify")
     if verify is not None and not (isinstance(verify, dict) and "exit" in verify):
         return None, "invalid"
+    # The criteria this lane answers are part of its claim, so they are checked like one: a string
+    # where a list belongs, or an id that cannot name a criterion, makes the whole line invalid.
+    if "acs" in result:
+        acs = result.get("acs")
+        if not isinstance(acs, list) or not all(isinstance(item, str) for item in acs):
+            return None, "invalid"
+        if _ac_problems([item.strip().upper() for item in acs]):
+            return None, "invalid"
+        result["acs"] = _ac_list(acs)
     return result, "ok"
 
 
@@ -617,6 +642,8 @@ def lane_facts(name: str, record: dict) -> dict:
         "p0": len((record.get("review") or {}).get("p0") or []),
         "p1": len((record.get("review") or {}).get("p1") or []),
         "merged": False, "conflict": False, "dirty": 0,
+        "acs": {"declared": [], "covered": [], "missing": [], "where": {}, "reported": [],
+                "unreported": []},
     }
     if repo and Path(repo).is_dir():
         rc, head, _ = _git(repo, "rev-parse", "HEAD")
@@ -640,6 +667,22 @@ def lane_facts(name: str, record: dict) -> dict:
     if worktree and Path(worktree).is_dir():
         rc, out, _ = _git(worktree, "status", "--porcelain")
         facts["dirty"] = len([line for line in out.splitlines() if line.strip()]) if rc == 0 else 0
+
+    # Criteria: declared on the record, reported in the RESULT, proven by a test or a gate script.
+    # Before the merge the proof can only live in the lane's own worktree, so that is where it is
+    # looked for; after the merge the repository is the tree that counts, and so is the gate.
+    declared = _ac_list(record.get("acs") or [])
+    if declared:
+        reported = _ac_list((record.get("result") or {}).get("acs") or [])
+        root = repo if facts["merged"] else (worktree if worktree and Path(worktree).is_dir() else repo)
+        summary = spec_summary(root, declared) if root and Path(root).is_dir() else {
+            "covered": [], "missing": declared, "where": {}}
+        facts["acs"] = {
+            "declared": declared, "covered": summary["covered"], "missing": summary["missing"],
+            "where": summary.get("where") or {}, "reported": reported,
+            "unreported": [ac_id for ac_id in declared if ac_id not in reported],
+            "root": root,
+        }
     return facts
 
 
@@ -658,6 +701,12 @@ def lane_blockers(name: str, record: dict, stage: str, *, allow_missing_result: 
         blockers.append("no valid RESULT — the lane's last text must end with RESULT: {\"files\": […], …}")
     if facts["claim"] == "mismatch" and not accept_claim:
         blockers.append(f"the verify claim does not match the gate — {facts['claim_why']}")
+    acs = facts.get("acs") or {}
+    if acs.get("missing"):
+        blockers.append(f"criteria covered nowhere in {acs.get('root')}: {', '.join(acs['missing'])}")
+    if acs.get("unreported"):
+        blockers.append(f"the RESULT names no {', '.join(acs['unreported'])} — its `acs` list must carry "
+                        "every criterion the lane answers")
     if stage == "close":
         if facts["review"] not in ("ok", "skipped"):
             blockers.append("no critic review")
@@ -1481,6 +1530,11 @@ def wait_all(argv: list) -> int:
         return 0
 
     deadline = (time.monotonic() + args.timeout) if args.timeout else None
+    started = time.monotonic()
+    # A record is written a moment after `pi-lane plan` spawns its lane. A wait that read that gap as
+    # `gone` answered "all settled — 0/2 done" for two lanes that had not started yet, with exit 0.
+    # Pending is not finished until the grace has passed.
+    grace = 30
     printed: dict[str, str] = {}
     while True:
         states: dict[str, str] = {}
@@ -1488,12 +1542,19 @@ def wait_all(argv: list) -> int:
         failed = False
         for lane in watch:
             state, record, question = _lane_state(lane)
+            if state == "gone" and (time.monotonic() - started) < grace:
+                states[lane] = "pending"
+                continue
             if state in ("running", "waiting") and record is not None and not pid_alive(record.get("pid")):
                 print(f"{lane}: orphaned — its runner is gone; `pi-lane resume {lane}` picks it up",
                       file=sys.stderr)
                 states[lane] = "orphaned"
                 failed = True
                 continue
+            if state == "gone":
+                print(f"{lane}: no record after {grace}s — nothing was opened under that name",
+                      file=sys.stderr)
+                failed = True
             states[lane] = state
             if question is not None:
                 waiting.append(lane)
@@ -1677,6 +1738,25 @@ def gate_lanes(argv: list) -> int:
         print("merge them first — a gate here would bless work that is not in the tree", file=sys.stderr)
         return 1
 
+    # A criterion nobody proves is a requirement nobody checks, and the gate is the last place that
+    # can say so before a merge. Cheap and first: it reads files, it does not run a suite.
+    coverage = {}
+    uncovered = {}
+    for lane, record in records.items():
+        declared = _ac_list(record.get("acs") or [])
+        if not declared:
+            continue
+        summary = spec_summary(workdir, declared)
+        coverage[lane] = summary
+        if summary["missing"]:
+            uncovered[lane] = summary["missing"]
+    if uncovered:
+        for lane, missing in sorted(uncovered.items()):
+            print(f"{lane}: criteria covered nowhere in {workdir}: {', '.join(missing)}", file=sys.stderr)
+        print("refusing: name each criterion in a test or a gate script, or fix the declared ids",
+              file=sys.stderr)
+        return 1
+
     started = time.time()
     results = []
     for command in cmds:
@@ -1724,6 +1804,8 @@ def gate_lanes(argv: list) -> int:
                 if claimed_exit is None or claimed_exit != int(same[0]):
                     check["match"] = False
                     check["why"] = f"claimed exit {claim.get('exit')}, the gate ran it with exit {same[0]}"
+        if lane in coverage:
+            record["acs_check"] = coverage[lane]
         record["verify_check"] = check
         if not check["match"]:
             print(f"{lane}: verify claim does not match the gate — {check['why']}", file=sys.stderr)
@@ -1803,6 +1885,12 @@ def digest_lane(argv: list) -> int:
     if check:
         print(f"verify    {'match' if check.get('match') else 'MISMATCH'}"
               + (f" — {check.get('why')}" if check.get("why") else ""))
+    acs_check = record.get("acs_check") or {}
+    if acs_check.get("declared"):
+        note = f"acs       {len(acs_check.get('covered') or [])}/{len(acs_check['declared'])}"
+        if acs_check.get("missing"):
+            note += " · covered nowhere: " + ", ".join(acs_check["missing"])
+        print(note)
     if record.get("autonomy"):
         extra = f" · {record['auto_answers']} auto-answer(s)" if record.get("auto_answers") else ""
         print(f"autonomy  {record.get('autonomy')}{extra}")
@@ -2069,9 +2157,17 @@ def report(argv: list) -> int:
             nxt = "fix"
         cost = float(usage.get("cost_usd") or 0) + float(review_usage.get("cost_usd") or 0)
         pair = f"{facts['p0']}/{facts['p1']}"
+        notes = [f"    {reason}" for reason in (close_blockers or hand_blockers)]
+        acs = facts.get("acs") or {}
+        if acs.get("declared"):
+            note = f"    acs {len(acs['covered'])}/{len(acs['declared'])}"
+            if acs.get("missing"):
+                note += f" · covered nowhere: {', '.join(acs['missing'])}"
+            if acs.get("unreported"):
+                note += f" · missing from the RESULT: {', '.join(acs['unreported'])}"
+            notes.append(note)
         lines.append((f"{name:16s} {str(record.get('state')):8s} {facts['gate']:6s} {facts['claim']:8s} "
-                      f"{facts['result']:7s} {pair:6s} {cost:8.4f}  {nxt}",
-                      [f"    {reason}" for reason in (close_blockers or hand_blockers)]))
+                      f"{facts['result']:7s} {pair:6s} {cost:8.4f}  {nxt}", notes))
     print(f"run      {Path(repo).name or '?'} · {len(records)} lane(s)")
     print(f"ready    close {ready} · hand {hand_only} · blocked {blocked}")
     print(f"spend    lanes {spend['lane']:.4f} + critic {spend['critic']:.4f} = "
@@ -2339,6 +2435,8 @@ def _plan_lanes(spec: dict, base: Path) -> list:
 def _spawn(name: str, task: str, entry: dict, spec: dict, repo: str, plan_id: str) -> int:
     argv = [sys.executable, str(Path(__file__).resolve()), name, task, "--repo", repo,
             "--plan", plan_id]
+    for ac_id in _ac_list(entry.get("acs") or []):
+        argv += ["--acs", ac_id]
     for key, flag in (("provider", "--provider"), ("model", "--model"), ("thinking", "--thinking"),
                       ("autonomy", "--autonomy"), ("feature", "--feature"), ("group", "--feature"),
                       ("max_usd", "--max-usd"), ("max_turns", "--max-turns"),
@@ -2403,10 +2501,39 @@ def _plan_gates(spec: dict, lanes: list) -> list:
         if text not in out:
             out.append(text)
     for name, _, entry in lanes:
+        if entry.get("acs"):
+            bad = _ac_problems(_ac_list(entry.get("acs") or []))
+            if bad:
+                raise SystemExit(f"plan: lane {name} names criteria that are not ids: {', '.join(bad)}")
         if entry.get("gates"):
             raise SystemExit(f"plan: lane {name} carries gates — gates belong to the plan, "
                              "because a gate runs in the merged tree")
     return out
+
+
+def _plan_acs(lanes: list, repo: str) -> dict:
+    """Which criteria each lane answers, checked against the requirements file before any spend.
+
+    A typo in an id is invisible until the gate refuses the whole run, and a run whose requirements
+    file does not exist has nothing to answer for: both are refused here, at open.
+    """
+    declared = {}
+    for name, _, entry in lanes:
+        ids = _ac_list(entry.get("acs") or [])
+        if ids:
+            declared[name] = ids
+    if not declared:
+        return {}
+    path = spec_path(repo)
+    criteria = spec_criteria(path)
+    if not criteria:
+        raise SystemExit(f"plan: lanes declare criteria but {path} holds none — write the requirements "
+                         "file before the run, as templates/requirements.md shows")
+    known = {ac_id for ac_id, _, _ in criteria}
+    unknown = sorted({ac_id for ids in declared.values() for ac_id in ids if ac_id not in known})
+    if unknown:
+        raise SystemExit(f"plan: declared criteria missing from {path}: {', '.join(unknown)}")
+    return declared
 
 
 def _write_plan_snapshot(plan_id: str, spec: dict, repo: str, gates: list, lanes: list) -> Path:
@@ -2424,6 +2551,7 @@ def _write_plan_snapshot(plan_id: str, spec: dict, repo: str, gates: list, lanes
         "repo": repo,
         "gates": list(gates),
         "lanes": [name for name, _, _ in lanes],
+        "acs": {name: _ac_list(entry.get("acs") or []) for name, _, entry in lanes},
         "waves": spec.get("waves") or None,
         "opened_at": int(time.time()),
     }
@@ -2462,6 +2590,7 @@ def plan(argv: list) -> int:
             print("plan: waves and lanes do not name the same lanes", file=sys.stderr)
             return 1
     gates = _plan_gates(spec, lanes)
+    declared = _plan_acs(lanes, repo)
     plan_id = str(spec.get("id") or f"{Path(repo).name}-{time.strftime('%H%M%S')}")
     if not PLAN_ID_RE.match(plan_id):
         print("plan: an id holds letters, digits, dot, dash and underscore only", file=sys.stderr)
@@ -2493,6 +2622,260 @@ def plan(argv: list) -> int:
             print("gates: none — a plan without gates leaves the checks to the orchestrator's memory")
         print("check them with `pi-lane status` or `pi-lane report`")
     return 0
+
+
+# --- 78_spec.py --------------------------------------------------------
+"""spec: the requirement layer a run has to answer for.
+
+The task says what to build; nothing in a lane brief says what proves it. Six criteria in a plan, six
+`gates` commands, and the only link between them is prose nobody greps. This part adds the file, the
+check and the coverage search, so a criterion that no test proves stops the run at the gate instead of
+turning up in a review a week later.
+
+    spec/requirements.md      AC1  WHEN … THE SYSTEM SHALL …      written once, by the orchestrator
+    spec/tasks.md             lane → the files it owns → the criteria it answers (generated)
+    spec/design.md            what the slices must agree on (the contract lane writes it)
+
+    pi-lane spec check  [--repo P] [--file F]
+    pi-lane spec cover  [--repo P] [--file F] [--acs AC1,AC3] [--json]
+    pi-lane spec tasks  <plan.json> [--write]
+
+`check` reads the requirements file; `cover` looks for each id in `tests/` and `gates/`; `tasks` writes
+the table a reviewer reads. A lane declares the ids it answers (`--acs AC1,AC3`, or `"acs": [...]` in a
+plan), reports them back in its `RESULT`, and `gate` refuses to record a check while one of them is
+covered nowhere in the merged tree.
+"""
+import json
+import os
+import re
+from pathlib import Path
+
+REQUIREMENTS_FILE = "spec/requirements.md"
+DESIGN_FILE = "spec/design.md"
+TASKS_FILE = "spec/tasks.md"
+AC_ID_RE = re.compile(r"^AC\d+$")
+AC_LINE_RE = re.compile(r"^\s*(AC\d+)\b(.*)$")
+EARS_TRIGGERS = ("WHEN", "WHILE", "WHERE", "IF")
+COVER_DIRS = ("tests", "gates")
+SKIP_DIRS = {".git", ".worktrees", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cache"}
+
+
+def spec_path(repo: str, file: str = "") -> Path:
+    return Path(file).expanduser() if file else Path(repo) / REQUIREMENTS_FILE
+
+
+def spec_criteria(path: Path) -> list:
+    """Every criterion line as (id, text, line number). Prose between them is not a criterion."""
+    out = []
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return out
+    for number, line in enumerate(text.splitlines(), 1):
+        match = AC_LINE_RE.match(line)
+        if not match:
+            continue
+        out.append((match.group(1), match.group(2).strip(), number))
+    return out
+
+
+def spec_problems(criteria: list, path: Path) -> list:
+    """What makes this file useless as ground truth, in the order a person would fix it."""
+    problems = []
+    if not path.is_file():
+        return [f"no requirements file at {path}"]
+    if not criteria:
+        return [f"{path} carries no criterion — one line per AC<n>, as in templates/requirements.md"]
+    seen = {}
+    for ac_id, text, number in criteria:
+        if ac_id in seen:
+            problems.append(f"line {number}: {ac_id} already used on line {seen[ac_id]}")
+        else:
+            seen[ac_id] = number
+        if not text:
+            problems.append(f"line {number}: {ac_id} has no text")
+            continue
+        upper = text.upper()
+        if "SHALL" not in upper:
+            problems.append(f"line {number}: {ac_id} states no SHALL — a criterion names an observable result")
+        if not any(trigger in upper.split() for trigger in EARS_TRIGGERS):
+            problems.append(f"line {number}: {ac_id} names no trigger "
+                            f"({'/'.join(EARS_TRIGGERS)} … THE SYSTEM SHALL …)")
+    return problems
+
+
+def _cover_files(repo: str):
+    """Every file that can carry a proof: tests/, gates/ and the test modules at the root."""
+    root = Path(repo)
+    if not root.is_dir():
+        return
+    candidates = []
+    for name in COVER_DIRS:
+        base = root / name
+        if base.is_dir():
+            candidates.extend(sorted(base.rglob("*")))
+    candidates.extend(sorted(root.glob("test_*.py")))
+    for path in candidates:
+        if not path.is_file():
+            continue
+        if any(part in SKIP_DIRS for part in path.parts):
+            continue
+        yield path
+
+
+def spec_covered(repo: str, ids: list) -> dict:
+    """Which of these ids appears in a test or a gate script, and where.
+
+    One match is proof of a trace, not of a good test: the location is printed so the critic and the
+    orchestrator can read the line. A missing id is the failure this exists for.
+    """
+    wanted = {ac_id: [] for ac_id in ids}
+    if not wanted:
+        return {}
+    patterns = {ac_id: re.compile(rf"(?<![A-Za-z0-9]){re.escape(ac_id)}(?![0-9])", re.IGNORECASE)
+                for ac_id in wanted}
+    for path in _cover_files(repo):
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for ac_id, pattern in patterns.items():
+            if not wanted[ac_id] and pattern.search(text):
+                try:
+                    relative = str(path.relative_to(Path(repo)))
+                except ValueError:
+                    relative = str(path)
+                line = next((number for number, body in enumerate(text.splitlines(), 1)
+                             if pattern.search(body)), 1)
+                wanted[ac_id] = [f"{relative}:{line}"]
+    return wanted
+
+
+def spec_summary(repo: str, ids: list) -> dict:
+    """The one shape every reader uses: declared, covered, missing."""
+    found = spec_covered(repo, ids)
+    covered = [ac_id for ac_id in ids if found.get(ac_id)]
+    missing = [ac_id for ac_id in ids if not found.get(ac_id)]
+    return {"declared": list(ids), "covered": covered, "missing": missing,
+            "where": {k: v[0] for k, v in found.items() if v}}
+
+
+def spec_check(argv: list) -> int:
+    parser = argparse.ArgumentParser(prog="pi-lane spec check")
+    parser.add_argument("--repo", default=".", help="the repository that holds spec/")
+    parser.add_argument("--file", default="", help="read this file instead of spec/requirements.md")
+    args = parser.parse_args(argv)
+    repo = os.path.realpath(args.repo)
+    path = spec_path(repo, args.file)
+    criteria = spec_criteria(path)
+    problems = spec_problems(criteria, path)
+    if problems:
+        for problem in problems:
+            print(f"spec: {problem}", file=sys.stderr)
+        return 1
+    ids = [ac_id for ac_id, _, _ in criteria]
+    print(f"spec ok — {len(ids)} criterion(s): {', '.join(ids)}")
+    return 0
+
+
+def spec_cover(argv: list) -> int:
+    parser = argparse.ArgumentParser(prog="pi-lane spec cover")
+    parser.add_argument("--repo", default=".", help="the repository that holds spec/ and tests/")
+    parser.add_argument("--file", default="", help="read this file instead of spec/requirements.md")
+    parser.add_argument("--acs", default="", help="only these ids, comma separated (a lane's slice)")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+    repo = os.path.realpath(args.repo)
+    path = spec_path(repo, args.file)
+    criteria = spec_criteria(path)
+    problems = spec_problems(criteria, path)
+    if problems:
+        for problem in problems:
+            print(f"spec: {problem}", file=sys.stderr)
+        return 1
+    wanted = [ac_id for ac_id, _, _ in criteria]
+    if args.acs:
+        wanted = [piece.strip().upper() for piece in args.acs.split(",") if piece.strip()]
+        unknown = [ac_id for ac_id in wanted if ac_id not in {c[0] for c in criteria}]
+        if unknown:
+            print(f"spec: not in {path}: {', '.join(unknown)}", file=sys.stderr)
+            return 1
+    summary = spec_summary(repo, wanted)
+    if args.json:
+        print(json.dumps(summary, ensure_ascii=False))
+        return 0 if not summary["missing"] else 1
+    for ac_id in summary["covered"]:
+        print(f"{ac_id:6s} covered  {summary['where'][ac_id]}")
+    for ac_id in summary["missing"]:
+        print(f"{ac_id:6s} NOT COVERED — no test or gate script names it in {', '.join(COVER_DIRS)}/")
+    print(f"coverage {len(summary['covered'])}/{len(wanted)}")
+    return 0 if not summary["missing"] else 1
+
+
+def spec_tasks(argv: list) -> int:
+    """Generate `spec/tasks.md`: which lane owns which files and answers which criteria.
+
+    The plan file already carries the split; this turns it into the one page a reviewer keeps open.
+    Unknown ids are refused here, before a lane is opened, because a typo in an id is invisible until
+    the gate refuses the whole run.
+    """
+    parser = argparse.ArgumentParser(prog="pi-lane spec tasks")
+    parser.add_argument("file", help="the plan file")
+    parser.add_argument("--write", action="store_true", help="write <repo>/spec/tasks.md")
+    args = parser.parse_args(argv)
+    plan_file = Path(args.file).expanduser()
+    try:
+        spec = json.loads(plan_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        print(f"spec tasks: cannot read {plan_file} — {error}", file=sys.stderr)
+        return 1
+    repo = str(spec.get("repo") or "")
+    if not repo or not Path(repo).is_dir():
+        print("spec tasks: the plan names no repository", file=sys.stderr)
+        return 1
+    lanes = spec.get("lanes") or []
+    if not isinstance(lanes, list) or not lanes:
+        print("spec tasks: the plan names no lanes", file=sys.stderr)
+        return 1
+    criteria = spec_criteria(spec_path(repo))
+    known = [ac_id for ac_id, _, _ in criteria]
+    declared = []
+    for entry in lanes:
+        declared.extend(str(item).upper() for item in (entry.get("acs") or []))
+    unknown = sorted({ac_id for ac_id in declared if ac_id not in known})
+    if unknown:
+        print(f"spec tasks: no such criterion in {spec_path(repo)}: {', '.join(unknown)}", file=sys.stderr)
+        return 1
+
+    rows = ["# Tasks — lane, files, criteria", "",
+            f"Generated from `{plan_file.name}` by `pi-lane spec tasks`. Do not edit: change the plan.", "",
+            "| Lane | Files it owns | Criteria |", "|---|---|---|"]
+    for entry in lanes:
+        files = ", ".join(f"`{item}`" for item in (entry.get("touch") or [])) or "—"
+        acs = ", ".join(str(item).upper() for item in (entry.get("acs") or [])) or "—"
+        rows.append(f"| `{entry.get('name')}` | {files} | {acs} |")
+    unclaimed = [ac_id for ac_id in known if ac_id not in {item.upper() for item in declared}]
+    if unclaimed:
+        rows += ["", f"Unclaimed criteria — no lane answers for them: {', '.join(unclaimed)}"]
+    text = "\n".join(rows) + "\n"
+    if args.write:
+        target = Path(repo) / TASKS_FILE
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding="utf-8")
+        print(f"spec tasks: wrote {target} ({len(lanes)} lane(s), {len(declared)} claimed id(s))")
+        if unclaimed:
+            print(f"spec tasks: {len(unclaimed)} criteria claimed by no lane: {', '.join(unclaimed)}")
+            return 1
+        return 0
+    print(text, end="")
+    return 0
+
+
+def spec(argv: list) -> int:
+    if not argv or argv[0] not in ("check", "cover", "tasks"):
+        print("usage: pi-lane spec check|cover|tasks …", file=sys.stderr)
+        return 2
+    return {"check": spec_check, "cover": spec_cover, "tasks": spec_tasks}[argv[0]](argv[1:])
 
 
 # --- 80_open.py --------------------------------------------------------
@@ -2540,12 +2923,17 @@ def open_lane(argv: list) -> int:
                         help="which provider the critic at `hand` uses (another vendor by default)")
     parser.add_argument("--review-model", default=DEFAULT_REVIEW_MODEL)
     parser.add_argument("--plan", default="", help="the plan that opened this lane; `pi-lane plan` sets it")
+    parser.add_argument("--acs", action="append", default=[],
+                        help="a criterion this lane answers (AC3); repeatable or comma separated")
     parser.add_argument("--autonomy", choices=("auto", "ask"), default=DEFAULT_AUTONOMY,
                         help="auto: the lane answers its own dialogs; ask: a dialog parks it in waiting")
     args = parser.parse_args(argv)
 
     if not LANE_RE.match(args.lane):
         fail(f"bad lane name: {args.lane}")
+    bad_acs = _ac_problems(_ac_list(args.acs))
+    if bad_acs:
+        fail(f"--acs takes criterion ids like AC3: {', '.join(bad_acs)}")
 
     # A brief is input tokens for this lane, every time. Show its size; a slice brief is under 2.5 KB.
     brief_bytes = len(args.task.encode("utf-8"))
@@ -2667,6 +3055,7 @@ def open_lane(argv: list) -> int:
         "review_model": args.review_model,
         "autonomy": args.autonomy,
         "plan": args.plan or None,
+        "acs": _ac_list(args.acs),
         "budget": {
             "max_usd": args.max_usd,
             "max_turns": args.max_turns,
@@ -2687,6 +3076,8 @@ def main() -> int:
         return resume_lane(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "plan":
         return plan(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "spec":
+        return spec(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "report":
         return report(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "status":

@@ -409,6 +409,11 @@ def wait_all(argv: list) -> int:
         return 0
 
     deadline = (time.monotonic() + args.timeout) if args.timeout else None
+    started = time.monotonic()
+    # A record is written a moment after `pi-lane plan` spawns its lane. A wait that read that gap as
+    # `gone` answered "all settled — 0/2 done" for two lanes that had not started yet, with exit 0.
+    # Pending is not finished until the grace has passed.
+    grace = 30
     printed: dict[str, str] = {}
     while True:
         states: dict[str, str] = {}
@@ -416,12 +421,19 @@ def wait_all(argv: list) -> int:
         failed = False
         for lane in watch:
             state, record, question = _lane_state(lane)
+            if state == "gone" and (time.monotonic() - started) < grace:
+                states[lane] = "pending"
+                continue
             if state in ("running", "waiting") and record is not None and not pid_alive(record.get("pid")):
                 print(f"{lane}: orphaned — its runner is gone; `pi-lane resume {lane}` picks it up",
                       file=sys.stderr)
                 states[lane] = "orphaned"
                 failed = True
                 continue
+            if state == "gone":
+                print(f"{lane}: no record after {grace}s — nothing was opened under that name",
+                      file=sys.stderr)
+                failed = True
             states[lane] = state
             if question is not None:
                 waiting.append(lane)

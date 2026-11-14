@@ -55,6 +55,22 @@ def _json_after(text: str, marker: str):
     return None
 
 
+def _ac_list(values) -> list:
+    """Criterion ids from `--acs` values: `AC3`, `AC1,AC3`, repeated flags, any case."""
+    out = []
+    for value in values or []:
+        for piece in str(value).replace(";", ",").split(","):
+            text = piece.strip().upper()
+            if text and text not in out:
+                out.append(text)
+    return out
+
+
+def _ac_problems(ids) -> list:
+    """Ids that cannot name a criterion; every reader refuses these before it searches anything."""
+    return [ac_id for ac_id in ids or [] if not AC_ID_RE.match(ac_id)]
+
+
 def parse_result(text: str) -> tuple:
     """Read the lane's machine-readable report: the last `RESULT: {...}` in its final text.
 
@@ -75,6 +91,15 @@ def parse_result(text: str) -> tuple:
     verify = result.get("verify")
     if verify is not None and not (isinstance(verify, dict) and "exit" in verify):
         return None, "invalid"
+    # The criteria this lane answers are part of its claim, so they are checked like one: a string
+    # where a list belongs, or an id that cannot name a criterion, makes the whole line invalid.
+    if "acs" in result:
+        acs = result.get("acs")
+        if not isinstance(acs, list) or not all(isinstance(item, str) for item in acs):
+            return None, "invalid"
+        if _ac_problems([item.strip().upper() for item in acs]):
+            return None, "invalid"
+        result["acs"] = _ac_list(acs)
     return result, "ok"
 
 

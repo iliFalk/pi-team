@@ -70,6 +70,8 @@ def _plan_lanes(spec: dict, base: Path) -> list:
 def _spawn(name: str, task: str, entry: dict, spec: dict, repo: str, plan_id: str) -> int:
     argv = [sys.executable, str(Path(__file__).resolve()), name, task, "--repo", repo,
             "--plan", plan_id]
+    for ac_id in _ac_list(entry.get("acs") or []):
+        argv += ["--acs", ac_id]
     for key, flag in (("provider", "--provider"), ("model", "--model"), ("thinking", "--thinking"),
                       ("autonomy", "--autonomy"), ("feature", "--feature"), ("group", "--feature"),
                       ("max_usd", "--max-usd"), ("max_turns", "--max-turns"),
@@ -134,10 +136,39 @@ def _plan_gates(spec: dict, lanes: list) -> list:
         if text not in out:
             out.append(text)
     for name, _, entry in lanes:
+        if entry.get("acs"):
+            bad = _ac_problems(_ac_list(entry.get("acs") or []))
+            if bad:
+                raise SystemExit(f"plan: lane {name} names criteria that are not ids: {', '.join(bad)}")
         if entry.get("gates"):
             raise SystemExit(f"plan: lane {name} carries gates — gates belong to the plan, "
                              "because a gate runs in the merged tree")
     return out
+
+
+def _plan_acs(lanes: list, repo: str) -> dict:
+    """Which criteria each lane answers, checked against the requirements file before any spend.
+
+    A typo in an id is invisible until the gate refuses the whole run, and a run whose requirements
+    file does not exist has nothing to answer for: both are refused here, at open.
+    """
+    declared = {}
+    for name, _, entry in lanes:
+        ids = _ac_list(entry.get("acs") or [])
+        if ids:
+            declared[name] = ids
+    if not declared:
+        return {}
+    path = spec_path(repo)
+    criteria = spec_criteria(path)
+    if not criteria:
+        raise SystemExit(f"plan: lanes declare criteria but {path} holds none — write the requirements "
+                         "file before the run, as templates/requirements.md shows")
+    known = {ac_id for ac_id, _, _ in criteria}
+    unknown = sorted({ac_id for ids in declared.values() for ac_id in ids if ac_id not in known})
+    if unknown:
+        raise SystemExit(f"plan: declared criteria missing from {path}: {', '.join(unknown)}")
+    return declared
 
 
 def _write_plan_snapshot(plan_id: str, spec: dict, repo: str, gates: list, lanes: list) -> Path:
@@ -155,6 +186,7 @@ def _write_plan_snapshot(plan_id: str, spec: dict, repo: str, gates: list, lanes
         "repo": repo,
         "gates": list(gates),
         "lanes": [name for name, _, _ in lanes],
+        "acs": {name: _ac_list(entry.get("acs") or []) for name, _, entry in lanes},
         "waves": spec.get("waves") or None,
         "opened_at": int(time.time()),
     }
@@ -193,6 +225,7 @@ def plan(argv: list) -> int:
             print("plan: waves and lanes do not name the same lanes", file=sys.stderr)
             return 1
     gates = _plan_gates(spec, lanes)
+    declared = _plan_acs(lanes, repo)
     plan_id = str(spec.get("id") or f"{Path(repo).name}-{time.strftime('%H%M%S')}")
     if not PLAN_ID_RE.match(plan_id):
         print("plan: an id holds letters, digits, dot, dash and underscore only", file=sys.stderr)

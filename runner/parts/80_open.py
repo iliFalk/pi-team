@@ -42,12 +42,17 @@ def open_lane(argv: list) -> int:
                         help="which provider the critic at `hand` uses (another vendor by default)")
     parser.add_argument("--review-model", default=DEFAULT_REVIEW_MODEL)
     parser.add_argument("--plan", default="", help="the plan that opened this lane; `pi-lane plan` sets it")
+    parser.add_argument("--acs", action="append", default=[],
+                        help="a criterion this lane answers (AC3); repeatable or comma separated")
     parser.add_argument("--autonomy", choices=("auto", "ask"), default=DEFAULT_AUTONOMY,
                         help="auto: the lane answers its own dialogs; ask: a dialog parks it in waiting")
     args = parser.parse_args(argv)
 
     if not LANE_RE.match(args.lane):
         fail(f"bad lane name: {args.lane}")
+    bad_acs = _ac_problems(_ac_list(args.acs))
+    if bad_acs:
+        fail(f"--acs takes criterion ids like AC3: {', '.join(bad_acs)}")
 
     # A brief is input tokens for this lane, every time. Show its size; a slice brief is under 2.5 KB.
     brief_bytes = len(args.task.encode("utf-8"))
@@ -169,6 +174,7 @@ def open_lane(argv: list) -> int:
         "review_model": args.review_model,
         "autonomy": args.autonomy,
         "plan": args.plan or None,
+        "acs": _ac_list(args.acs),
         "budget": {
             "max_usd": args.max_usd,
             "max_turns": args.max_turns,
