@@ -596,30 +596,70 @@ def auto_answer(question: dict) -> tuple:
     return {"cancelled": True}, "no value supplied — the lane decides and states the assumption"
 
 
-def _auto_close_blockers(name: str, record: dict) -> list:
-    """Why an autonomous close must not happen yet: an empty list means gate, critic and merge agree."""
-    blockers = []
+def lane_facts(name: str, record: dict) -> dict:
+    """Everything a gate, a hand and a close must agree on, read once.
+
+    The three verbs used to ask these questions in three places, and every defect of one afternoon came
+    from that: a skipped review deadlocked the close, a stale claim was only checked in one verb, and a
+    lane's own bill was lost because nobody looked. One reader means one answer.
+    """
     repo = str(record.get("repo") or "")
     branch = str(record.get("branch") or f"lane/{name}")
-    if not repo or not Path(repo).is_dir():
-        return ["no repository"]
-    rc, head, _ = _git(repo, "rev-parse", "HEAD")
-    checked = str(record.get("checked_sha") or "")
-    if rc != 0 or not checked:
-        blockers.append("no gate recorded")
-    elif checked != head:
-        blockers.append(f"the gate ran at {checked[:7]}, HEAD is {head[:7]}")
-    review = record.get("review") or {}
-    review_status = str(record.get("review_status") or "")
-    if review_status not in ("ok", "skipped"):
-        blockers.append("no critic review")
-    elif review.get("p0"):
-        blockers.append(f"the critic reported {len(review['p0'])} P0")
-    rc, _, _ = _git(repo, "merge-base", "--is-ancestor", branch, "HEAD")
-    if rc != 0:
-        done = subprocess.run(["git", "-C", repo, "merge-tree", "--write-tree", "HEAD", branch],
-                              capture_output=True, text=True, check=False)
-        if done.returncode != 0:
+    facts = {
+        "repo": repo, "branch": branch, "head": "", "gate": "none", "gate_at": str(record.get("checked_sha") or ""),
+        "result": str(record.get("result_status") or "missing"),
+        "claim": "none", "claim_why": "",
+        "review": str(record.get("review_status") or ""),
+        "p0": len((record.get("review") or {}).get("p0") or []),
+        "p1": len((record.get("review") or {}).get("p1") or []),
+        "merged": False, "conflict": False, "dirty": 0,
+    }
+    if repo and Path(repo).is_dir():
+        rc, head, _ = _git(repo, "rev-parse", "HEAD")
+        if rc == 0 and head:
+            facts["head"] = head
+        if facts["gate_at"] and facts["head"]:
+            facts["gate"] = "ok" if facts["gate_at"] == facts["head"] else "stale"
+        elif facts["gate_at"]:
+            facts["gate"] = "unconfirmed"
+        rc, _, _ = _git(repo, "merge-base", "--is-ancestor", branch, "HEAD")
+        facts["merged"] = rc == 0
+        if not facts["merged"]:
+            done = subprocess.run(["git", "-C", repo, "merge-tree", "--write-tree", "HEAD", branch],
+                                  capture_output=True, text=True, check=False)
+            facts["conflict"] = done.returncode != 0
+    check = record.get("verify_check") or {}
+    if check:
+        facts["claim"] = "match" if check.get("match") else "mismatch"
+        facts["claim_why"] = str(check.get("why") or "")
+    worktree = str(record.get("worktree") or "")
+    if worktree and Path(worktree).is_dir():
+        rc, out, _ = _git(worktree, "status", "--porcelain")
+        facts["dirty"] = len([line for line in out.splitlines() if line.strip()]) if rc == 0 else 0
+    return facts
+
+
+def lane_blockers(name: str, record: dict, stage: str, *, allow_missing_result: bool = False,
+                  accept_claim: bool = False) -> list:
+    """Why this lane cannot be filed (`hand`) or closed (`close`) yet. Empty list means it can."""
+    facts = lane_facts(name, record)
+    blockers = []
+    if facts["gate"] == "none":
+        blockers.append("no gate recorded — merge it and run `pi-lane gate`")
+    elif facts["gate"] == "stale":
+        blockers.append(f"the gate ran at {facts['gate_at'][:7]}, HEAD is {facts['head'][:7]}")
+    elif facts["gate"] == "unconfirmed":
+        blockers.append("the recorded gate sha cannot be checked against a HEAD")
+    if facts["result"] != "ok" and not allow_missing_result:
+        blockers.append("no valid RESULT — the lane's last text must end with RESULT: {\"files\": […], …}")
+    if facts["claim"] == "mismatch" and not accept_claim:
+        blockers.append(f"the verify claim does not match the gate — {facts['claim_why']}")
+    if stage == "close":
+        if facts["review"] not in ("ok", "skipped"):
+            blockers.append("no critic review")
+        elif facts["p0"]:
+            blockers.append(f"the critic reported {facts['p0']} P0")
+        if not facts["merged"] and facts["conflict"]:
             blockers.append("the merge would conflict")
     return blockers
 
@@ -661,7 +701,7 @@ def close_lanes(argv: list) -> int:
             continue
 
         if args.auto:
-            blockers = _auto_close_blockers(name, record)
+            blockers = lane_blockers(name, record, "close")
             if blockers:
                 print(f"{name}: not closed — {', '.join(blockers)}", file=sys.stderr)
                 failed += 1
@@ -870,37 +910,6 @@ def say_in_thread(argv: list) -> int:
     return 0
 
 
-def _check_is_fresh(lane: str, record: dict):
-    """Return a refusal line when `checked_sha` no longer names HEAD of the tree the work lands in.
-
-    The pair has to hold, or a lane is filed on a check that never saw the tree: `pi-lane gate` runs the
-    gates in the merged tree and writes that HEAD, so a commit after the gate makes the pair stale and a
-    hand would take green for a tree nobody ran. Measured: a run merged a lane, ran the gate, then landed
-    two commits and filed the lane — three tests were red in the tree it called checked.
-    """
-    checked = str(record.get("checked_sha") or "")
-    if not checked:
-        return (f"{lane}: no check recorded — merge it and run "
-                f"`pi-lane gate {lane} --cmd \"…\"` first")
-    repo = str(record.get("repo") or "")
-    if not repo or not Path(repo).is_dir():
-        return f"{lane}: no repository to read HEAD from — the check {checked[:7]} cannot be confirmed"
-    rc, head, err = _git(repo, "rev-parse", "HEAD")
-    if rc != 0 or not head:
-        return f"{lane}: git says: {err or 'no HEAD'} — the check {checked[:7]} cannot be confirmed"
-    if checked == head:
-        return None
-    seen = f"repository HEAD {head[:7]}"
-    worktree = str(record.get("worktree") or "")
-    if worktree and Path(worktree).is_dir():
-        rc_w, sha_w, _ = _git(worktree, "rev-parse", "HEAD")
-        if rc_w == 0 and sha_w:
-            seen += f", worktree HEAD {sha_w[:7]}"
-    return (f"{lane}: refused — checked at {checked[:7]}, {seen}. The work moved after the check, so the "
-            f"check no longer covers the tree: read it again and record a fresh one "
-            f"(`pi-lane gate {lane} --cmd \"…\"`)")
-
-
 def hand_lane(argv: list) -> int:
     """File a finished lane for review: `handed_at`, the field the panel reads as TO REVIEW.
 
@@ -930,21 +939,12 @@ def hand_lane(argv: list) -> int:
     if record.get("state") in ("running", "waiting"):
         print(f"{args.lane}: still {record.get('state')} — a lane is filed when it has finished", file=sys.stderr)
         return 1
-    stale = _check_is_fresh(args.lane, record)
-    if stale:
-        print(stale, file=sys.stderr)
-        return 1
-    if str(record.get("result_status") or "") != "ok" and not args.allow_missing_result:
-        print(f"{args.lane}: no valid RESULT — its last text must end with "
-              f"RESULT: {{\"files\": [\"…\"], \"verify\": {{\"cmd\": \"…\", \"exit\": 0}}}}, so the "
-              f"orchestrator reads the report as data. `--allow-missing-result` files it anyway",
-              file=sys.stderr)
-        return 1
-    verify_check = record.get("verify_check") or {}
-    if verify_check and not verify_check.get("match") and not args.accept_claim:
-        print(f"{args.lane}: verify claim does not match the gate — {verify_check.get('why')}. "
-              f"Fix it and run `pi-lane gate` again, or file it anyway with `--accept-claim`",
-              file=sys.stderr)
+    blockers = lane_blockers(args.lane, record, "hand",
+                             allow_missing_result=args.allow_missing_result,
+                             accept_claim=args.accept_claim)
+    if blockers:
+        for reason in blockers:
+            print(f"{args.lane}: cannot hand — {reason}", file=sys.stderr)
         return 1
     review = None
     if not args.no_review:
@@ -1962,6 +1962,67 @@ def eval_table(argv: list) -> int:
     return 0
 
 
+def report(argv: list) -> int:
+    """The one call an orchestrator makes at the end: what can close, what is blocked and what it cost.
+
+    A finished run used to be read with `status`, `ledger`, `git status`, `gate` and a hand-written list;
+    this prints the same facts in the order the orchestrator needs them, from the same reader the verbs use.
+    """
+    parser = argparse.ArgumentParser(prog="pi-lane report")
+    parser.add_argument("--repo", default="", help="only lanes of this repository")
+    args = parser.parse_args(argv)
+    wanted = os.path.realpath(args.repo) if args.repo else ""
+    records = []
+    for record in lane_records():
+        if wanted and os.path.realpath(str(record.get("repo") or "")) != wanted:
+            continue
+        if record.get("closed_at"):
+            continue
+        records.append(record)
+    if not records:
+        print("no open lanes")
+        return 0
+    records.sort(key=lambda r: r.get("started") or 0)
+    name_of = {id(r): str(r.get("lane")) for r in records}
+    repo = str(records[0].get("repo") or "")
+    spend = {"lane": 0.0, "critic": 0.0}
+    ready = hand_only = blocked = 0
+    lines = []
+    for record in records:
+        name = name_of[id(record)]
+        facts = lane_facts(name, record)
+        close_blockers = lane_blockers(name, record, "close")
+        hand_blockers = lane_blockers(name, record, "hand")
+        usage = record.get("usage") or {}
+        review_usage = (record.get("review") or {}).get("usage") or {}
+        spend["lane"] += float(usage.get("cost_usd") or 0)
+        spend["critic"] += float(review_usage.get("cost_usd") or 0)
+        if not close_blockers:
+            ready += 1
+            nxt = "close"
+        elif not hand_blockers:
+            hand_only += 1
+            nxt = "hand"
+        else:
+            blocked += 1
+            nxt = "fix"
+        cost = float(usage.get("cost_usd") or 0) + float(review_usage.get("cost_usd") or 0)
+        pair = f"{facts['p0']}/{facts['p1']}"
+        lines.append((f"{name:16s} {str(record.get('state')):8s} {facts['gate']:6s} {facts['claim']:8s} "
+                      f"{facts['result']:7s} {pair:6s} {cost:8.4f}  {nxt}",
+                      [f"    {reason}" for reason in (close_blockers or hand_blockers)]))
+    print(f"run      {Path(repo).name or '?'} · {len(records)} lane(s)")
+    print(f"ready    close {ready} · hand {hand_only} · blocked {blocked}")
+    print(f"spend    lanes {spend['lane']:.4f} + critic {spend['critic']:.4f} = "
+          f"{spend['lane'] + spend['critic']:.4f} USD")
+    print(f"{'lane':16s} {'state':8s} {'gate':6s} {'claim':8s} {'result':7s} {'p0/p1':6s} {'usd':>8s}  next")
+    for line, reasons in lines:
+        print(line)
+        for reason in reasons:
+            print(reason)
+    return 0 if not blocked else 1
+
+
 def status(argv: list) -> int:
     """Everything an orchestrator otherwise gathers with five shell calls, in one table.
 
@@ -2151,6 +2212,8 @@ def main() -> int:
         return reap(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "resume":
         return resume_lane(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "report":
+        return report(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "status":
         return status(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "ledger":
@@ -2201,6 +2264,7 @@ def open_lane(argv: list) -> int:
             "pi-lane check <lane> (record that its work was read), "
             "pi-lane close <lane> [--no-merge] [--yes|--auto], "
             "pi-lane say <lane> \"text\", pi-lane answer <lane> \"value\", pi-lane list, "
+            "pi-lane report [--repo P] (what can close, what is blocked, what it cost), "
             "pi-lane status [--repo P] (gate, claim, critic and cost per lane), pi-lane ledger [lane …] (tokens and money per lane), "
             "pi-lane dry-merge <lane …> (branches merged in memory, conflicts named), "
             "pi-lane reap (mark lanes whose runner is gone), pi-lane resume <lane> (continue one in "

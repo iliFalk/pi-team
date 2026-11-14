@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.8.0
+version: 3.9.0
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -369,6 +369,14 @@ its merges, and the unfinished arm looked better than the finished one.
 
 Count the repair rounds per lane (`pi-lane continue`) in the report. One extra round on a single slice
 cost $0.06 and seven minutes, and that variance, not the lane model, decides most of the spread.
+
+## End of a run: one call, one answer
+
+`pi-lane report [--repo P]` prints what can close, what is blocked, and what the run cost, from the same
+reader `hand` and `close` use: gate against HEAD, the lane's own verify claim, `RESULT`, the critic's
+P0/P1, and the money of each lane with the critic's. Exit `1` means at least one lane is blocked, and
+the reason stands under its row. Do not rebuild this list by hand — the four checks used to live in
+three verbs and every defect of one afternoon came from that.
 
 ## Review, close
 
