@@ -33,6 +33,12 @@ Project → Feature → Lane. The project is one repository. The feature is what
 lane is one slice of it. Projects and features exist before the first lane, because the registry holds
 them; the panel draws empty nodes.
 
+## The eval store
+
+`$HERMES_HOME/eval/cases.json` holds the cases — the whole task text, the gate commands and an
+optional seed tree. `$HERMES_HOME/eval/results.jsonl` holds one row per run: model, wall time,
+tokens, cost, `state`, `pass`, and every gate's exit code. `pi-lane eval table` prints it.
+
 ## Data the panes read
 
 | Field | Source |

@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.5.0
+version: 3.6.0
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -274,6 +274,17 @@ re-open with `pi-lane <lane> "…"` — that cuts a SECOND worktree and looks li
 
 **Ask before continuing.** His note in a thread is a thought, not an order: put the exact prompt in
 the question and run `continue` only after his yes.
+
+## Lane: replay a task as an eval case
+
+`pi-lane eval add <name> --task-file <path> --gate "<cmd>" [--seed <dir>]` stores a case: the task in
+full, the commands that decide pass, and an optional starting tree. `pi-lane eval run <name> --model M
+--provider P` opens one lane on a fresh copy, runs the case's gates in that tree, and appends a row with
+wall time, tokens, money and every gate's exit code. `pi-lane eval table [name]` prints the rows.
+
+Use it before claiming that a model, a brief or a prompt change helps: one task, one row per variant,
+the same gates. Rows are evidence; a bench table built by hand was wrong twice — once because the lane's
+own bill was not in it, once because a cut-off run's snapshot was read as a result.
 
 ## Lane: verify
 

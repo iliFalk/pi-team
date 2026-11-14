@@ -1748,6 +1748,180 @@ def resume_lane(argv: list) -> int:
     return run_session(lane_dir, record, args.lane, worktree, prompt, args.question_timeout)
 
 
+EVAL_DIR_NAME = "eval"
+
+
+def _eval_dir() -> Path:
+    folder = hermes_home() / EVAL_DIR_NAME
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+
+def _eval_cases() -> dict:
+    data = read_json(_eval_dir() / "cases.json") or {}
+    return data if isinstance(data, dict) else {}
+
+
+def _write_eval_cases(cases: dict) -> None:
+    path = _eval_dir() / "cases.json"
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(cases, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    tmp.replace(path)
+
+
+def eval_add(argv: list) -> int:
+    """Record one eval case: the task text, the gates that decide pass, and an optional seed tree."""
+    parser = argparse.ArgumentParser(prog="pi-lane eval add")
+    parser.add_argument("name")
+    parser.add_argument("--task-file", required=True)
+    parser.add_argument("--gate", action="append", default=[], help="a pass/fail command; repeatable")
+    parser.add_argument("--seed", default="", help="a directory copied into each run as the starting tree")
+    args = parser.parse_args(argv)
+    task_path = Path(args.task_file).expanduser()
+    if not task_path.is_file():
+        print(f"no task file: {task_path}", file=sys.stderr)
+        return 1
+    if not args.gate:
+        print("eval add: pass at least one --gate \"<command>\"", file=sys.stderr)
+        return 2
+    cases = _eval_cases()
+    cases[args.name] = {
+        "task": task_path.read_text(encoding="utf-8"),
+        "gates": list(args.gate),
+        "seed": str(Path(args.seed).expanduser()) if args.seed else "",
+    }
+    _write_eval_cases(cases)
+    print(f"{args.name}: case stored — {len(cases[args.name]['task'])} chars, {len(args.gate)} gate(s)")
+    return 0
+
+
+def eval_list(argv: list) -> int:
+    parser = argparse.ArgumentParser(prog="pi-lane eval list")
+    parser.parse_args(argv)
+    cases = _eval_cases()
+    if not cases:
+        print("no eval cases — `pi-lane eval add <name> --task-file … --gate \"…\"`")
+        return 0
+    for name, case in sorted(cases.items()):
+        print(f"{name}\t{len(case.get('task') or '')} chars\t{len(case.get('gates') or [])} gate(s)"
+              f"\tseed {case.get('seed') or '-'}")
+    return 0
+
+
+def eval_run(argv: list) -> int:
+    """Run one case as one lane on a fresh copy of the seed, then judge it with the case's gates.
+
+    A bench that counts only the orchestrator made lanes look cheap; this one reads the lane's own bill
+    from the record and writes gate results beside it, so a model change is a row, not an opinion.
+    """
+    parser = argparse.ArgumentParser(prog="pi-lane eval run")
+    parser.add_argument("name")
+    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--provider", default=DEFAULT_PROVIDER)
+    parser.add_argument("--thinking", default="low")
+    parser.add_argument("--root", default=str(Path.home() / "work" / "eval"))
+    parser.add_argument("--max-usd", type=float, default=0.0)
+    parser.add_argument("--keep", action="store_true", help="keep the lane record and its worktree")
+    args = parser.parse_args(argv)
+    cases = _eval_cases()
+    case = cases.get(args.name)
+    if not case:
+        print(f"no such case: {args.name}", file=sys.stderr)
+        return 1
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    model_slug = re.sub(r"[^A-Za-z0-9._-]+", "-", args.model)
+    repo = Path(args.root).expanduser() / f"{args.name}-{model_slug}-{stamp}"
+    repo.mkdir(parents=True, exist_ok=True)
+    seed = str(case.get("seed") or "")
+    if seed and Path(seed).is_dir():
+        subprocess.run(f"cp -a {seed.rstrip('/')}/. {repo}/", shell=True, check=False)
+        if not Path(repo, ".git").exists():
+            _git(str(repo), "init", "-q", "-b", "main")
+    else:
+        repo.mkdir(parents=True, exist_ok=True)
+        _git(str(repo), "init", "-q", "-b", "main")
+        Path(repo, ".gitkeep").write_text("placeholder\n", encoding="utf-8")
+    _git(str(repo), "add", "-A")
+    _git(str(repo), "-c", "user.name=eval", "-c", "user.email=eval@local", "commit", "-qm", "seed")
+
+    lane = f"eval-{args.name}-{model_slug}"[:56]
+    open_argv = [lane, str(case.get("task") or ""), "--repo", str(repo),
+                 "--model", args.model, "--provider", args.provider, "--thinking", args.thinking,
+                 "--autonomy", "auto"]
+    if args.max_usd:
+        open_argv += ["--max-usd", str(args.max_usd)]
+    started = time.time()
+    print(f"? {args.name} on {args.model} — lane {lane} in {repo}")
+    rc = open_lane(open_argv)
+    wall = int(time.time() - started)
+    record = read_json(hermes_home() / "lanes" / lane / "lane.json") or {}
+
+    gates = []
+    for command in case.get("gates") or []:
+        done = subprocess.run(command, shell=True, cwd=str(repo), capture_output=True, text=True,
+                              timeout=1800, check=False)
+        gates.append({"cmd": command, "exit": int(done.returncode)})
+        print(f"$ {command}   -> exit {done.returncode}")
+    passed = rc == 0 and all(gate["exit"] == 0 for gate in gates)
+    usage = record.get("usage") or {}
+    review = (record.get("review") or {}).get("usage") or {}
+    row = {
+        "case": args.name,
+        "model": args.model,
+        "provider": args.provider,
+        "thinking": args.thinking,
+        "at": int(time.time()),
+        "wall_seconds": wall,
+        "tokens": {key: usage.get(key) for key in ("input", "output", "cache_read", "turns")},
+        "cost_usd": round(float(usage.get("cost_usd") or 0) + float(review.get("cost_usd") or 0), 6),
+        "state": record.get("state") or "gone",
+        "pass": passed,
+        "gates": gates,
+        "repo": str(repo),
+        "lane": lane,
+    }
+    with (_eval_dir() / "results.jsonl").open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+    print(f"{'PASS' if passed else 'FAIL'} {args.name} · {args.model} · {wall}s · "
+          f"${row['cost_usd']:.4f} · {row['tokens'].get('output') or 0} out")
+    if not args.keep:
+        print(f"  keep the evidence with: --keep, or read {row['repo']}")
+    return 0 if passed else 1
+
+
+def eval_table(argv: list) -> int:
+    """Print every recorded result as a table, so two models on one case are one glance apart."""
+    parser = argparse.ArgumentParser(prog="pi-lane eval table")
+    parser.add_argument("name", nargs="?")
+    args = parser.parse_args(argv)
+    path = _eval_dir() / "results.jsonl"
+    if not path.is_file():
+        print("no eval results yet")
+        return 0
+    rows = []
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if args.name and row.get("case") != args.name:
+            continue
+        rows.append(row)
+    if not rows:
+        print("no eval results for that case")
+        return 0
+    print(f"{'case':18s} {'model':34s} {'res':5s} {'wall':>6s} {'in':>8s} {'out':>7s} {'usd':>8s}  gates")
+    for row in sorted(rows, key=lambda r: (r.get("case") or "", r.get("at") or 0)):
+        tokens = row.get("tokens") or {}
+        failures = sum(1 for gate in row.get("gates") or [] if gate.get("exit"))
+        gates = "ok" if not failures else f"{failures} fail"
+        print(f"{str(row.get('case'))[:18]:18s} {str(row.get('model'))[:34]:34s} "
+              f"{'pass' if row.get('pass') else 'fail':5s} {int(row.get('wall_seconds') or 0):5d}s "
+              f"{int(tokens.get('input') or 0):8d} {int(tokens.get('output') or 0):7d} "
+              f"{float(row.get('cost_usd') or 0):8.4f}  {gates}")
+    return 0
+
+
 def set_budget(argv: list) -> int:
     """Change a lane's caps. `max_usd` covers the whole lane, so a spent lane refuses a continuation."""
     parser = argparse.ArgumentParser(prog="pi-lane budget")
@@ -1887,9 +2061,17 @@ def main() -> int:
         return check_lane(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "say":
         return say_in_thread(sys.argv[2:])
+    if len(sys.argv) > 2 and sys.argv[1] == "eval" and sys.argv[2] in ("add", "list", "run", "table"):
+        sub = sys.argv[2]
+        rest = sys.argv[3:]
+        return {"add": eval_add, "list": eval_list, "run": eval_run, "table": eval_table}[sub](rest)
     if len(sys.argv) > 1 and sys.argv[1] == "continue":
         return continue_lane(sys.argv[2:])
 
+    return open_lane(sys.argv[1:])
+
+
+def open_lane(argv: list) -> int:
     parser = argparse.ArgumentParser(
         prog="pi-lane",
         epilog=(
@@ -1933,7 +2115,7 @@ def main() -> int:
     parser.add_argument("--review-model", default=DEFAULT_REVIEW_MODEL)
     parser.add_argument("--autonomy", choices=("auto", "ask"), default=DEFAULT_AUTONOMY,
                         help="auto: the lane answers its own dialogs; ask: a dialog parks it in waiting")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if not LANE_RE.match(args.lane):
         fail(f"bad lane name: {args.lane}")
