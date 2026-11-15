@@ -18,6 +18,7 @@ task description, not a slice, and it is paid for as input tokens by every lane 
         test command   <the exact command>
         gate command   <the exact command>
         .gitignore     holds __pycache__/ and *.pyc — never commit bytecode
+        entry point    bin/<name> --help exits 0 when run from the repository root
 
     ## Names this slice must use (the contract other lanes code against)
         <symbol or key>    <signature or meaning>

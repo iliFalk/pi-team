@@ -3036,9 +3036,33 @@ MUTATION_SKIP_DIRS = {".git", ".worktrees", "node_modules", "__pycache__", "test
                       ".venv", "venv", "build", "dist"}
 
 
+def _entry_points(root: Path) -> list:
+    """Scripts a user runs: `bin/*` and `scripts/*` with a python shebang and no `.py` suffix.
+
+    One measured pair of lanes shipped a CLI whose launcher crashed with `ModuleNotFoundError` while
+    twenty-one tests stayed green — no test and no mutant touched the entry point, because `rglob("*.py")`
+    never saw a file called `bin/bookindex`. A launcher is behaviour: it gets a sample.
+    """
+    out = []
+    for folder in ("bin", "scripts"):
+        base = root / folder
+        if not base.is_dir():
+            continue
+        for path in sorted(base.rglob("*")):
+            if not path.is_file() or path.suffix == ".py":
+                continue
+            try:
+                first = path.read_text(encoding="utf-8", errors="replace").splitlines()[:1]
+            except OSError:
+                continue
+            if first and "python" in first[0] and first[0].startswith("#!"):
+                out.append(path)
+    return out
+
+
 def _mutation_targets(repo: str, pattern: str) -> list:
     root = Path(repo)
-    files = sorted(root.glob(pattern)) if pattern else sorted(root.rglob("*.py"))
+    files = sorted(root.glob(pattern)) if pattern else sorted(root.rglob("*.py")) + _entry_points(root)
     out = []
     for path in files:
         if not path.is_file():

@@ -68,6 +68,15 @@ git add -A && git -c user.email=t@t.t -c user.name=t commit -qm "test the bounda
 out=$("$RUNNER" mutate --repo "$REPO" --cmd "python3 -m unittest discover -s tests" --max 4 2>&1); rc=$?
 [ $rc -eq 0 ] && echo "$out" | grep -q "every sampled mutant killed" && ok "every sampled mutant is killed" || bad "green mutate: rc=$rc $out"
 
+echo "== a launcher with a guard is in the sample"
+mkdir -p bin
+printf '#!/usr/bin/env python3\nimport sys\n\nif len(sys.argv) == 2:\n    print("ok")\n    sys.exit(0)\nsys.exit(2)\n' > bin/tool
+chmod +x bin/tool
+printf 'import subprocess, unittest\nfrom pathlib import Path\n\n\nclass Tool(unittest.TestCase):\n    def test_one_argument_is_accepted(self):\n        done = subprocess.run([str(Path("bin/tool")), "x"], capture_output=True)\n        self.assertEqual(done.returncode, 0)\n\n    def test_no_argument_is_refused(self):\n        done = subprocess.run([str(Path("bin/tool"))], capture_output=True)\n        self.assertEqual(done.returncode, 2)\n' > tests/test_tool.py
+git add -A && git -c user.email=t@t.t -c user.name=t commit -qm "launcher"
+out=$("$RUNNER" mutate --repo "$REPO" --cmd "python3 -m unittest discover -s tests" --max 8 2>&1)
+echo "$out" | grep -q "bin/tool" && ok "bin/tool is sampled as an entry point" || bad "no launcher site: $out"
+
 echo "== a dirty tree is refused"
 echo "x = 1" >> music.py
 out=$("$RUNNER" mutate --repo "$REPO" --cmd "true" 2>&1); rc=$?

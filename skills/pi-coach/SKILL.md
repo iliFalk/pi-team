@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.22.2
+version: 3.22.4
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -239,6 +239,10 @@ pi-lane <lane> "<task>" --repo <path> --executor pf     # pi-durable through `pf
 - **Only the executor differs.** The record carries `executor`, and every later verb — `gate`, `hand`,
   `holdout`, `mutate`, `close`, `report`, `eval capture` — reads the same fields either way. A second
   runner would be a second canon: its own fields, its own fixes, its own drift.
+- **The two runners are developed in parallel, in one pass.** Pi-team (`pi-lane`, the layer) and
+  pi-factory (`pf`, the durable executor) are one product with two halves: a change to either is applied to
+  both in the same session, and the pair is described in the same commit message. A fix that lands on one
+  side only turns the other into the stale copy nobody notices until a run disagrees with the panel.
 - **`pf session` is the whole contract**: `--dir`, `--worktree`, `--lane`, provider, model, thinking,
   autonomy, question timeout and one prompt. The caller owns the directory and the record; `pf` runs the
   durable session and projects `events.jsonl` into it.
@@ -763,6 +767,11 @@ templates with it, and say how far the line count moved.
 - **A fix can make two requirements mutually unsatisfiable.** AC26 said `docker compose config` must
   exit 0 without a `.env`; the audit's AC31 demands it fail without a password. Both cannot hold. Read the
   requirements file against itself before opening lanes, and amend the older criterion on the record.
+- **Green tests never touched the launcher.** One measured pair of lanes shipped a CLI whose `bin/` script
+  crashed with `ModuleNotFoundError` while 21 tests passed: the tests imported the package, the user runs
+  the script. Two fixes, both cheap: the gate carries a smoke command (`bin/<name> --help` exits 0 from the
+  repository root), and `mutate` samples `bin/` and `scripts/` python scripts as entry points even with no
+  `.py` suffix. A launcher is behaviour; a suite that never runs it proves nothing about it.
 - **A lane that commits bytecode breaks the next merge.** Two arms of one comparison both committed
   `__pycache__`, because their briefs never mentioned `.gitignore`, and the merge stopped on three binary
   `.pyc` conflicts. The brief now carries the line, and it is the template's job, not the lane's memory.
