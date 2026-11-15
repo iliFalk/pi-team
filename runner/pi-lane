@@ -2185,6 +2185,9 @@ def eval_capture(argv: list) -> int:
     parser.add_argument("--orchestrator-usd", type=float, default=0.0,
                         help="what the orchestrator itself spent; the lanes are summed here")
     parser.add_argument("--note", default="", help="one line on what this arm did differently")
+    parser.add_argument("--receipts-project", default="",
+                        help="join the receipts under this project name; a renamed repository keeps "
+                             "the name it ran under")
     parser.add_argument("--no-gates", action="store_true", help="do not run the case's gate commands")
     args = parser.parse_args(argv)
     repo = os.path.realpath(Path(args.repo).expanduser())
@@ -2207,7 +2210,7 @@ def eval_capture(argv: list) -> int:
     lanes = [record for record in lane_records()
              if os.path.realpath(str(record.get("repo") or "")) == repo
              and (not args.plan or record.get("plan") == args.plan)]
-    name = Path(repo).name
+    name = args.receipts_project or Path(repo).name
     receipts = []
     for receipt in _receipts():
         # Receipts carry no repository path, only the project name, and one benchmark owns one repository —
@@ -2286,7 +2289,7 @@ def eval_capture(argv: list) -> int:
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(row, ensure_ascii=False) + "\n")
     print(f"{args.case}: captured — {'pass' if row['pass'] else 'fail'} · "
-          f"{row['lanes']} lane(s) · ${row['cost_usd']:.4f} · criteria "
+          f"{row['lanes']} lane(s) · ${row['cost_usd']:.4f} · receipts as {name} · criteria "
           f"{row['criteria']['covered']}/{row['criteria']['declared']} · "
           f"holdout {'ok' if row['holdout'].get('ok') else 'no'}")
     return 0 if row["pass"] else 1

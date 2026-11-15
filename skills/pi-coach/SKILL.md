@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.19.0
+version: 3.19.1
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -511,6 +511,10 @@ holdout state. Two rules live in it:
 - Receipts carry the project name, not the repository path, so the name is the join; a run's extra lanes
   (a `repair` opened outside the plan) belong in the row, and filtering receipts by the plan's lane list
   hid exactly the work a comparison needs to see.
+- **A renamed repository keeps the name it ran under.** After bench14's code moved to
+  `~/work/music-pipeline`, a capture joined on the new name, found no receipts and reported a run with
+  zero lanes — the whole bill gone. `--receipts-project bench14-lane` restores it; a row whose repository
+  no longer exists is history, and `repo_missing: true` says so instead of pretending it can be re-run.
 
 ## Lane: verify
 
