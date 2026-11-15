@@ -31,6 +31,47 @@ def _pf_bin() -> str:
     return ""
 
 
+FIX_PROMPT = ("Your last message carried no RESULT line. Reply with exactly one line and nothing else: "
+              'RESULT: {"files": ["a.py"], "verify": {"cmd": "true", "exit": 0}, "risks": [], '
+              '"followups": []}. Change nothing and run no command.')
+
+
+def _durable_turn(binary: str, lane_dir: Path, record: dict, lane: str, worktree: Path, prompt: str,
+                  question_timeout: int) -> tuple:
+    """One `pf session` call: returns (exit code, stdout, stderr)."""
+    mode = "resume" if record.pop("_durable_mode", "") == "resume" else "open"
+    argv = [binary, "session", "--dir", str(lane_dir), "--worktree", str(worktree), "--lane", lane,
+            "--mode", mode,
+            "--provider", str(record.get("provider") or DEFAULT_PROVIDER),
+            "--model", str(record.get("model") or ""),
+            "--thinking", str(record.get("thinking") or DEFAULT_THINKING),
+            "--autonomy", str(record.get("autonomy") or DEFAULT_AUTONOMY),
+            "--question-timeout", str(question_timeout), prompt]
+    # `pf` is a TypeScript checkout run through tsx: its imports resolve from ITS OWN directory, so the
+    # spawn happens there and the worktree travels as an argument.
+    executor_root = str(Path(binary).resolve().parent.parent)
+    done = subprocess.run(argv, capture_output=True, text=True, timeout=None, cwd=executor_root)
+    return int(done.returncode or 0), done.stdout or "", done.stderr or ""
+
+
+def _durable_text(lane_dir: Path) -> str:
+    events = lane_dir / "events.jsonl"
+    if not events.is_file():
+        return ""
+    text = ""
+    for line in events.read_text(errors="replace").splitlines()[-400:]:
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if event.get("type") != "message_end":
+            continue
+        said = assistant_text(event)
+        if said:
+            text = said
+    return text
+
+
 def _run_durable(lane_dir: Path, record: dict, lane: str, worktree: Path, task: str,
                  question_timeout: int) -> int:
     """One turn through pi-durable, driven by `pf session`.
@@ -47,18 +88,8 @@ def _run_durable(lane_dir: Path, record: dict, lane: str, worktree: Path, task: 
         write_record(lane_dir, record)
         print(f"{lane}: {record['error']}", file=sys.stderr)
         return 2
-    argv = [binary, "session", "--dir", str(lane_dir), "--worktree", str(worktree), "--lane", lane,
-            "--provider", str(record.get("provider") or DEFAULT_PROVIDER),
-            "--model", str(record.get("model") or ""),
-            "--thinking", str(record.get("thinking") or DEFAULT_THINKING),
-            "--autonomy", str(record.get("autonomy") or DEFAULT_AUTONOMY),
-            "--question-timeout", str(question_timeout), task]
-    # `pf` is a TypeScript checkout run through tsx: its imports resolve from ITS OWN directory, so the
-    # spawn happens there and the worktree travels as an argument.
-    executor_root = str(Path(binary).resolve().parent.parent)
     started = time.time()
-    done = subprocess.run(argv, capture_output=True, text=True, timeout=None, cwd=executor_root)
-    exit_code = int(done.returncode or 0)
+    exit_code, _, stderr = _durable_turn(binary, lane_dir, record, lane, worktree, task, question_timeout)
 
     # `pf` writes into the same record file and the same events.jsonl; read back what it learned and
     # keep every field the layer put there.
@@ -69,21 +100,22 @@ def _run_durable(lane_dir: Path, record: dict, lane: str, worktree: Path, task: 
             record[key] = fresh[key]
     record["finished"] = int(time.time())
     record["exit"] = exit_code
-    texts = []
-    events = lane_dir / "events.jsonl"
-    if events.is_file():
-        for line in events.read_text(errors="replace").splitlines()[-400:]:
-            try:
-                event = json.loads(line)
-            except ValueError:
-                continue
-            if event.get("type") != "message_end":
-                continue
-            said = assistant_text(event)
-            if said:
-                texts.append(said)
-    text = texts[-1] if texts else ""
+    text = _durable_text(lane_dir)
     result, result_status = parse_result(text)
+    # A durable turn can settle on a tool call with no closing message — pi keeps talking, pi-durable stops
+    # there. One repair turn through the same session is what the pi path already does for the same shape.
+    if result_status != "ok" and exit_code == 0 and not record.get("stop_reason"):
+        record["result_repairs"] = int(record.get("result_repairs") or 0) + 1
+        write_record(lane_dir, record)
+        exit_code, _, more = _durable_turn(binary, lane_dir, record, lane, worktree, FIX_PROMPT,
+                                          question_timeout)
+        stderr += more
+        fresh = read_json(lane_dir / "lane.json") or {}
+        for key in ("usage", "state", "runs", "submission_id", "stop_reason", "auto_answers"):
+            if key in fresh:
+                record[key] = fresh[key]
+        text = _durable_text(lane_dir)
+        result, result_status = parse_result(text)
     record["result"] = result
     record["result_status"] = result_status
     if "stop_reason" in record and record.get("stop_reason"):
@@ -94,8 +126,8 @@ def _run_durable(lane_dir: Path, record: dict, lane: str, worktree: Path, task: 
     write_record(lane_dir, record)
     print(f"{lane}: durable turn {record['state']} in {int(time.time() - started)}s "
           f"· ${float((record.get('usage') or {}).get('cost_usd') or 0):.4f}", file=sys.stderr)
-    if done.stderr.strip():
-        (lane_dir / "stderr.txt").open("a", encoding="utf-8").write(done.stderr)
+    if stderr.strip():
+        (lane_dir / "stderr.txt").open("a", encoding="utf-8").write(stderr)
     return exit_code
 
 
@@ -477,4 +509,6 @@ def resume_lane(argv: list) -> int:
     write_record(lane_dir, record)
     load_env_keys()
     print(f"{args.lane}: resumed in session {record.get('session_id')}")
+    if str(record.get("executor") or "pi") == "pf":
+        record["_durable_mode"] = "resume"
     return run_session(lane_dir, record, args.lane, worktree, prompt, args.question_timeout)

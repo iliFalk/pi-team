@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.21.0
+version: 3.22.0
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -245,9 +245,20 @@ pi-lane <lane> "<task>" --repo <path> --executor pf     # pi-durable through `pf
 - **The spawn happens in the executor's own directory.** `pf` is a TypeScript checkout run through tsx, so
   its imports resolve from its root; the worktree travels as an argument instead of as the cwd. Measured:
   spawned from the lane's cwd, `pf` died with `Cannot find package 'tsx'`.
-- **Measured, one word:** a durable lane through the layer ends `done`, exit 0, `$0.0002`, `RESULT ok`,
-  and `gate` stamps it like any other. What is NOT measured is the promise: killing a lane mid-run and
-  resuming it. Do not quote durability until that run exists.
+- **The four streams that had to be closed, and are:** `continue` (a new submission in the same durable
+  storage — measured: `runs 2`, events grow, cost accumulates), caps (`--max-turns 1` ends the lane with
+  `stop_reason: max_turns 1 >= 1` because pf reads the record's `budget`), `resume` (`pf session --mode
+  resume` picks up the submission the record carries instead of paying for the context again), and a
+  question under `--autonomy ask` (pf writes the same `question.json`, `pi-lane answer` writes the same
+  `answer.json`: measured `waiting` → answered → `done`).
+- **A durable turn can end on a tool call with no closing message.** `pi` keeps talking after a tool and
+  writes the RESULT; pi-durable settles at `stopReason: toolUse`, so a lane that created a file ended with
+  `result missing`. The layer now runs one repair turn through the same session — the same shape the `pi`
+  path already had. Measured after the fix: `result ok`, `result_repairs 1`.
+- **Measured end to end on one durable lane:** `plan` with `"executor": "pf"` → lane `done` with
+  `RESULT ok` and `acs` → merge → `gate --plan` → `holdout` → critic P0 0 · P1 0 → `close --auto`. What
+  is still NOT measured is the promise itself: killing a process mid-run and resuming it. Do not quote
+  durability until that run exists.
 
 ## Lane: wait
 
