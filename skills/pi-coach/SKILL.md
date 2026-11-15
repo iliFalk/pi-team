@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.19.1
+version: 3.20.0
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -712,6 +712,22 @@ templates with it, and say how far the line count moved.
   plan, gates, the criteria layer and every refusal for zero dollars, and each run has its own
   `mktemp` `HERMES_HOME`. Two defects were found there that a syntax check cannot see: the burst-loss in
   the event loop, and `wait --all` reading a missing record as finished.
+- **A green holdout can pass for the wrong reason.** Six scenarios for the audit fixes were written from
+  the findings; two of them asserted only the absence of harm, so an unrelated failure made them green —
+  a symlink to an *existing* file is caught by the earlier `exists()` guard, and a planted *garbage* file
+  fails in ffprobe, so neither reached the dangerous path. A scenario must exercise the dangerous variant
+  (a dangling link, real AAC bytes) **and** demand the positive outcome, or it measures nothing.
+- **Waves do not replace merging.** `waves: [[compose, paths], [names]]` starts `names` only after its
+  siblings settle, but every lane is cut from the same base and the orchestrator merges at the end, so
+  two lanes that touch one file still conflict — measured: `paths` and `names` collided in
+  `music/resolve.py` and in its tests. A wave helps only when you merge wave one before opening wave two.
+- **A fix can make two requirements mutually unsatisfiable.** AC26 said `docker compose config` must
+  exit 0 without a `.env`; the audit's AC31 demands it fail without a password. Both cannot hold. Read the
+  requirements file against itself before opening lanes, and amend the older criterion on the record.
+- **A gate command carries the environment the new behaviour needs.** After the compose lane made the
+  deploy fail closed, `docker compose config` alone exits 1 by design; the gate reads
+  `NAVIDROME_ADMIN_PASSWORD=gate docker compose config`. A gate that fails after a correct fix sends the
+  next lane hunting a defect that is a requirement.
 - **A prompt is not parallelism.** A solo orchestrator told, in capitals, to spawn three subagents in ONE
   `delegate_task` call spawned them one per call and waited for each — the manifest read `task_count: 1`,
   and the run was sequential with extra ceremony. Measured twice: a model decides its own concurrency, so
