@@ -1,7 +1,7 @@
 ---
 name: pi-coach
-description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.22.4
+description: "Use when running pi lanes, on pi or on pf (durable)."
+version: 3.22.5
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -23,6 +23,9 @@ lanewise state in `~/.thinkrail`. The files under `$HERMES_HOME/lanes` are the o
 
 ## When to Use
 
+- «полоса», «прогони полосой», «через pf», «на durable», «durable-полоса» — one procedure either way: the
+  executor is a flag (`--executor pi` or `--executor pf`), not a different workflow, and the record, gates
+  and receipts are the same files.
 - Work splits into slices that can run in parallel, or a task is big enough to own a worktree.
 - A lane finished and its work has to be read, verified, filed for review and closed.
 - `pi` misbehaves in a lane: read `references/pitfalls.md` before touching anything.
