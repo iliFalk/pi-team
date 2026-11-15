@@ -307,7 +307,8 @@ def hand_lane(argv: list) -> int:
                 return 1
     record["handed_at"] = int(time.time())
     write_record(lane_dir, record)
-    files, added, removed = _shortstat(str(record.get("repo") or ""), str(record.get("branch") or ""))
+    files, added, removed = _shortstat(str(record.get("repo") or ""), str(record.get("branch") or ""),
+                                      str(record.get("base_sha") or ""))
     print(f"{args.lane}: in review — {files} files +{added} -{removed}")
     return 0
 
@@ -448,7 +449,8 @@ def wait_all(argv: list) -> int:
                 files = added = removed = 0
                 if record and record.get("repo") and record.get("branch"):
                     try:
-                        files, added, removed = _shortstat(str(record["repo"]), str(record["branch"]))
+                        files, added, removed = _shortstat(str(record["repo"]), str(record["branch"]),
+                                                          str(record.get("base_sha") or ""))
                     except Exception:
                         pass
                 _report_lane(lane, state, record, question, files, added, removed, args.json)
@@ -504,7 +506,7 @@ def wait_lane(argv: list) -> int:
         branch = str(record.get("branch") or "")
         if repo and branch:
             try:
-                files, added, removed = _shortstat(repo, branch)
+                files, added, removed = _shortstat(repo, branch, str(record.get("base_sha") or ""))
             except Exception:
                 pass
         question = None

@@ -41,8 +41,17 @@ def _default_branch(repo: str) -> str:
     return ""
 
 
-def _shortstat(repo: str, sha: str) -> tuple:
-    rc, out, _ = _git(repo, "show", "--shortstat", "--format=", sha)
+def _shortstat(repo: str, sha: str, base: str = "") -> tuple:
+    """How much this lane changed, not how big the commit it was cut from is.
+
+    `git show <branch>` on a lane that has not committed prints the base commit's own stat — a read-only
+    audit reported "20 files +3820" for five hunters that added nothing. With a base, the range is the
+    lane's work; without one, the commit's own stat is the honest answer for a merge sha.
+    """
+    if base:
+        rc, out, _ = _git(repo, "diff", "--shortstat", f"{base}..{sha}")
+    else:
+        rc, out, _ = _git(repo, "show", "--shortstat", "--format=", sha)
     if rc != 0:
         return 0, 0, 0
     files = re.search(r"(\d+) files? changed", out)
