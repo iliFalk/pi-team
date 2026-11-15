@@ -3043,7 +3043,14 @@ def _mutation_targets(repo: str, pattern: str) -> list:
     for path in files:
         if not path.is_file():
             continue
-        if any(part in MUTATION_SKIP_DIRS for part in path.parts):
+        # The skip list applies INSIDE the repository, not above it: a lane's work lives under
+        # `<repo>/.worktrees/<lane>/`, and matching the absolute path made `mutate` find nothing there —
+        # the one tree where a lane's code exists before it is merged.
+        try:
+            relative = path.relative_to(root)
+        except ValueError:
+            relative = path
+        if any(part in MUTATION_SKIP_DIRS for part in relative.parts):
             continue
         out.append(path)
     return out
@@ -3076,8 +3083,12 @@ def _mutation_candidates(path: Path) -> list:
             continue
         if stripped.startswith(("import ", "from ")):
             continue
+        # An operator INSIDE a quoted string is prose, not behaviour: `help="write chapters.json and
+        # index.html"` produced three survivors that no test could ever kill. Match on the line with its
+        # string literals removed.
+        code = re.sub(r'"[^"]*"|\'[^\']*\'', '""', line)
         for before, after in MUTATION_RULES:
-            if before in line:
+            if before in code:
                 out.append((number, before, after))
                 break
     return out

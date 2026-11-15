@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.22.0
+version: 3.22.1
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -400,9 +400,13 @@ pi-lane mutate --repo ~/work/bench11-lane --files 'music/*.py' --max 6
 - **One mutant, one test run.** The operators are the ones a wrong thought flips: `==`/`!=`, `<`/`<=`,
   `>`/`>=`, `and`/`or`. A non-zero exit is a kill, a crash included; a timeout is a survival, because a
   suite that hangs judged nothing.
-- **Prose is not a mutation point.** Docstrings, comments and imports are skipped: the first run scored
-  2/6 because three "survivors" were `"artist and title"` inside a docstring. A mutant must land on
-  behaviour or the score measures the checker.
+- **Prose is not a mutation point.** Docstrings, comments, imports and operators inside a quoted string
+  are skipped: the first run scored 2/6 because three "survivors" were `"artist and title"` inside a
+  docstring, and a later run blamed `help="write chapters.json and index.html"`. Match the operator on the
+  line with its string literals removed. A mutant must land on behaviour or the score measures the checker.
+- **The skip list applies inside the repository, not above it.** `mutate --repo <repo>/.worktrees/<lane>`
+  found nothing, because `.worktrees` was matched against the absolute path — and that worktree is the one
+  place a lane's code exists before it is merged. Compare the path relative to the scanned root.
 - **The tree is read-only for the run.** A dirty tree is refused, every file is restored byte for byte,
   the subprocess runs with `PYTHONDONTWRITEBYTECODE=1`, and the run fails if the sha moved.
 - **`"mutation": true` in the plan makes it a close blocker**, like the holdout: `close --auto` refuses
