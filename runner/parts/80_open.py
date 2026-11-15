@@ -42,6 +42,8 @@ def open_lane(argv: list) -> int:
                         help="which provider the critic at `hand` uses (another vendor by default)")
     parser.add_argument("--review-model", default=DEFAULT_REVIEW_MODEL)
     parser.add_argument("--plan", default="", help="the plan that opened this lane; `pi-lane plan` sets it")
+    parser.add_argument("--executor", choices=("pi", "pf"), default="pi",
+                        help="who runs the model: `pi` (original) or `pf` (pi-durable, survives a kill)")
     parser.add_argument("--acs", action="append", default=[],
                         help="a criterion this lane answers (AC3); repeatable or comma separated")
     parser.add_argument("--autonomy", choices=("auto", "ask"), default=DEFAULT_AUTONOMY,
@@ -175,6 +177,7 @@ def open_lane(argv: list) -> int:
         "autonomy": args.autonomy,
         "plan": args.plan or None,
         "acs": _ac_list(args.acs),
+        "executor": args.executor,
         "budget": {
             "max_usd": args.max_usd,
             "max_turns": args.max_turns,

@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.20.0
+version: 3.21.0
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -224,6 +224,30 @@ pi-lane gate --plan music-sdd --cmd "npm run build"   # one extra command, appen
   together and the verb refuses (exit 2); an unknown id exits 1; a plan without gates is refused with a
   message that names `--cmd`.
 - `id` holds letters, digits, dot, dash and underscore, and defaults to `<repo>-<HHMMSS>`.
+
+## Two executors, one layer
+
+A lane's record, worktree, gates, holdout, mutation check and receipts are written by one implementation.
+The process that runs the model is a choice:
+
+```sh
+pi-lane <lane> "<task>" --repo <path> --executor pi     # the default: `pi --mode rpc`
+pi-lane <lane> "<task>" --repo <path> --executor pf     # pi-durable through `pf session`
+{"executor": "pf", ...}                                  # or once, for every lane in a plan
+```
+
+- **Only the executor differs.** The record carries `executor`, and every later verb — `gate`, `hand`,
+  `holdout`, `mutate`, `close`, `report`, `eval capture` — reads the same fields either way. A second
+  runner would be a second canon: its own fields, its own fixes, its own drift.
+- **`pf session` is the whole contract**: `--dir`, `--worktree`, `--lane`, provider, model, thinking,
+  autonomy, question timeout and one prompt. The caller owns the directory and the record; `pf` runs the
+  durable session and projects `events.jsonl` into it.
+- **The spawn happens in the executor's own directory.** `pf` is a TypeScript checkout run through tsx, so
+  its imports resolve from its root; the worktree travels as an argument instead of as the cwd. Measured:
+  spawned from the lane's cwd, `pf` died with `Cannot find package 'tsx'`.
+- **Measured, one word:** a durable lane through the layer ends `done`, exit 0, `$0.0002`, `RESULT ok`,
+  and `gate` stamps it like any other. What is NOT measured is the promise: killing a lane mid-run and
+  resuming it. Do not quote durability until that run exists.
 
 ## Lane: wait
 

@@ -20,6 +20,85 @@ def _read_lines(fd: int, pending: bytes, timeout: float):
     return [raw.decode("utf-8", "replace") for raw in complete if raw.strip()], pending, False
 
 
+def _pf_bin() -> str:
+    """The durable executor: `pf` on PATH, else the repository's bin, else nothing."""
+    found = shutil.which("pf")
+    if found:
+        return found
+    for candidate in (Path.home() / "work/pi-factory/bin/pf", Path("/usr/local/bin/pf")):
+        if candidate.exists():
+            return str(candidate)
+    return ""
+
+
+def _run_durable(lane_dir: Path, record: dict, lane: str, worktree: Path, task: str,
+                 question_timeout: int) -> int:
+    """One turn through pi-durable, driven by `pf session`.
+
+    The lane keeps OUR record and OUR worktree: `pf` is handed the directory and the session only, writes
+    its projections into the same folder, and returns. So the gates, the holdout, the mutation check, the
+    receipts and the panel see one shape, and the only difference between two lanes is which process runs
+    the model.
+    """
+    binary = _pf_bin()
+    if not binary:
+        record["state"] = "failed"
+        record["error"] = "the durable executor is missing: install pi-factory or put `pf` on PATH"
+        write_record(lane_dir, record)
+        print(f"{lane}: {record['error']}", file=sys.stderr)
+        return 2
+    argv = [binary, "session", "--dir", str(lane_dir), "--worktree", str(worktree), "--lane", lane,
+            "--provider", str(record.get("provider") or DEFAULT_PROVIDER),
+            "--model", str(record.get("model") or ""),
+            "--thinking", str(record.get("thinking") or DEFAULT_THINKING),
+            "--autonomy", str(record.get("autonomy") or DEFAULT_AUTONOMY),
+            "--question-timeout", str(question_timeout), task]
+    # `pf` is a TypeScript checkout run through tsx: its imports resolve from ITS OWN directory, so the
+    # spawn happens there and the worktree travels as an argument.
+    executor_root = str(Path(binary).resolve().parent.parent)
+    started = time.time()
+    done = subprocess.run(argv, capture_output=True, text=True, timeout=None, cwd=executor_root)
+    exit_code = int(done.returncode or 0)
+
+    # `pf` writes into the same record file and the same events.jsonl; read back what it learned and
+    # keep every field the layer put there.
+    fresh = read_json(lane_dir / "lane.json") or {}
+    for key in ("usage", "state", "result", "result_status", "runs", "submission_id",
+                "stop_reason", "auto_answers", "projected_count"):
+        if key in fresh:
+            record[key] = fresh[key]
+    record["finished"] = int(time.time())
+    record["exit"] = exit_code
+    texts = []
+    events = lane_dir / "events.jsonl"
+    if events.is_file():
+        for line in events.read_text(errors="replace").splitlines()[-400:]:
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if event.get("type") != "message_end":
+                continue
+            said = assistant_text(event)
+            if said:
+                texts.append(said)
+    text = texts[-1] if texts else ""
+    result, result_status = parse_result(text)
+    record["result"] = result
+    record["result_status"] = result_status
+    if "stop_reason" in record and record.get("stop_reason"):
+        record["state"] = "stopped"
+    else:
+        record.pop("stop_reason", None)
+        record["state"] = "done" if (exit_code == 0 and text) else "failed"
+    write_record(lane_dir, record)
+    print(f"{lane}: durable turn {record['state']} in {int(time.time() - started)}s "
+          f"· ${float((record.get('usage') or {}).get('cost_usd') or 0):.4f}", file=sys.stderr)
+    if done.stderr.strip():
+        (lane_dir / "stderr.txt").open("a", encoding="utf-8").write(done.stderr)
+    return exit_code
+
+
 def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: str, question_timeout: int,
                 repair: bool = True) -> int:
     """One `pi --mode rpc` turn: the lane's first task or a continuation of its session.
@@ -28,6 +107,9 @@ def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: s
     run, `idle_timeout` seconds without an event. A breach ends the run with state `stopped` and a
     `stop_reason`, so a lane that loops on a failing test cannot spend the night.
     """
+    if str(record.get("executor") or "pi") == "pf":
+        return _run_durable(lane_dir, record, lane, worktree, task, question_timeout)
+
     events_path = lane_dir / "events.jsonl"
     stderr_path = lane_dir / "stderr.txt"
     question_path = lane_dir / "question.json"

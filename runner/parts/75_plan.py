@@ -72,6 +72,9 @@ def _spawn(name: str, task: str, entry: dict, spec: dict, repo: str, plan_id: st
             "--plan", plan_id]
     for ac_id in _ac_list(entry.get("acs") or []):
         argv += ["--acs", ac_id]
+    executor = entry.get("executor") or spec.get("executor")
+    if executor:
+        argv += ["--executor", str(executor)]
     for key, flag in (("provider", "--provider"), ("model", "--model"), ("thinking", "--thinking"),
                       ("autonomy", "--autonomy"), ("feature", "--feature"), ("group", "--feature"),
                       ("max_usd", "--max-usd"), ("max_turns", "--max-turns"),
