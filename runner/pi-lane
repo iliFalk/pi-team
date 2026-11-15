@@ -1338,6 +1338,11 @@ def close_lanes(argv: list) -> int:
             "review_p0": len((record.get("review") or {}).get("p0") or []),
             "review_p1": len((record.get("review") or {}).get("p1") or []),
             "autonomy": record.get("autonomy") or "",
+            # The checks that justified the merge die with the record too: keep the verdicts, not only
+            # the money. A receipt that says what a lane cost and not what it proved is half a receipt.
+            "holdout": record.get("holdout") or {},
+            "mutation": record.get("mutation") or {},
+            "acs_check": record.get("acs_check") or {},
         }
         (root / "closed.jsonl").open("a", encoding="utf-8").write(
             json.dumps(receipt, ensure_ascii=False) + "\n"
@@ -2236,8 +2241,15 @@ def eval_capture(argv: list) -> int:
     criteria = spec_criteria(spec_path(repo))
     summary = spec_summary(repo, [ac_id for ac_id, _, _ in criteria]) if criteria else {
         "declared": [], "covered": [], "unproven": [], "missing": []}
+    # The plan's own checks.json outlives the lanes; the records are the fallback for a run that closed
+    # before this file existed.
+    plan_checks = (read_json(hermes_home() / "plans" / args.plan / "checks.json") or {}) if args.plan else {}
     holds = [record.get("holdout") or {} for record in lanes if record.get("holdout")]
-    holdout = max(holds, key=lambda item: item.get("ran_at") or 0) if holds else {}
+    holdout = plan_checks.get("holdout") or (max(holds, key=lambda item: item.get("ran_at") or 0)
+                                             if holds else {})
+    mutants = [record.get("mutation") or {} for record in lanes if record.get("mutation")]
+    mutation = plan_checks.get("mutation") or (max(mutants, key=lambda item: item.get("ran_at") or 0)
+                                               if mutants else {})
 
     row = {
         "case": args.case,
@@ -2263,6 +2275,9 @@ def eval_capture(argv: list) -> int:
                      "missing": summary.get("missing") or []},
         "holdout": {"ok": bool(holdout.get("ok")), "sha": holdout.get("sha") or "",
                     "scenarios": len(holdout.get("scenarios") or [])} if holdout else {},
+        "mutation": {"ok": bool(mutation.get("ok")), "sha": mutation.get("sha") or "",
+                     "score": mutation.get("score"), "killed": mutation.get("killed"),
+                     "total": mutation.get("total")} if mutation else {},
         "receipts": len(receipts),
         "note": args.note,
     }
@@ -2299,18 +2314,21 @@ def eval_table(argv: list) -> int:
         print("no eval results for that case")
         return 0
     print(f"{'case':18s} {'arm':26s} {'res':5s} {'wall':>6s} {'lanes':>5s} {'usd':>8s} "
-          f"{'crit':>7s} {'hold':4s}  gates")
+          f"{'crit':>7s} {'hold':4s} {'mut':7s}  gates")
     for row in sorted(rows, key=lambda r: (r.get("case") or "", r.get("at") or 0)):
         failures = sum(1 for gate in row.get("gates") or [] if gate.get("exit"))
         gates = "ok" if not failures else f"{failures} fail"
         criteria = row.get("criteria") or {}
         arms = f"{criteria.get('covered', 0)}/{criteria.get('declared', 0)}" if criteria else "-"
         holdout = "ok" if (row.get("holdout") or {}).get("ok") else "no"
+        mutant = row.get("mutation") or {}
+        mut = (f"{mutant.get('killed')}/{mutant.get('total')}"
+               if mutant and mutant.get("total") else "no")
         arm = str(row.get("note") or row.get("plan") or row.get("model") or "")[:26]
         print(f"{str(row.get('case'))[:18]:18s} {arm:26s} "
               f"{'pass' if row.get('pass') else 'fail':5s} {int(row.get('wall_seconds') or 0):5d}s "
               f"{int(row.get('lanes') or 0):5d} {float(row.get('cost_usd') or 0):8.4f} "
-              f"{float(row.get('critic_usd') or 0):7.4f} {holdout:4s}  {gates}  acs {arms}")
+              f"{float(row.get('critic_usd') or 0):7.4f} {holdout:4s} {mut:7s}  {gates}  acs {arms}")
     return 0
 
 
@@ -3048,6 +3066,7 @@ def mutate(argv: list) -> int:
     for record in records:
         record["mutation"] = check
         write_record(hermes_home() / "lanes" / str(record.get("lane")), record)
+    write_plan_check(args.plan, "mutation", check)
 
     rc, after_head, _ = _git(repo, "rev-parse", "HEAD")
     if after_head != head:
@@ -3384,6 +3403,23 @@ HOLDOUT_DIR = "holdout"
 SCENARIO_SUFFIXES = (".py", ".sh")
 
 
+def write_plan_check(plan_id: str, key: str, value: dict) -> None:
+    """Keep the verdict beside the plan, not only on the lanes.
+
+    A close deletes the lane record, and a receipt proved to carry the merge facts and not the checks —
+    so the two verdicts that justify a merge disappeared exactly when somebody would want to read them.
+    `$HERMES_HOME/plans/<id>/checks.json` outlives every lane of the plan.
+    """
+    if not plan_id:
+        return
+    folder = hermes_home() / "plans" / plan_id
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / "checks.json"
+    data = read_json(path) or {}
+    data[key] = value
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
 def holdout_folder(plan_id: str, path: str = "") -> Path:
     return Path(path).expanduser() if path else hermes_home() / HOLDOUT_DIR / plan_id
 
@@ -3493,6 +3529,7 @@ def holdout(argv: list) -> int:
     for record in records:
         record["holdout"] = check
         write_record(hermes_home() / "lanes" / str(record.get("lane")), record)
+    write_plan_check(args.plan, "holdout", check)
 
     if args.json:
         print(json.dumps(check, ensure_ascii=False))

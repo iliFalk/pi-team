@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.18.0
+version: 3.19.0
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -375,6 +375,17 @@ pi-lane mutate --repo ~/work/bench11-lane --files 'music/*.py' --max 6
 - **A survivor is evidence, not a verdict.** An equivalent mutant (an `or` whose branch never differs)
   survives and is no hole — the orchestrator reads the site before demanding a test. Measured: bench11
   5/6 with one boundary survivor at `cli.py:124`, bench12 2/6.
+
+**Both verdicts outlive the lanes.** `holdout` and `mutate` write
+`$HERMES_HOME/plans/<id>/checks.json` as well as the lane record, and `close` copies `holdout`,
+`mutation` and `acs_check` into the receipt. A record dies with the close and a receipt used to carry
+only the money: the two checks that justified a merge disappeared exactly when somebody would read them.
+
+**The whole layer, measured once.** bench14 ran the same task as bench11 with requirements, holdout,
+the critic's map and `"mutation": true`: 2055 s against 2115 s, $0.2551 against $0.2333, coverage 30/30
+both, holdout 4/4, mutation **8/8 against bench11's 5/6**. The extra checks cost two repair lanes and
+about a minute of clock; they bought tests that notice a changed operator, which the earlier runs did
+not have.
 
 ## Lane: autonomy — `auto` or `ask`
 

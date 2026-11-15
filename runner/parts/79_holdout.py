@@ -32,6 +32,23 @@ HOLDOUT_DIR = "holdout"
 SCENARIO_SUFFIXES = (".py", ".sh")
 
 
+def write_plan_check(plan_id: str, key: str, value: dict) -> None:
+    """Keep the verdict beside the plan, not only on the lanes.
+
+    A close deletes the lane record, and a receipt proved to carry the merge facts and not the checks —
+    so the two verdicts that justify a merge disappeared exactly when somebody would want to read them.
+    `$HERMES_HOME/plans/<id>/checks.json` outlives every lane of the plan.
+    """
+    if not plan_id:
+        return
+    folder = hermes_home() / "plans" / plan_id
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / "checks.json"
+    data = read_json(path) or {}
+    data[key] = value
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
 def holdout_folder(plan_id: str, path: str = "") -> Path:
     return Path(path).expanduser() if path else hermes_home() / HOLDOUT_DIR / plan_id
 
@@ -141,6 +158,7 @@ def holdout(argv: list) -> int:
     for record in records:
         record["holdout"] = check
         write_record(hermes_home() / "lanes" / str(record.get("lane")), record)
+    write_plan_check(args.plan, "holdout", check)
 
     if args.json:
         print(json.dumps(check, ensure_ascii=False))

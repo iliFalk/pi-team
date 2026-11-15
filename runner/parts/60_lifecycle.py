@@ -154,6 +154,11 @@ def close_lanes(argv: list) -> int:
             "review_p0": len((record.get("review") or {}).get("p0") or []),
             "review_p1": len((record.get("review") or {}).get("p1") or []),
             "autonomy": record.get("autonomy") or "",
+            # The checks that justified the merge die with the record too: keep the verdicts, not only
+            # the money. A receipt that says what a lane cost and not what it proved is half a receipt.
+            "holdout": record.get("holdout") or {},
+            "mutation": record.get("mutation") or {},
+            "acs_check": record.get("acs_check") or {},
         }
         (root / "closed.jsonl").open("a", encoding="utf-8").write(
             json.dumps(receipt, ensure_ascii=False) + "\n"

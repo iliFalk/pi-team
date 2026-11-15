@@ -203,6 +203,7 @@ def mutate(argv: list) -> int:
     for record in records:
         record["mutation"] = check
         write_record(hermes_home() / "lanes" / str(record.get("lane")), record)
+    write_plan_check(args.plan, "mutation", check)
 
     rc, after_head, _ = _git(repo, "rev-parse", "HEAD")
     if after_head != head:
