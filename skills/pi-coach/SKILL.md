@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running, steering or checking pi lanes (pi-team)."
-version: 3.22.1
+version: 3.22.2
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -763,6 +763,9 @@ templates with it, and say how far the line count moved.
 - **A fix can make two requirements mutually unsatisfiable.** AC26 said `docker compose config` must
   exit 0 without a `.env`; the audit's AC31 demands it fail without a password. Both cannot hold. Read the
   requirements file against itself before opening lanes, and amend the older criterion on the record.
+- **A lane that commits bytecode breaks the next merge.** Two arms of one comparison both committed
+  `__pycache__`, because their briefs never mentioned `.gitignore`, and the merge stopped on three binary
+  `.pyc` conflicts. The brief now carries the line, and it is the template's job, not the lane's memory.
 - **A gate command carries the environment the new behaviour needs.** After the compose lane made the
   deploy fail closed, `docker compose config` alone exits 1 by design; the gate reads
   `NAVIDROME_ADMIN_PASSWORD=gate docker compose config`. A gate that fails after a correct fix sends the

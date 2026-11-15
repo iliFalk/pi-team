@@ -17,6 +17,7 @@ task description, not a slice, and it is paid for as input tokens by every lane 
         <runtime and version>       <tool available? yes/no>
         test command   <the exact command>
         gate command   <the exact command>
+        .gitignore     holds __pycache__/ and *.pyc — never commit bytecode
 
     ## Names this slice must use (the contract other lanes code against)
         <symbol or key>    <signature or meaning>
@@ -55,7 +56,9 @@ Rules that keep it small:
    return shape: `-> list[dict]` with the dict keys named, or `-> dict` with its keys named. Two measured
    repair rounds came from a sibling that returned a dict where the first lane expected a list; the brief
    named the function and not its result. The reasoning stays with the orchestrator.
-4. **The gate belongs in the brief**, verbatim, so a lane self-checks instead of being re-run.
+4. **The gate belongs in the brief**, verbatim, so a lane self-checks instead of being re-run. So does the
+   `.gitignore` line: two lanes that committed `__pycache__` merged into a binary conflict, and the only
+   thing a `.pyc` ever contributes to a repository is a merge nobody can resolve by reading.
 5. **A returned dict is asserted, not described.** A slice whose function returns a dict asserts the
    result against the contract's constant — `self.assertEqual(set(result), set(INGEST_RESULT_KEYS))` —
    in the test that exercises it. A signature test proves the parameters; it never notices that the
