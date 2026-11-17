@@ -30,7 +30,20 @@ lane = os.path.basename(os.getcwd().split(".worktrees/")[-1]) or "stub"
 with open(os.path.join(os.getcwd(), f"stub_{lane}.txt"), "w", encoding="utf-8") as handle:
     handle.write("stub work\n")
 
-acs = [piece.strip().upper() for piece in (os.environ.get("STUB_ACS") or "").split(",") if piece.strip()]
+def stub_acs() -> list:
+    """The criteria this fake lane claims.
+
+    A runner hands `pi` a minimal environment, so a case cannot rely on exporting STUB_ACS: it writes
+    the value into `stub_acs` beside this script. An exported STUB_ACS still wins, for a hand run.
+    """
+    raw = os.environ.get("STUB_ACS")
+    if raw is None:
+        beside = os.path.join(os.path.dirname(os.path.abspath(__file__)), "stub_acs")
+        raw = open(beside, encoding="utf-8").read() if os.path.exists(beside) else ""
+    return [piece.strip().upper() for piece in raw.split(",") if piece.strip()]
+
+
+acs = stub_acs()
 text = ("Edited one file.\n"
         'RESULT: {"files": ["stub_%s.txt"], "verify": {"cmd": "python3 -m unittest discover -s tests", '
         '"exit": 0}%s, "risks": [], "followups": []}'

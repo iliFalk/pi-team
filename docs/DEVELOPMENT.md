@@ -85,16 +85,15 @@ tokens, cost, `state`, `pass`, and every gate's exit code. `pi-lane eval table` 
 | `/lanes/<lane>/hand` | POST | file a finished lane on the review shelf |
 | `/review/send` | POST | put the whole review queue into the chat as one list |
 | `/projects/check` | POST | check a repository before anything is promised |
-| `/projects/prepare` | POST | a project asked for by its URL: it appears at once, the agent clones |
+| `/projects/prepare` | POST | a project asked for by its URL: it appears at once, then `git clone` runs |
 | `/projects/cancel` | POST | drop a project placeholder that was never cloned |
 | `/features/prepare` | POST | a feature asked for in one line: it appears at once |
 | `/features/cancel` | POST | drop a placeholder that never became a feature |
-| `/update/request` | POST | ask the agent to update the plugin; the route only injects the message |
 
-There is **no route that writes the plugin's own files**. A catalog install is pinned to one commit, and a
-plugin that pulls and replaces itself would move an installed copy to a commit nobody reviewed. The panel's
-`✓` on the update control calls `/update/request`, which puts the request into the chat; the agent does the
-copy.
+There is **no route that writes the plugin's own files, and no update route at all**. A catalog install is
+pinned to one commit, and a plugin that pulls and replaces itself would move an installed copy to a commit
+nobody reviewed. An update is `hermes plugins update pi-team` plus a backend restart. The panel has no
+control for it: a button that asks a chat to pull and copy moves the install off the pin just the same.
 
 The backend module is imported once, at `hermes-serve` start. An edit reaches the live route only after
 `systemctl --user restart hermes-serve`.
@@ -154,8 +153,8 @@ copy it into the project again; never edit a copy in place.
 ## Editing the runner
 
 `runner/pi-lane` is GENERATED. Edit `runner/parts/*.py` — one topic per file, numbered in build order —
-then run `python3 runner/build.py`. The built file is what installs into `~/.hermes/scripts`, because the
-plugin copies files there and a package would not survive the copy.
+then run `python3 runner/build.py`. The built file is what the backend runs, from the plugin's own
+`runner/` directory: one file, so the panel never depends on a package install and never on a stale copy.
 
 `python3 runner/build.py --check` fails when the built file is older than the parts, and it runs in the
 pre-ship list below. The parts hold: constants, store and records, text parsing, the critic, lane facts

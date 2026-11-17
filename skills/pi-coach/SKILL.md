@@ -45,31 +45,31 @@ Depth lives beside this file, and each is read only when a step names it:
 ```sh
 pi --version                     # 1.4.0 on the agent machine
 pi-lane --help                   # must answer on PATH
-ls ~/.hermes/scripts/pi-lane     # the runner
+ls ~/.hermes/plugins/pi-team/runner/pi-lane     # the runner
 ```
 
-**`pi-lane` lives in `~/.hermes/scripts`, which is not on PATH in a nested `hermes chat` run** — a
-benchmark orchestrator spent eleven shell calls finding that out (`which`, `echo $PATH`, `ls`) before it
-could open its first lane. Symlink the three scripts into a directory that is on PATH for every process:
+**`pi-lane` lives in the plugin's own `runner/` directory, which is not on PATH** — a benchmark
+orchestrator spent eleven shell calls finding that out (`which`, `echo $PATH`, `ls`) before it could
+open its first lane. Nothing copies the runner out of the plugin any more: a copy goes stale on the
+next update, so the panel would drive one version while you read another. Call it by its full path, or
+symlink it once for the session:
 
 ```sh
-ln -sf ~/.hermes/scripts/pi-lane ~/.hermes/scripts/pi-project ~/.hermes/scripts/pi-feature ~/.local/bin/
+ln -sf ~/.hermes/plugins/pi-team/runner/pi-lane ~/.local/bin/
 ```
 
-The runner refuses a bad lane name, a non-repository path and a missing `pi`. It loads the provider
-key itself: Hermes never exports one to a shell, so the runner asks Hermes's secret scope first and
-falls back to the profile file for `OPENCODE_API_KEY`, `DEEPSEEK_API_KEY`, `NVIDIA_API_KEY`,
-`OPENROUTER_API_KEY` and `ANTHROPIC_API_KEY`. It never prints a value.
+The runner refuses a bad lane name, a non-repository path and a missing `pi`. It loads ONE provider key
+— the one its `--provider` names — through Hermes's secret scope (`agent.secret_scope.get_secret`), and
+reads no `.env` of its own. A key already in the environment wins, which is how the panel hands a lane
+its key. It never prints a value.
 
-Two rules make that loading work, and both were learned from a lane that died with
-`No API key found for opencode-go` while `.env` was complete:
+Two rules make that loading work:
 
-- **One key present is not all keys present.** Never return early because some known key is already
-  exported: a gateway exports the one key its own provider needs, so a lane for a second provider found
-  `NVIDIA_API_KEY`, skipped the file, and started with nothing. The file is always read.
-- **Hermes and pi spell one key differently.** `OPENCODE_GO_API_KEY` in `.env` is `OPENCODE_API_KEY` to
-  `pi`, so a complete environment still answers `credentials_not_configured`. Keep the alias table in
-  the runner and apply it after every load.
+- **One key per lane, and the alias still matters.** `OPENCODE_GO_API_KEY` is `OPENCODE_API_KEY` to
+  `pi`, so a correct environment still answers `credentials_not_configured` without the alias pass.
+- **A child gets a minimal environment.** `pi`, the critic, the gate, the holdout and the mutation run
+  receive PATH, HOME, LANG, `GIT_TERMINAL_PROMPT=0` and this lane's own key — never every Hermes
+  credential. `pi` runs code from a repository somebody else wrote.
 
 Defaults: provider `nvidia`, model `nvidia/nemotron-3.5-super-vl-120b-a12b`, thinking `medium`.
 

@@ -19,42 +19,56 @@ def apply_aliases() -> None:
             os.environ[target] = value
 
 
-def load_env_keys() -> None:
-    """Put the provider keys into this process, for the pi run it starts.
+def load_provider_key(provider: str) -> None:
+    """Put this lane's provider key into the process, through Hermes's secret scope.
 
-    Hermes's own secret scope comes first: run the runner with Hermes's interpreter and the keys
-    arrive profile-scoped, exactly as Hermes reads them. A plain `python3` has no such scope, so the
-    fallback parses the profile's `.env` — the one file the keys live in when no scope is installed.
+    One key, never six. `agent.secret_scope.get_secret` is the sanctioned route: it composes the
+    profile's `.env` with the environment and honours the active profile under multiplexing, so this
+    module reads no file of its own. A key that already sits in the environment — the dashboard
+    resolves the one a lane needs and passes it in — is left alone.
     """
+    name = PROVIDER_KEYS.get(provider or "", "")
+    if not name or (os.environ.get(name) or "").strip():
+        apply_aliases()
+        return
     try:
         from agent.secret_scope import get_secret
 
-        for name in ENV_KEYS:
-            value = (get_secret(name) or "").strip()
-            if value and not os.environ.get(name):
-                os.environ[name] = value
+        value = (get_secret(name) or "").strip()
     except Exception:
-        pass
-    # No early return here. A scope that answers for one provider says nothing about another, and a
-    # single unrelated key in the environment — the gateway's own, say — used to stop this fallback
-    # before it read the file. The file is the last place a key can come from: read it always.
-    env_file = hermes_home() / ".env"
-    if not env_file.is_file():
-        return
-    try:
-        lines = env_file.read_text(errors="replace").splitlines()
-    except OSError:
-        return
-    for line in lines:
-        name, sep, value = line.partition("=")
-        name = name.strip()
-        if not sep or name not in ENV_KEYS:
-            continue
-        value = value.strip()
-        target = ALIASES.get(name, name)
-        if not os.environ.get(target):
-            os.environ[target] = value
+        value = ""
+    if value:
+        os.environ[name] = value
     apply_aliases()
+
+
+def minimal_env(provider: str = "", extra: dict | None = None) -> dict:
+    """The whole environment a child gets: a PATH, a HOME, a locale, one provider key.
+
+    `pi` and the test commands it runs work inside a repository somebody else wrote. They inherit
+    nothing that can spend money or reach another service, so an injected command finds no
+    credential to read. `extra` carries the few names a command genuinely needs.
+    """
+    env = {
+        "PATH": os.environ.get("PATH") or "/usr/local/bin:/usr/bin:/bin",
+        "HOME": os.environ.get("HOME") or str(Path.home()),
+        "LANG": os.environ.get("LANG") or "C.UTF-8",
+        "GIT_TERMINAL_PROMPT": "0",
+    }
+    for name in ("TMPDIR", "TZ"):
+        value = os.environ.get(name)
+        if value:
+            env[name] = value
+    key = PROVIDER_KEYS.get(provider or "", "")
+    value = (os.environ.get(key) or "").strip() if key else ""
+    if value:
+        env[key] = value
+        for source, target in ALIASES.items():
+            if source == key:
+                env[target] = value
+    if extra:
+        env.update({name: str(value) for name, value in extra.items()})
+    return env
 
 
 def write_record(lane_dir: Path, record: dict) -> None:

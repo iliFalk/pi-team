@@ -75,7 +75,7 @@ def run_review(lane_dir: Path, record: dict, lane: str) -> dict | None:
     )
     provider = str(record.get("review_provider") or DEFAULT_REVIEW_PROVIDER)
     model = str(record.get("review_model") or DEFAULT_REVIEW_MODEL)
-    load_env_keys()
+    load_provider_key(provider)
     cmd = [
         "pi", "-p", "-nt", "--no-session", "--mode", "json",
         "--provider", provider, "--model", model, "--thinking", "low", prompt,
@@ -84,7 +84,7 @@ def run_review(lane_dir: Path, record: dict, lane: str) -> dict | None:
     try:
         done = subprocess.run(
             cmd, capture_output=True, text=True, timeout=REVIEW_TIMEOUT,
-            stdin=subprocess.DEVNULL, cwd=str(worktree), check=False,
+            stdin=subprocess.DEVNULL, cwd=str(worktree), check=False, env=minimal_env(provider),
         )
     except subprocess.TimeoutExpired:
         print(f"{lane}: review — the critic timed out after {REVIEW_TIMEOUT}s", file=sys.stderr)

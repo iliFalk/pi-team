@@ -18,30 +18,64 @@ import subprocess
 import sys
 import time
 
-ENV_KEYS = ("NVIDIA_API_KEY", "DEEPSEEK_API_KEY", "OPENROUTER_API_KEY", "OPENCODE_GO_API_KEY")
+# The variable that holds each provider's key. The probe asks for one of them, never for all.
+PROVIDER_KEYS = {
+    "nvidia": "NVIDIA_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+    "opencode": "OPENCODE_API_KEY",
+    "opencode-go": "OPENCODE_GO_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+}
 DIALOG_METHODS = {"select", "confirm", "input", "editor"}
 PROVIDER = os.environ.get("PROBE_PROVIDER", "nvidia")
 MODEL = os.environ.get("PROBE_MODEL", "nvidia/nemotron-3.5-super-vl-120b-a12b")
 TIMEOUT = 150
 
 
-def load_keys() -> None:
-    env_file = pathlib.Path.home() / ".hermes" / ".env"
-    if not env_file.is_file():
+def load_key() -> None:
+    """Put the probe provider's key into the process, through Hermes's secret scope.
+
+    No file is read here: `agent.secret_scope.get_secret` is the one route to a key, and a key that
+    already sits in the environment is left alone.
+    """
+    name = PROVIDER_KEYS.get(PROVIDER, "")
+    if not name or (os.environ.get(name) or "").strip():
         return
-    for line in env_file.read_text(errors="replace").splitlines():
-        name, sep, value = line.partition("=")
-        if sep and name in ENV_KEYS and not os.environ.get(name):
-            os.environ[name] = value.strip()
+    try:
+        from agent.secret_scope import get_secret
+
+        value = (get_secret(name) or "").strip()
+    except Exception:
+        return
+    if value:
+        os.environ[name] = value
+
+
+def child_env() -> dict:
+    """The environment the probe hands `pi`: a PATH, a HOME, a locale, the one key it needs."""
+    env = {
+        "PATH": os.environ.get("PATH") or "/usr/local/bin:/usr/bin:/bin",
+        "HOME": os.environ.get("HOME") or str(pathlib.Path.home()),
+        "LANG": os.environ.get("LANG") or "C.UTF-8",
+        "GIT_TERMINAL_PROMPT": "0",
+    }
+    name = PROVIDER_KEYS.get(PROVIDER, "")
+    value = (os.environ.get(name) or "").strip() if name else ""
+    if value:
+        env[name] = value
+        if name == "OPENCODE_GO_API_KEY":
+            env["OPENCODE_API_KEY"] = value
+    return env
 
 
 def main() -> int:
     repo = sys.argv[1] if len(sys.argv) > 1 else os.getcwd()
-    load_keys()
+    load_key()
     cmd = ["pi", "--mode", "rpc", "--no-session", "--provider", PROVIDER, "--model", MODEL,
            "--thinking", "low"]
     proc = subprocess.Popen(cmd, cwd=repo, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, text=True, bufsize=1)
+                            stderr=subprocess.PIPE, text=True, bufsize=1, env=child_env())
     assert proc.stdin and proc.stdout
     proc.stdin.write(json.dumps({"type": "prompt", "message":
         "Use the ask_user_question tool: ask me to choose between option A and option B. Then stop."}) + "\n")

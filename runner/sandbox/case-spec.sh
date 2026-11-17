@@ -6,7 +6,7 @@ SCR="$HOME/.hermes/cache/scratch/pi-gate-plan"
 export HERMES_HOME="$SCR/home-spec"
 export PATH="$SCR/bin:$PATH"
 export STUB_ACS="AC1,AC2"
-RUNNER="$HOME/.hermes/scripts/pi-lane"
+RUNNER="$(cd "$(dirname "$0")/.." && pwd)/pi-lane"
 REPO="$SCR/spec-repo"
 fail=0
 ok()  { echo "OK   $*"; }

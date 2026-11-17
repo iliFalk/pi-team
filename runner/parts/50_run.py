@@ -50,7 +50,8 @@ def _durable_turn(binary: str, lane_dir: Path, record: dict, lane: str, worktree
     # `pf` is a TypeScript checkout run through tsx: its imports resolve from ITS OWN directory, so the
     # spawn happens there and the worktree travels as an argument.
     executor_root = str(Path(binary).resolve().parent.parent)
-    done = subprocess.run(argv, capture_output=True, text=True, timeout=None, cwd=executor_root)
+    done = subprocess.run(argv, capture_output=True, text=True, timeout=None, cwd=executor_root,
+                          env=minimal_env(str(record.get("provider") or DEFAULT_PROVIDER)))
     return int(done.returncode or 0), done.stdout or "", done.stderr or ""
 
 
@@ -172,6 +173,7 @@ def run_session(lane_dir: Path, record: dict, lane: str, worktree: Path, task: s
         proc = subprocess.Popen(
             cmd, cwd=str(worktree), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=stderr_handle, text=True, bufsize=1,
+            env=minimal_env(str(record.get("provider") or DEFAULT_PROVIDER)),
         )
         assert proc.stdin is not None and proc.stdout is not None
         proc.stdin.write(json.dumps({"type": "prompt", "message": task}) + "\n")
@@ -414,7 +416,7 @@ def continue_lane(argv: list) -> int:
     record["exit"] = None
     record["finished"] = None
     write_record(lane_dir, record)
-    load_env_keys()
+    load_provider_key(str(record.get("provider") or DEFAULT_PROVIDER))
     print(f"{args.lane}: continuing")
     return run_session(lane_dir, record, args.lane, worktree, args.text, args.question_timeout)
 
@@ -507,7 +509,7 @@ def resume_lane(argv: list) -> int:
     record.pop("stop_reason", None)
     record.pop("orphaned_at", None)
     write_record(lane_dir, record)
-    load_env_keys()
+    load_provider_key(str(record.get("provider") or DEFAULT_PROVIDER))
     print(f"{args.lane}: resumed in session {record.get('session_id')}")
     if str(record.get("executor") or "pi") == "pf":
         record["_durable_mode"] = "resume"

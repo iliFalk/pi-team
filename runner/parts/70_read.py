@@ -128,7 +128,7 @@ def eval_run(argv: list) -> int:
     gates = []
     for command in case.get("gates") or []:
         done = subprocess.run(command, shell=True, cwd=str(repo), capture_output=True, text=True,
-                              timeout=1800, check=False)
+                              timeout=1800, check=False, env=minimal_env())
         gates.append({"cmd": command, "exit": int(done.returncode)})
         print(f"$ {command}   -> exit {done.returncode}")
     passed = rc == 0 and all(gate["exit"] == 0 for gate in gates)
@@ -227,7 +227,7 @@ def eval_capture(argv: list) -> int:
         for command in case.get("gates") or []:
             try:
                 done = subprocess.run(command, shell=True, cwd=repo, capture_output=True, text=True,
-                                      timeout=1800)
+                                      timeout=1800, env=minimal_env())
                 gates.append({"cmd": command, "exit": done.returncode})
             except subprocess.TimeoutExpired:
                 gates.append({"cmd": command, "exit": 124})

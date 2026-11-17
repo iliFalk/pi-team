@@ -206,8 +206,7 @@ def mutate(argv: list) -> int:
             lines[index] = mutated
             path.write_text("".join(lines), encoding="utf-8")
             try:
-                env = dict(os.environ)
-                env["PYTHONDONTWRITEBYTECODE"] = "1"
+                env = minimal_env(extra={"PYTHONDONTWRITEBYTECODE": "1"})
                 done = subprocess.run(command, shell=True, cwd=repo, capture_output=True, text=True,
                                       timeout=args.timeout, env=env)
                 verdict = "killed" if done.returncode != 0 else "survived"

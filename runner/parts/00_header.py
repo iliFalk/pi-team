@@ -50,6 +50,17 @@ ENV_KEYS = (
 # pi names the opencode credential OPENCODE_API_KEY; Hermes stores the same value as
 # OPENCODE_GO_API_KEY. Hand pi the name it reads, or the provider looks unconfigured.
 ALIASES = {"OPENCODE_GO_API_KEY": "OPENCODE_API_KEY"}
+# Which variable holds a provider's key. One lane gets one key: `pi` runs commands from a repository
+# somebody else wrote, so every other credential in the process is one shell command away from a
+# prompt. `minimal_env` builds the child environment from this map and nothing else.
+PROVIDER_KEYS = {
+    "nvidia": "NVIDIA_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+    "opencode": "OPENCODE_API_KEY",
+    "opencode-go": "OPENCODE_GO_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+}
 DEFAULT_PROVIDER = "nvidia"
 DEFAULT_MODEL = "nvidia/nemotron-3.5-super-vl-120b-a12b"
 DEFAULT_THINKING = "medium"

@@ -6,11 +6,10 @@ Read this when something does not behave. The five that cost the most are also o
 
 - **The runner's run loop is shared by the first run and a continuation.** It lives in `run_session(lane_dir, record, lane, worktree, task, question_timeout)`, which reads `provider`, `model` and `thinking` from the record, so `main()` and `pi-lane continue` behave identically. When you move that block by script, parse before spending a lane: `python3 -c "import ast,pathlib; ast.parse(open(path).read())"`. The block sat inside a `with` in `main()`, so a function needs it DEDENTED by the depth it left; a duplicated assignment at the seam (`text = ""` twice) means the anchor matched the wrong end of the move, not that the code is fine.
 - **Prove a runner change with a throwaway lane, not with the panel.** `pi-lane smoke --project <p> --feature <f> "Answer one word: ok. Change nothing." --question-timeout 60` must end `state: done`, `exit: 0`; then `pi-lane continue smoke "one more word"` must print `continuing`, end `done` again and leave MORE lines in `events.jsonl` than the first run. Two states and one line count settle the refactor in a minute; a green syntax check proves nothing about the run loop. Remove the probe lane afterwards (§ probe lane pitfall).
-- **The runner is two files that must stay identical.** `~/.hermes/scripts/pi-lane` is what runs on this
-  machine; `~/work/pi-team/runner/pi-lane` is what the repository ships and the update route copies to
-  another host. Add a subcommand to the live copy, then `cp` it back into the repo and prove it with
-  `diff -q runner/pi-lane ~/.hermes/scripts/pi-lane && echo identical` before the commit — a route or a
-  subcommand that exists only on the agent machine works there and is missing on every other install.
+- **The runner has one home.** `runner/pi-lane` in the plugin is what runs — on this machine and on every
+  other install — and `python3 runner/build.py --check` fails when the built file lags its parts. There is
+  no copy in `~/.hermes/scripts` to keep in step: a subcommand added to a stray copy works on one machine
+  and is missing everywhere else, which is exactly the bug the copy used to hide.
 - **Commit before you merge, or the cleanup eats the work.** A lane never commits, so its changes sit
   uncommitted in the worktree; `git merge --no-ff lane/<lane>` answers `Already up to date`, and the
   `git branch -d` and `worktree remove --force` that follow delete the only copy. Every automated close is

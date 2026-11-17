@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """build.py: cut `runner/pi-lane` into parts and glue them back.
 
-One file installs into `~/.hermes/scripts`, where a package would not survive the plugin's copy. One file
+One file runs from the plugin's own `runner/`, where a package install would be a second thing to keep in
+step. One file
 is also 2 400 lines of edit surface. This script keeps both: edit `parts/*.py`, run `python3 build.py`,
 and the single-file runner is regenerated in the order the parts are numbered.
 

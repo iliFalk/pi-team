@@ -75,8 +75,7 @@ def _run_scenario(path: Path, repo: str, timeout: int) -> dict:
         argv = [str(path)]
     else:
         argv = ["sh", str(path)]
-    env = dict(os.environ)
-    env["HOLDOUT_REPO"] = repo
+    env = minimal_env(extra={"HOLDOUT_REPO": repo})
     started = time.time()
     try:
         done = subprocess.run(argv, cwd=repo, capture_output=True, text=True, timeout=timeout, env=env)

@@ -86,7 +86,7 @@ def open_lane(argv: list) -> int:
     ):
         fail("pi not found")
 
-    load_env_keys()
+    load_provider_key(args.provider)
 
     lane = args.lane
     worktree = Path(repo) / ".worktrees" / lane

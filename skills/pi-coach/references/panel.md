@@ -52,8 +52,9 @@ button). A message Ilja writes in a
 lane's thread reaches the orchestrator, never pi: the route appends it to
 `$HERMES_HOME/lanes/<lane>/thread.jsonl` (`{who: lane|jarvis|user, at, text}`, one object per line) and
 calls `ctx.inject_message` with a `[lane <name> · project/group · state]` prefix. That call reaches nothing
-until the plugin is allowed to speak: `hermes config set plugins.entries.pi-team.allow_gateway_injection true`
-(back up `config.yaml` first). Without it the log reads
+until the plugin is allowed to speak: `plugins.entries.pi-team.allow_gateway_injection` must be `true`.
+**Ask Ilja to set it** — it is a permission on his own config, and an agent that grants itself one has
+moved the line it was asked to respect. Without it the log reads
 `inject_message: gateway injection denied for plugin pi-team` and the route still answers
 `message_sent: false`, so every button in the panel goes quiet at once — check this setting before the
 session key or the render code. Answer in the same
@@ -139,9 +140,10 @@ the app theme, and a light/dark toggle inside it was deleted on his word. The ke
 four providers, each labelled lowercase with `_API_KEY` stripped and `_` read as a space (`openrouter`,
 `opencode go`, `deepseek`, `nvidia`) — plus whatever a person already added
 (`extra_keys` in `settings.json`), never the whole `~/.hermes/.env`: TAVILY, PODCAST and MINIMAX appeared there
-and he took them out, and a list that mirrors the file invents entries nobody manages in the panel. `POST /settings/key`
-writes mode `0600`, an empty field deletes, and NO route returns a value — the panel shows a mask or `set`, and a
-route that echoes a key is a leak whichever client asks.
+and he took them out, and a list that mirrors the file invents entries nobody manages in the panel. The
+panel **reads** keys only: `GET /settings` answers `set` or not-set per provider, and no route returns a
+value — a route that echoes a key is a leak whichever client asks. A key is added where it already lives,
+in Hermes's own settings.
 
 **State colours follow the same deepest-visible rule.** Working is `#1A6543` (status word, pulse, ball,
 ring), a question paints the lane's label band `#0762B4` at 85% with white text, and its parents take the
@@ -234,7 +236,6 @@ words; recognise the OPENING, not the whole sentence, because the rest is data:
 | `Review queue: N lane(s).` and a `- <project>/<group>/<lane> — <state> — <files> +i −d` line per lane | the `send` on the `review` header row (`POST /review/send`) — the ONLY trigger of a check since 2026-11-09 | read each worktree's diff, run the project's gates, report what you found, then print the plan with `pi-lane close <lane>` (bare — it changes nothing) and wait for his go before `--yes` |
 | `[lane <name> · <project>/<group> · <state>]` | a message Ilja typed in a lane's thread (`POST /lanes/<lane>/say`) | answer in that thread with `pi-lane say <lane> "…"`; it never reaches pi |
 | `[feature <project>/<feature> · preparation]` | the dashed `new feature` row | `pi-feature rename` …, then open the first lane |
-| `Update the pi-team plugin: pull the repository …` | the `✓` on the update control (`POST /update/request`) | pull, copy the three files to their install paths, restart the backend, ship the panel, report the hashes |
 
 `TO REVIEW` on a card (`POST /lanes/<lane>/hand`) is SILENT: it writes `handed_at`, the lane moves to the
 `review` shelf, and nothing is said. He removed the per-lane message because it sent the same request twice —
@@ -276,7 +277,7 @@ Settle this before rearranging it again:
 
 **A new control is two questions before it is code.** When he asks for something in words ("add a model
 selection line"), ask what it controls and where it sits as one decision card, recommended option first,
-then build. Ask nothing the machine already answers — which provider keys `~/.hermes/.env` holds, how many
+then build. Ask nothing the machine already answers — which provider keys this profile holds, how many
 ids a catalogue carries — inspect it and put the number into the question instead. A control placed by guesswork is cheap to draw and expensive to re-shape: the composer took
 four rejected versions before those two answers existed, and the model line still needed a second pass
 because the placement answer "above the field" was not the position he wanted. Put the options in HIS
@@ -350,14 +351,11 @@ next session reads before it reads the code. Structure and the cross-check rule:
 `hermes-desktop-plugins` § Document the visual system. Recipes and the pixel check:
 `hermes-desktop-plugins` § `references/panel-visuals.md`.
 
-**Updating a client.** The control at the right end of the `projects` header says `update plugin`; a click
-replaces the word with `✕` and `✓` on the same spot (a centred dialog for a two-word decision costs a
-round trip and breaks the row). `✓` posts `/update/request`, whose only job is `ctx.inject_message` with
-the request in plain words: pull the repo, put each file where it belongs, restart the backend, ship the
-panel to every client. The orchestrator then does it. That indirection is the point — the backend knows
-this one host's repo path, install paths and service name, while the agent can look at the machine it is
-on. The plugin has **no update route of its own**: a catalog install is pinned to one commit, and a
-plugin that replaces its own files breaks that pin. Pull by hand, copy, restart.
+**Updating a client.** One command: `hermes plugins update pi-team`, then restart the backend. The panel
+carries **no update control and no update route** — a catalog install is pinned to one commit, and a
+plugin that replaces its own files, or asks a chat to do it, breaks that pin. The backend runs the
+runner from its own `runner/` directory for the same reason: an update moves the panel and the runner
+together, and no copy is left behind to drift.
 - **A written file is not a shipped file.** `sha256sum` both sides and put the expected value in the
   reply — the repo, `$HERMES_HOME/desktop-plugins/pi-team/plugin.js` on the window machine, and the copy
   the backend imports.

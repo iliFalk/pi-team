@@ -5,7 +5,7 @@
  * Right pane: the selected lane — task, the last text the agent wrote, last tool,
  * changes, touched specs.
  *
- * Lanes are headless `pi -p` runs recorded by ~/.hermes/scripts/pi-lane.
+ * Lanes are headless `pi -p` runs recorded by the plugin's own runner/pi-lane.
  * Backend: ~/.hermes/plugins/pi-team/dashboard/plugin_api.py (/api/plugins/pi-team).
  * Procedure: skill `pi-coach`.
  */
@@ -1353,7 +1353,6 @@ function LaneList({ ctx }) {
   const toggle = key => collapsedAtom.set({ ...collapsed, [key]: !collapsed[key] })
   const isOpen = key => !collapsed[key]
 
-  const [askUpdate, setAskUpdate] = useState(false)
   const registry = (query.data && query.data.registry) || []
   const registryByName = new Map(registry.map(entry => [entry.name, entry]))
 
@@ -1762,58 +1761,6 @@ function LaneList({ ctx }) {
             hoverColour: 'var(--ui-text-secondary)',
             children: jsx(icons.Settings, { size: 11, strokeWidth: 2 })
           }),
-          askUpdate
-            ? jsxs('span', {
-                className: 'ml-auto flex shrink-0 items-center gap-1',
-                children: [
-                  jsx(
-                    HeaderControl,
-                    {
-                      title: 'cancel',
-                      glyph: '✕',
-                      size: BAND_MIN_H,
-                      fontSize: '10px',
-                      colour: BAD_TEXT,
-                      hoverColour: BAD_TEXT,
-                      border: BAD_TEXT,
-                      onClick: () => setAskUpdate(false)
-                    },
-                    'cancel'
-                  ),
-                  jsx(
-                    HeaderControl,
-                    {
-                      title: 'ask the agent to update the plugin',
-                      glyph: '✓',
-                      size: BAND_MIN_H,
-                      fontSize: '10px',
-                      colour: RUN_TEXT,
-                      hoverColour: RUN_TEXT,
-                      border: RUN_TEXT,
-                      onClick: () => {
-                        setAskUpdate(false)
-                        ctx
-                          .rest('/update/request', {
-                            method: 'POST',
-                            body: { session_key: sessionId },
-                            timeoutMs: 15000
-                          })
-                          .then(() => host.notify({ kind: 'info', message: 'update: the request went to the chat' }))
-                      }
-                    },
-                    'go'
-                  )
-                ]
-              })
-            : jsx(HoverBox, {
-                onClick: () => setAskUpdate(true),
-                title: 'ask the agent to pull the repo, copy the files and restart the backend',
-                hoverColour: 'var(--ui-accent)',
-                className:
-                  'ml-auto shrink-0 px-1 text-[0.625rem] uppercase tracking-wide text-(--ui-text-tertiary)',
-                children: 'update plugin'
-              }),
-
         ]
       }),
       jsx(Scroller, {

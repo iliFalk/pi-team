@@ -6,10 +6,12 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 SCR=$(mktemp -d)
 export HERMES_HOME="$SCR/home"
 export PATH="$SCR/bin:$PATH"
-RUNNER="${PI_LANE:-$HOME/.hermes/scripts/pi-lane}"
+RUNNER="${PI_LANE:-$(cd "$(dirname "$0")/.." && pwd)/pi-lane}"
 REPO="$SCR/repo"
 mkdir -p "$SCR/bin" "$HERMES_HOME/lanes" "$REPO/tests"
 cp "$HERE/pi" "$SCR/bin/pi"; chmod +x "$SCR/bin/pi"
+# The runner hands `pi` a minimal environment, so the criteria travel in a file, not in an export.
+printf '%s' "${STUB_ACS:-}" > "$SCR/bin/stub_acs"
 echo "sandbox $SCR"
 fail=0
 ok()   { echo "OK   $*"; }

@@ -43,8 +43,9 @@ hermes plugins install iliFalk/pi-team     # then connect the desktop app once: 
 systemctl --user restart hermes-serve
 ```
 
-The plugin places its runner — `pi-lane`, `pi-feature`, `pi-team-demo` — in `~/.hermes/scripts` on its
-first start. Files already there are left alone, so a local edit survives an update.
+The plugin ships its runner — `pi-lane`, `pi-feature`, `pi-team-demo` — in its own `runner/` directory
+and runs it from there. Nothing is copied into `~/.hermes/scripts`: an update replaces the panel and the
+runner in one move, so the two never disagree.
 
 The panel appears beside the chat. Until a lane exists it opens on `start here` and draws nothing else.
 
@@ -54,17 +55,18 @@ The install brings the panel, the runner and the procedure. Two things are left.
 
 1. **The coding agent**, which every lane runs: `npm install -g --ignore-scripts @earendil-works/pi-coding-agent`,
    and a provider key in Hermes Settings → Providers.
-2. **Buttons that speak.** A panel button puts a message into the chat through the gateway. Off by default:
+2. **Buttons that speak.** A panel button puts a message into the chat through the gateway. Off by default,
+   and a permission on your own config, so an agent asks you for it rather than setting it:
 
    ```sh
    hermes config set plugins.entries.pi-team.allow_gateway_injection true
    ```
 
-`~/.hermes/scripts` is not on `PATH` by default, and the agent calls `pi-lane` by name. Add the
-directory once, so both you and the agent find it:
+`pi-lane` is not on `PATH`, and an agent calls it by name. Symlink the runner once, so both you and
+the agent find it:
 
 ```sh
-echo 'export PATH="$HOME/.hermes/scripts:$PATH"' >> ~/.bashrc
+ln -sf ~/.hermes/plugins/pi-team/runner/pi-lane ~/.local/bin/
 ```
 
 ## Your first lane
@@ -96,8 +98,8 @@ it ships, when to answer instead of asking.
 ## See it working before you have any lanes
 
 ```sh
-~/.hermes/scripts/pi-team-demo            # a scratch repo in ~/work/pi-team-demo and three lanes
-~/.hermes/scripts/pi-team-demo --remove   # the lanes, their worktrees and branches, the project entry, the repo
+~/.hermes/plugins/pi-team/runner/pi-team-demo            # a scratch repo in ~/work/pi-team-demo and three lanes
+~/.hermes/plugins/pi-team/runner/pi-team-demo --remove   # the lanes, their worktrees and branches, the project entry, the repo
 ```
 
 Three fixed lane records — one waiting on a question, one in review, one checked — so the card can be seen
@@ -143,7 +145,7 @@ Disclosed because you should know before you install:
 | Panel missing after install | the desktop app has not reloaded — Command-K → Reload desktop plugins |
 | Panel is there, no data, no error | the backend half was imported before Hermes restarted — `systemctl --user restart hermes-serve` |
 | Buttons do nothing | `plugins.entries.pi-team.allow_gateway_injection` is off — step 4 above |
-| `start here` and nothing else | no project yet — press `+`, or run `~/.hermes/scripts/pi-team-demo` to see the card with data |
+| `start here` and nothing else | no project yet — press `+`, or run `runner/pi-team-demo` to see the card with data |
 | A lane reads `stopped` | a cap fired or its `pi` process died — `lane.json` says `stop_reason`, `stderr.txt` says why |
 
 ## Development

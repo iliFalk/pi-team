@@ -108,7 +108,7 @@ def gate_lanes(argv: list) -> int:
         print(f"$ {command}   (in {workdir})")
         try:
             done = subprocess.run(command, shell=True, cwd=workdir, capture_output=True, text=True,
-                                  timeout=args.timeout)
+                                  timeout=args.timeout, env=minimal_env())
         except subprocess.TimeoutExpired:
             print(f"timeout after {args.timeout}s: {command}", file=sys.stderr)
             return 1

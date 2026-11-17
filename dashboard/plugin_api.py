@@ -1,6 +1,6 @@
 """pi-team backend: headless pi lanes for the desktop panes.
 
-A lane is a worktree plus one ``pi -p`` run, recorded by ``~/.hermes/scripts/pi-lane``:
+A lane is a worktree plus one ``pi -p`` run, recorded by the plugin's own ``runner/pi-lane``:
 
     $HERMES_HOME/lanes/<lane>/lane.json      lane record: task, state, pid, session
     $HERMES_HOME/lanes/<lane>/events.jsonl   the raw pi JSON event stream
@@ -32,15 +32,20 @@ from fastapi import APIRouter, Body, HTTPException
 # The plugin now runs the same scripts an agent would, and the chat gets the result instead of the
 # errand. Anything that needs judgement — the task text, the review — still goes to the chat.
 
+_PLUGIN_ROOT = Path(__file__).resolve().parent.parent
+_RUNNER = _PLUGIN_ROOT / "runner"
+
+
 def _tool(name: str) -> Optional[str]:
-    """Locate a pi-team script: the profile's scripts directory first, then PATH."""
-    local = Path.home() / ".hermes" / "scripts" / name
-    if local.exists() and os.access(local, os.X_OK):
-        return str(local)
-    for entry in (os.environ.get("PATH") or "").split(os.pathsep):
-        candidate = Path(entry) / name
-        if candidate.exists() and os.access(candidate, os.X_OK):
-            return str(candidate)
+    """The plugin's own copy of a runner script.
+
+    The panel runs the code this plugin ships, never a copy left in `$HERMES_HOME/scripts`: a copy
+    goes stale on the next update, so the panel would drive one version while the person reads
+    another.
+    """
+    candidate = _RUNNER / name
+    if candidate.is_file() and os.access(candidate, os.X_OK):
+        return str(candidate)
     return None
 
 
@@ -74,17 +79,57 @@ def _say(text: str, session_key: Optional[str]) -> bool:
         return False
 
 
+# The variable that holds each provider's key. A lane gets exactly one of them.
+PROVIDER_KEYS = {
+    "nvidia": "NVIDIA_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+    "opencode": "OPENCODE_API_KEY",
+    "opencode-go": "OPENCODE_GO_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+}
+
+
+def _lane_env(provider: str) -> Dict[str, str]:
+    """The whole environment a lane starts with: a PATH, a HOME, a locale, its own provider key.
+
+    A lane runs `pi`, and `pi` runs commands from a repository somebody else wrote. Every other
+    credential in the backend's environment would be one shell command away from a prompt, so the
+    backend resolves the single key this lane's provider needs and passes nothing else.
+    """
+    env = {
+        "PATH": os.environ.get("PATH") or "/usr/local/bin:/usr/bin:/bin",
+        "HOME": os.environ.get("HOME") or str(Path.home()),
+        "LANG": os.environ.get("LANG") or "C.UTF-8",
+        "GIT_TERMINAL_PROMPT": "0",
+    }
+    name = PROVIDER_KEYS.get(provider or "", "")
+    value = _secret(name) if name else ""
+    if value:
+        env[name] = value
+        if name == "OPENCODE_GO_API_KEY":
+            # pi reads the opencode credential under its own name.
+            env["OPENCODE_API_KEY"] = value
+    return env
+
+
 def _clone_project(name: str, url: str) -> tuple[bool, str]:
-    """Clone and register. Returns (ok, what to tell the person)."""
-    tool = _tool("pi-project")
-    if tool is None:
-        return False, "pi-project is not installed (see the README, Install)"
+    """Clone into `~/work/<name>` and register the path. Returns (ok, what to tell the person).
+
+    `git clone` itself, not a helper looked up on PATH: a plugin that ships its clone step cannot
+    be half installed, and `--` keeps a repository named like an option from becoming one.
+    """
     # The panel takes a bare `github.com/owner/name`; git needs a scheme or it reads a local path.
     if not url.startswith(("http://", "https://", "ssh://", "git@")):
         url = "https://" + url
+    dest = Path.home() / "work" / name
+    if (dest / ".git").is_dir():
+        pireg.add_project(name, str(dest), url)
+        return True, str(dest)
     try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
         done = subprocess.run(
-            [tool, "add", name, url],
+            ["git", "clone", "--", url, str(dest)],
             capture_output=True, text=True, timeout=300, cwd=str(Path.home()),
         )
     except subprocess.TimeoutExpired:
@@ -93,8 +138,9 @@ def _clone_project(name: str, url: str) -> tuple[bool, str]:
         return False, str(exc)
     if done.returncode != 0:
         detail = (done.stderr or done.stdout or "").strip().splitlines()
-        return False, (detail[-1] if detail else f"pi-project exited {done.returncode}")
-    return True, str(Path.home() / "work" / name)
+        return False, (detail[-1] if detail else f"git clone exited {done.returncode}")
+    pireg.add_project(name, str(dest), url)
+    return True, str(dest)
 
 
 def _start_lane(project_name: str, slug: str, text: str) -> tuple[bool, str]:
@@ -128,11 +174,14 @@ def _start_lane(project_name: str, slug: str, text: str) -> tuple[bool, str]:
     model = (os.environ.get("PI_TEAM_MODEL") or "").strip()
     if provider and model:
         argv += ["--provider", provider, "--model", model]
+    # An unpinned panel lane uses the runner's own default provider, which is the key this spawn
+    # resolves; `nvidia` mirrors DEFAULT_PROVIDER in runner/parts/00_header.py.
     try:
         log = open(_lanes_root() / "spawn.log", "a")
         subprocess.Popen(
             argv, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
             start_new_session=True, cwd=repo, close_fds=True,
+            env=_lane_env(provider or "nvidia"),
         )
     except Exception as exc:  # noqa: BLE001
         return False, str(exc)
@@ -141,16 +190,15 @@ def _start_lane(project_name: str, slug: str, text: str) -> tuple[bool, str]:
 
 router = APIRouter()
 
-# The registry's rules live with the CLI helpers; import them by path so the panel and
-# `pi-feature` write the same file the same way.
-_SCRIPTS = Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes") / "scripts"
-if str(_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(_SCRIPTS))
+# The registry's rules live with the CLI helpers; import them from the plugin's own `runner/`, the
+# copy this plugin ships, so the panel and `pi-feature` write the same file the same way.
+if str(_RUNNER) not in sys.path:
+    sys.path.insert(0, str(_RUNNER))
+
 import pireg  # noqa: E402
 
 # The plugin's own state module, beside plugin.yaml: the entry point puts the plugin context there
 # and this router reads it. One shared module, so neither half reaches into the other's internals.
-_PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 if str(_PLUGIN_ROOT) not in sys.path:
     sys.path.insert(0, str(_PLUGIN_ROOT))
 import pi_team_state  # noqa: E402
@@ -173,6 +221,19 @@ def _hermes_home() -> Path:
 
 def _lanes_root() -> Path:
     return _hermes_home() / "lanes"
+
+
+# A lane name reaches a folder path in every lane route, so it is checked once, here: letters,
+# digits, dot, dash and underscore only. `.` and `..` are refused by the regex's own rule plus the
+# explicit test, and a name that fails is a 404 — the lane does not exist, and neither does the path.
+LANE_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _lane_dir(lane: str) -> Path:
+    """The folder of one lane. A lane is a name, never a path."""
+    if not lane or lane in (".", "..") or not LANE_NAME_RE.match(lane):
+        raise HTTPException(status_code=404, detail="unknown lane")
+    return _lanes_root() / lane
 
 
 def _read_json(path: Path) -> Optional[Dict[str, Any]]:
@@ -1075,7 +1136,7 @@ def say_to_lane(lane: str, payload: Dict[str, Any] = Body(default={})) -> Dict[s
     text = str(payload.get("text") or "").strip()
     if not text:
         raise HTTPException(status_code=422, detail="empty message")
-    lane_dir = _lanes_root() / lane
+    lane_dir = _lane_dir(lane)
     record = _read_json(lane_dir / "lane.json")
     if record is None:
         raise HTTPException(status_code=404, detail="unknown lane")
@@ -1114,7 +1175,7 @@ def set_lane_model(lane: str, payload: Dict[str, Any] = Body(default={})) -> Dic
     model = str(payload.get("model") or "").strip()
     if not provider or not model:
         raise HTTPException(status_code=422, detail="provider and model are required")
-    lane_dir = _lanes_root() / lane
+    lane_dir = _lane_dir(lane)
     path = lane_dir / "lane.json"
     record = _read_json(path)
     if record is None:
@@ -1134,15 +1195,6 @@ def set_lane_model(lane: str, payload: Dict[str, Any] = Body(default={})) -> Dic
         "model": model,
         "thinking": record.get("thinking") or "",
     }
-
-
-UPDATE_PROMPT = (
-    "Update the pi-team plugin: pull the repository and put the files in place — "
-    "desktop/plugin.js into ~/.hermes/desktop-plugins/pi-team/, "
-    "plugin/dashboard/plugin_api.py into ~/.hermes/plugins/pi-team/, "
-    "runner/pi-lane into ~/.hermes/scripts/. Restart the backend, share the panel with the "
-    "clients and show what changed."
-)
 
 
 PREPARE_PROMPT = (
@@ -1356,23 +1408,6 @@ def cancel_feature(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]
     return {"ok": True}
 
 
-@router.post("/update/request")
-def request_update(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
-    """Ask the agent to update the plugin, instead of doing it from here.
-
-    The backend cannot know where a person keeps the repository or how their host is wired;
-    the agent can look. So the button only puts the request into the chat.
-    """
-    sent = False
-    ctx = _plugin_ctx()
-    if ctx is not None:
-        try:
-            sent = bool(ctx.inject_message(UPDATE_PROMPT, session_key=payload.get("session_key") or None))
-        except Exception:
-            sent = False
-    return {"ok": True, "message_sent": sent}
-
-
 @router.post("/review/send")
 def send_review(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
     """Put the whole review queue into the chat as one list, for the orchestrator to check."""
@@ -1421,7 +1456,7 @@ def send_review(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
 @router.post("/lanes/{lane}/hand")
 def hand_lane(lane: str, payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
     """File a finished lane on the `review` shelf. It does not speak: the queue's `SEND` does."""
-    lane_dir = _lanes_root() / lane
+    lane_dir = _lane_dir(lane)
     record = _read_json(lane_dir / "lane.json")
     if record is None:
         raise HTTPException(status_code=404, detail="unknown lane")
@@ -1447,7 +1482,7 @@ def hand_lane(lane: str, payload: Dict[str, Any] = Body(default={})) -> Dict[str
 @router.post("/lanes/{lane}/answer")
 def answer_lane(lane: str, body: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
     """Answer the question a lane waits on: write answer.json for the runner."""
-    lane_dir = _lanes_root() / lane
+    lane_dir = _lane_dir(lane)
     question = _read_json(lane_dir / "question.json")
     if not isinstance(question, dict) or not question.get("id"):
         raise HTTPException(status_code=409, detail="lane is not waiting on a question")
