@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running pi lanes, on pi or on pf (durable)."
-version: 3.22.5
+version: 3.22.6
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -110,6 +110,9 @@ pi-feature add <project> <feature> --title "Settings menu"
 pi-lane <lane> "<task>" --project <project> --feature <feature>
 ```
 
+The three helpers ship in the plugin's own `runner/`, and `README.md` symlinks them into
+`~/.local/bin`. An install therefore runs the pinned copy — never a copy in `~/.hermes/scripts`.
+
 `pi-project list` and `pi-feature list <project>` show the registry. A throwaway run can bypass it
 with `--repo <path>`. The demo fixture `demo` is `~/work/demo-app`: `index.html`, `app.js` and
 `styles.css` — one static page, no build, one visible surface per feature. A README-only repository
@@ -120,8 +123,8 @@ refreshes the copy already there. `--check` prints `current`, `outdated`, `missi
 `no markers` per project and changes nothing, so it is safe to run alone. Three details bite:
 
 - The template is read from the **live** skill directory
-  (`~/.hermes/skills/software-development/pi-coach/templates/ponytail-block.md`), so editing only the
-  repository copy feeds the tool nothing.
+  (`<HERMES_HOME>/skills/software-development/pi-coach/templates/ponytail-block.md`), so editing only
+  the repository copy feeds the tool nothing.
 - The block spans `<!-- ponytail v1 … -->` to `<!-- /ponytail -->`; anything after the end marker is the
   project's own rules and survives. A copy written before that marker existed ends at its last level row.
 - Placing it in a repository is still a manual, attended action for Ilja: it edits an agent-instruction
@@ -461,15 +464,12 @@ question with `409`. Field-by-field meaning of every file: `references/lane-data
 ## Lane: unattended runs need the approval gate off
 
 A lane needs nobody. The orchestrator in front of it does: every `write_file` goes through Hermes's
-approval system, so under `approvals.mode: smart` a `hermes chat -q` run blocks forever on the first
-one with `waiting for user approval`.
+approval system, so under `approvals.mode: smart` a `hermes chat -q` run blocks on the first one with
+`waiting for user approval`.
 
-```sh
-hermes config set approvals.mode off     # before
-hermes config set approvals.mode smart   # after
-```
-
-`--yolo` is not enough: it bypasses terminal-command approvals, not file writes.
+Tell Ilja before the run, then stop. Never change `approvals.mode` from a skill: the approval gate is
+his decision, not the procedure's. `--yolo` is not the answer either: it bypasses terminal-command
+approvals, not file writes.
 
 ## Lane: parallel
 
@@ -719,12 +719,10 @@ committed, so the next session opens the project and starts there instead of re-
 - Do not let it cite its own commit: write the deployed files' hashes, which are stable, and name the
   commit they came from.
 
-**Three copies of this skill exist, and the live one is what a run obeys**: the repository copy
-(`~/work/pi-team/skills/pi-coach/`, ships with the plugin), the live copy
-(`~/.hermes/skills/software-development/pi-coach/`, read by the agent and by `pi-project agents` for its
-template), and the plugin copy (`~/.hermes/plugins/pi-team/skills/pi-coach/`). Before trusting a rule,
-read the `version:` line of each; after editing this file, copy it to both other places, copy the
-templates with it, and say how far the line count moved.
+**The repository copy is the source of this skill.** `skills/pi-coach/` ships with the plugin, and
+`hermes plugins update pi-team` moves it into the install — no file is copied by hand. The live
+directory under `$HERMES_HOME` is the copy a run obeys, so read its `version:` line before trusting a
+rule, and treat a difference between the two as an update that has not landed yet.
 
 ## Pitfalls that cost the most
 

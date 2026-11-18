@@ -298,7 +298,7 @@ until the button was centred across both rows and the box came back to `42` — 
 report, not his to guess.
 
 **How the panel is built.** Label a control with a word, not a glyph: at 10 px a pictograph can read as an
-empty spot, so the update control renders the word `UPDATE PLUGIN`. The source keeps the literal lowercase and
+empty spot. The source keeps the literal lowercase and
 the class carries `uppercase`, because **a word he can press is caps and a word that only reports keeps its own
 case**: `in review` stands where the `to review` button stands and stays a sentence, while state words, names,
 model ids, pi's own option strings and field placeholders keep theirs (a transform on a field changes what he
@@ -363,9 +363,10 @@ together, and no copy is left behind to drift.
   <host>` times out, but say in every reply which sha the repo holds and which one the client holds, and read
   a correction that repeats an already-fixed defect as a delivery question first: the window is drawing the
   copy it has, so re-fixing it moves the code away from what he described.
-- **The desktop half and the backend half ship separately.** `dashboard/` and `plugin.yaml` reach a
-  gateway by a copy into `~/.hermes/plugins/pi-team/` plus the serve restart; `desktop/plugin.js` reaches
-  the app's plugin folder. One install of the catalog entry does both.
+- **One catalog install carries both halves.** `dashboard/`, `plugin.yaml` and `desktop/plugin.js` reach
+  their machines through `hermes plugins install iliFalk/pi-team`; no file is copied into
+  `~/.hermes/plugins/pi-team/` by hand, and an install is pinned to one commit. How a development
+  checkout reaches a machine: `docs/DEVELOPMENT.md` § Install during development.
 
 
 ## Show the panel without a run

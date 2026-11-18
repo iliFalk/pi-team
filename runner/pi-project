@@ -1,0 +1,137 @@
+#!/usr/bin/env python3
+"""pi-project — register a pi-team project, cloning it when needed.
+
+    pi-project add <name> <git-url|path> [--dir <path>]
+    pi-project list
+    pi-project agents [<name>…] [--check]
+
+A project is one git repository. The default checkout lives in ~/work/<name>;
+~/src stays for reference clones that are not worked on. The script ships in the
+plugin's own `runner/` beside `pireg.py`, so an install runs the pinned copy.
+"""
+
+from __future__ import annotations
+
+import argparse
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import pireg  # noqa: E402
+
+
+def clone(url: str, target: Path) -> str:
+    if (target / ".git").is_dir():
+        done = subprocess.run(
+            ["git", "-C", str(target), "fetch", "--all", "--quiet"],
+            capture_output=True, text=True, check=False, timeout=300,
+        )
+        return "fetched" if done.returncode == 0 else f"fetch failed: {done.stderr.strip()[:200]}"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    done = subprocess.run(
+        ["git", "clone", "--quiet", url, str(target)],
+        capture_output=True, text=True, check=False, timeout=1800,
+    )
+    if done.returncode != 0:
+        raise SystemExit(f"pi-project: clone failed: {done.stderr.strip()[:300]}")
+    return "cloned"
+
+
+def agents(path: Path, block: str, check_only: bool) -> str:
+    """Install or refresh the coding block in one project's AGENTS.md."""
+    start, end = "<!-- ponytail v1", "<!-- /ponytail -->"
+    if not path.exists():
+        if check_only:
+            return "missing"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(block, encoding="utf-8")
+        return "installed"
+
+    text = path.read_text(encoding="utf-8")
+    if text.strip() == block.strip():
+        return "identical"
+
+    lines = text.splitlines(keepends=True)
+    first = next((i for i, line in enumerate(lines) if line.startswith(start)), None)
+    last = next((i for i, line in enumerate(lines) if line.strip() == end), None)
+    if last is None and first is not None:
+        # legacy copy: written before the end marker existed, ends at the last level row
+        last = next((i for i, line in enumerate(lines) if line.startswith("| **ultra**")), None)
+    if first is None or last is None or last < first:
+        return "no markers"
+
+    region = "".join(lines[first : last + 1])
+    current = region.strip() == block.strip()
+    if check_only:
+        return "current" if current else "outdated"
+    if current:
+        return "identical"
+
+    merged = "".join(lines[:first]) + block + "".join(lines[last + 1 :])
+    path.write_text(merged, encoding="utf-8")
+    return "updated"
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(prog="pi-project")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    add = sub.add_parser("add", help="clone (or fetch) and register a project")
+    add.add_argument("name")
+    add.add_argument("url")
+    add.add_argument("--dir", default="")
+
+    sub.add_parser("list", help="projects and their features")
+
+    agents_parser = sub.add_parser("agents", help="install or refresh the coding block in AGENTS.md")
+    agents_parser.add_argument("names", nargs="*", help="project names; all projects when empty")
+    agents_parser.add_argument("--check", action="store_true", help="report only, change nothing")
+
+    args = parser.parse_args()
+
+    if args.command == "agents":
+        block_path = (
+            pireg.hermes_home()
+            / "skills/software-development/pi-coach/templates/ponytail-block.md"
+        )
+        if not block_path.is_file():
+            raise SystemExit(f"pi-project: block template missing: {block_path}")
+        block = block_path.read_text(encoding="utf-8")
+        known = pireg.load()["projects"]
+        if not known:
+            print("no projects yet")
+            return 0
+        names = args.names or sorted(known)
+        unknown = [name for name in names if name not in known]
+        if unknown:
+            raise SystemExit(f"pi-project: unknown project(s): {', '.join(unknown)}")
+        for name in names:
+            repo = Path(str(known[name].get("repo") or ""))
+            if not repo.is_dir():
+                print(f"{name:<20} repo missing: {repo}")
+                continue
+            print(f"{name:<20} {agents(repo / 'AGENTS.md', block, args.check)}")
+        return 0
+
+    if args.command == "list":
+        data = pireg.load()
+        if not data["projects"]:
+            print("no projects yet")
+            return 0
+        for name, entry in sorted(data["projects"].items()):
+            features = sorted((entry.get("features") or {}).keys())
+            print(f"{name:<20} {entry.get('repo','')}")
+            print(f"{'':<20} features: {', '.join(features) if features else '—'}")
+        return 0
+
+    target = Path(args.dir).expanduser() if args.dir else pireg.DEFAULT_ROOT / args.name
+    action = clone(args.url, target)
+    pireg.add_project(args.name, str(target), args.url)
+    print(f"{action}: {target}")
+    print(f"project registered: {args.name}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

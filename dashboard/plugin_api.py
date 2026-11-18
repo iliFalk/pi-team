@@ -90,19 +90,27 @@ PROVIDER_KEYS = {
 }
 
 
-def _lane_env(provider: str) -> Dict[str, str]:
-    """The whole environment a lane starts with: a PATH, a HOME, a locale, its own provider key.
+def _base_env() -> Dict[str, str]:
+    """The floor every child process starts from: a PATH, a HOME, a locale, this Hermes home.
 
     A lane runs `pi`, and `pi` runs commands from a repository somebody else wrote. Every other
-    credential in the backend's environment would be one shell command away from a prompt, so the
-    backend resolves the single key this lane's provider needs and passes nothing else.
+    credential in the backend's environment would be one shell command away from a prompt, so a
+    child gets these keys and nothing else. `HERMES_HOME` is here because the runner records a lane
+    under it: without the key a lane started from a named profile writes to `~/.hermes` and never
+    shows up in that profile's panel.
     """
-    env = {
+    return {
         "PATH": os.environ.get("PATH") or "/usr/local/bin:/usr/bin:/bin",
         "HOME": os.environ.get("HOME") or str(Path.home()),
         "LANG": os.environ.get("LANG") or "C.UTF-8",
         "GIT_TERMINAL_PROMPT": "0",
+        "HERMES_HOME": str(_hermes_home()),
     }
+
+
+def _lane_env(provider: str) -> Dict[str, str]:
+    """The whole environment a lane starts with: the base, plus its own provider key."""
+    env = _base_env()
     name = PROVIDER_KEYS.get(provider or "", "")
     value = _secret(name) if name else ""
     if value:
@@ -215,8 +223,20 @@ _DELETE_RE = re.compile(r"(\d+) deletions?\(-\)")
 # --------------------------------------------------------------------------- #
 
 def _hermes_home() -> Path:
+    """This Hermes home: the environment wins, then the running install, then the default.
+
+    `HERMES_HOME` is set for a named profile; an install started without it still knows its own home
+    through `hermes_constants`, so a panel opened from a profile never falls back to `~/.hermes`.
+    """
     env = os.environ.get("HERMES_HOME")
-    return Path(env) if env else Path.home() / ".hermes"
+    if env:
+        return Path(env)
+    try:
+        from hermes_constants import get_hermes_home  # the running Hermes, the active profile
+
+        return Path(get_hermes_home())
+    except Exception:  # noqa: BLE001 - outside Hermes the default is the only known home
+        return Path.home() / ".hermes"
 
 
 def _lanes_root() -> Path:
@@ -1258,7 +1278,7 @@ def _check_repo(url: str) -> Dict[str, Any]:
             capture_output=True,
             text=True,
             timeout=25,
-            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+            env=_base_env(),
         )
         if done.returncode == 0 and done.stdout.strip():
             branches = [
@@ -1294,8 +1314,8 @@ def check_project(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
 PROJECT_PROMPT = (
     "[project {name} · preparation]\n{url}\n\n"
     "The person asked for this project from the panel. It is checked but not cloned: "
-    "clone {slug} into ~/work/{name}, then register the path with "
-    "`pi-project add {name} <repo>` so the project stops being a placeholder."
+    "run `pi-project add {name} {url}`, which clones into ~/work/{name} and registers the path, "
+    "so the project stops being a placeholder."
 )
 
 

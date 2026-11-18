@@ -43,9 +43,9 @@ hermes plugins install iliFalk/pi-team     # then connect the desktop app once: 
 systemctl --user restart hermes-serve
 ```
 
-The plugin ships its runner — `pi-lane`, `pi-feature`, `pi-team-demo` — in its own `runner/` directory
-and runs it from there. Nothing is copied into `~/.hermes/scripts`: an update replaces the panel and the
-runner in one move, so the two never disagree.
+The plugin ships its runner — `pi-lane`, `pi-feature`, `pi-project`, `pi-team-demo` — in its own `runner/`
+directory and runs it from there. Nothing is copied into `~/.hermes/scripts`: an update replaces the panel
+and the runner in one move, so the two never disagree.
 
 The panel appears beside the chat. Until a lane exists it opens on `start here` and draws nothing else.
 
@@ -67,6 +67,8 @@ the agent find it:
 
 ```sh
 ln -sf ~/.hermes/plugins/pi-team/runner/pi-lane ~/.local/bin/
+ln -sf ~/.hermes/plugins/pi-team/runner/pi-feature ~/.local/bin/
+ln -sf ~/.hermes/plugins/pi-team/runner/pi-project ~/.local/bin/
 ```
 
 ## Your first lane
@@ -157,7 +159,7 @@ pi_team_state.py       the one module the two halves share
 dashboard/             the lane API served under /api/plugins/pi-team/
 desktop/plugin.js      the panel; ESM, no build step
 desktop/*.mjs          the two checks that run before a change ships
-runner/                pi-lane, pi-feature, pireg.py, pi-team-demo
+runner/                pi-lane, pi-feature, pi-project, pireg.py, pi-team-demo
 skills/pi-coach/       the procedure, its reference and its probe script
 docs/DEVELOPMENT.md    architecture, data, routes
 ```

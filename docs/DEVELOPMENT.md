@@ -110,7 +110,11 @@ node desktop/render-check.mjs
 It strips the three real imports, stubs the SDK with fake lane data, and calls every component; a failure
 prints the component and the exception. Every entry must say `ok`.
 
-## The Python half
+## Install during development
+
+This is the developer path. An installed copy arrives by `hermes plugins install iliFalk/pi-team` or
+`hermes plugins update pi-team`, pinned to one commit; nobody copies files into `~/.hermes/plugins/`.
+For a local experiment, the two halves still reach their machines separately:
 
 The panes read their data from `plugin_api.py`, so both halves ship here and the repo is the source of both.
 
