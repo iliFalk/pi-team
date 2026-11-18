@@ -14,6 +14,7 @@ Put the stub directory first on `PATH` and the runner drives it like the real th
 bash runner/sandbox/case-plan-gate.sh     # plan gates + gate --plan + the refusals
 bash runner/sandbox/case-spec.sh          # spec check/cover/tasks + a lane's criteria + the gate refusal
 bash runner/sandbox/case-executor-pf.sh   # the durable executor path, `--executor pf`
+bash runner/sandbox/case-close-receipt.sh # what a receipt says about the merge it names
 ```
 
 Every script makes its own `mktemp` directory (`sandbox …` printed on the first line), starts with
@@ -29,7 +30,11 @@ fields the layer copies back from the executor's record, the repair turn when a 
 without a `RESULT` line, a question parked and answered through `pi-lane answer`, a `stop_reason`, and
 `resume` calling the executor with `--mode resume` instead of a second open.
 
-A real lane costs money and minutes; these three spend seconds. Three defects were found here that no
+`case-close-receipt.sh` covers the receipt's merge attribution: three lanes, two merged by hand and one
+by `close`, and every receipt must name its own merge commit, its own subject and its own file count. It
+exists because all three once named the last lane's merge and one counted a neighbour's file.
+
+A real lane costs money and minutes; these four spend seconds. Three defects were found here that no
 syntax check could see: a `select` + `readline` loop that lost the second event of a burst, a
-`wait --all` that read a missing record as finished, and — on the executor path — a repair turn nobody
-had a test for.
+`wait --all` that read a missing record as finished, a receipt that named another lane's merge, and —
+on the executor path — a repair turn nobody had a test for.

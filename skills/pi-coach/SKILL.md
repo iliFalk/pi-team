@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running pi lanes, on pi or on pf (durable)."
-version: 3.23.1
+version: 3.23.2
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -274,8 +274,14 @@ pi-lane <lane> "<task>" --repo <path> --executor pf     # pi-durable through `pf
   change to the executor wiring; a paid lane is not the first check.
 - **The receipt is one receipt.** Since the parity pass `pf close` writes the same eleven fields as
   `pi-lane close` (`usage`, `review_usage`, `cost_usd`, `result_status`, `review_p0/p1`, `autonomy`,
-  `holdout`, `mutation`, `acs_check`). A verb that reads receipts must keep working for both halves;
+  `holdout`, `mutation`, `acs_check`, `merged_by`). A verb that reads receipts must keep working for both halves;
   `test/receipt.sh <lane> <repo>` proves it on a real cycle.
+- **A receipt names the commit that carried THIS lane in, not the base's HEAD.** When the orchestrator
+  merges by hand (the documented order is merge, gate, hand) the branch is already an ancestor at close,
+  so `rev-parse <base>` answers somebody else's merge. Measured: three lanes closed in a row all named the
+  last lane's merge commit and its subject, and one lane's file count was its neighbour's. `merged_by`
+  now says `close` or `orchestrator`, and `merge_files` comes from `base_sha..<lane tip>`. Re-prove any
+  change here with `runner/sandbox/case-close-receipt.sh`, not with a paid lane.
 - **The layer lives in three copies, and the panel runs the one nobody edits.** The repository build
   (`~/work/pi-team/runner/pi-lane`), `~/.hermes/scripts/pi-lane` (what `pi-lane` on PATH resolves to),
   and the installed plugin's `runner/pi-lane` (what the backend spawns for a lane opened from the panel).

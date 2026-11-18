@@ -37,8 +37,10 @@ them; the panel draws empty nodes.
 
 `pi-lane close` appends one line per lane to `$HERMES_HOME/lanes/closed.jsonl` and deletes the record, the
 worktree and the lane's pi session. That line therefore carries what would otherwise die: `usage`,
-`review_usage`, `cost_usd`, `result_status`, `review_p0`, `review_p1`, `autonomy`, and the verdicts
-`holdout`, `mutation`, `acs_check`, beside the merge facts. `pi-lane ledger` reads the last twenty
+`review_usage`, `cost_usd`, `result_status`, `review_p0`, `review_p1`, `autonomy`, the verdicts
+`holdout`, `mutation`, `acs_check`, and `merged_by` beside the merge facts. `merge_sha` is the commit
+that carried this lane in and `merged_by` says `close` or `orchestrator`; before that field existed a
+hand-merged lane recorded the base's HEAD, so three lanes closed in a row all named the last merge. `pi-lane ledger` reads the last twenty
 receipts back, so a finished run can still be totalled.
 
 The durable executor writes the same line: `pf close` carries the same eleven fields since the parity

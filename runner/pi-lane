@@ -1427,6 +1427,7 @@ def close_lanes(argv: list) -> int:
         merged_sha = ""
         merged_subject = ""
         merged_date = ""
+        merged_by = ""
         reason = args.reason
         if default and not args.no_merge:
             rc, _, _ = _git(repo, "rev-parse", "--verify", "--quiet", branch)
@@ -1438,7 +1439,21 @@ def close_lanes(argv: list) -> int:
                         print(f"{name}: merge failed — {err_m or out_m}", file=sys.stderr)
                         failed += 1
                         continue
-                rc_s, sha, _ = _git(repo, "rev-parse", default)
+                    merged_by = "close"
+                else:
+                    # The orchestrator merged it by hand — the documented flow merges, then gates, then
+                    # hands. The base's HEAD is then somebody else's merge, so the lane's own merge is the
+                    # first merge commit on the ancestry path from its branch to the base. Measured: three
+                    # lanes closed after one manual merge pass all recorded the LAST lane's merge sha and
+                    # its subject, so a receipt named a commit that carried another lane's work.
+                    merged_by = "orchestrator"
+                if rc_merged == 0:
+                    _, first, _ = _git(repo, "rev-list", "--ancestry-path", "--merges", "--reverse",
+                                       f"{branch}..{default}")
+                    at = (first or "").strip().splitlines()[0].strip() if (first or "").strip() else ""
+                    rc_s, sha, _ = _git(repo, "rev-parse", at) if at else (1, "", "")
+                else:
+                    rc_s, sha, _ = _git(repo, "rev-parse", default)
                 if rc_s == 0:
                     merged_sha = sha
                     _, subject, _ = _git(repo, "log", "-1", "--format=%s", sha)
@@ -1452,7 +1467,12 @@ def close_lanes(argv: list) -> int:
         record["closed_at"] = int(time.time())
         record["closed_reason"] = reason
         if merged_sha:
-            files, added, removed = _shortstat(repo, merged_sha)
+            # The range is the lane's own work: from the commit it was cut from to the tip of ITS branch.
+            # The merge commit is not that tip — a sibling merged in the same pass sits inside
+            # `base_sha..merge`, and one measured lane counted its neighbour's file that way.
+            rc_t, tip, _ = _git(repo, "rev-parse", "--verify", "--quiet", branch)
+            files, added, removed = _shortstat(
+                repo, tip if (rc_t == 0 and tip) else merged_sha, base=str(record.get("base_sha") or ""))
             record.update({
                 "merge_sha": merged_sha,
                 "merge_subject": merged_subject,
@@ -1460,6 +1480,7 @@ def close_lanes(argv: list) -> int:
                 "merge_files": files,
                 "merge_insertions": added,
                 "merge_deletions": removed,
+                "merged_by": merged_by,
             })
         lane_dir.mkdir(parents=True, exist_ok=True)
         (lane_dir / "lane.json").write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -1479,6 +1500,9 @@ def close_lanes(argv: list) -> int:
             "merge_insertions": record.get("merge_insertions", 0),
             "merge_deletions": record.get("merge_deletions", 0),
             "base": default,
+            # Who merged it: `close` when this verb did, `orchestrator` when the branch was already an
+            # ancestor. A receipt that names a merge commit gives no clue otherwise.
+            "merged_by": merged_by or record.get("merged_by") or "",
             # The bill dies with the lane: `close` deletes the record and the pi session, so the receipt
             # is the only place left to say what the lane cost. Measured: after a close, the spend was
             # unrecoverable and a run could not be totalled.
