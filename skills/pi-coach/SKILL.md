@@ -1,7 +1,7 @@
 ---
 name: pi-coach
 description: "Use when running pi lanes, on pi or on pf (durable)."
-version: 3.23.0
+version: 3.23.1
 author: Jarvis (Hermes Agent)
 license: MIT
 platforms: [linux, macos]
@@ -276,6 +276,17 @@ pi-lane <lane> "<task>" --repo <path> --executor pf     # pi-durable through `pf
   `pi-lane close` (`usage`, `review_usage`, `cost_usd`, `result_status`, `review_p0/p1`, `autonomy`,
   `holdout`, `mutation`, `acs_check`). A verb that reads receipts must keep working for both halves;
   `test/receipt.sh <lane> <repo>` proves it on a real cycle.
+- **The layer lives in three copies, and the panel runs the one nobody edits.** The repository build
+  (`~/work/pi-team/runner/pi-lane`), `~/.hermes/scripts/pi-lane` (what `pi-lane` on PATH resolves to),
+  and the installed plugin's `runner/pi-lane` (what the backend spawns for a lane opened from the panel).
+  Measured: all three held different bytes — 17.11, 15.11 and 13.11 — so the panel ran three days of
+  fixes behind the shell. After any runner change: `python3 runner/build.py`, `install -m 755` the build
+  into both live copies, compare `md5sum` of the three, restart `hermes-serve`, then check the route
+  answers (`/api/plugins/pi-team/lanes` returning `401` means the mount is alive).
+- **The plugin's Python and its desktop file are a fourth and fifth copy.** `plugin_api.py` and
+  `plugin.js` in `~/.hermes/plugins/pi-team/` and `~/.hermes/desktop-plugins/pi-team/` fall behind the
+  repository too. Sync the runner without asking — a stale runner is a defect. Leave the API and the
+  panel file to Ilja: they change what he sees.
 
 ## Lane: wait
 
