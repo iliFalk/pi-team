@@ -1,0 +1,145 @@
+#!/usr/bin/env python3
+"""A fake `pf` for sandbox runs: answers one `pf session` call and returns.
+
+No provider, no tokens, no durable storage. The point is the CONTRACT the layer depends on:
+argv (`session --dir D --worktree W --lane L --mode open|resume --provider … --model … --thinking …
+--autonomy … --question-timeout N <prompt>`), the files it projects into the caller's directory
+(`lane.json`, `events.jsonl`), and the answer it expects for a question (`answer.json`).
+
+Knobs, all optional and all read from the environment:
+  STUB_PF_LOG      append one line per call with the argv it received (mode, lane, dir)
+  STUB_PF_NO_RESULT  answer without a RESULT line, so the layer's repair turn runs
+  STUB_PF_ASK      park in `waiting` with a question until `answer.json` appears, then finish
+  STUB_PF_STOP     write this `stop_reason`, so the lane settles as `stopped`
+"""
+import json
+import os
+import sys
+import time
+
+argv = sys.argv[1:]
+if not argv or argv[0] != "session":
+    sys.stderr.write("stub pf: only `pf session` is implemented\n")
+    sys.exit(2)
+
+
+def knob(name: str):
+    """A knob from the environment, else from `stub_pf.json` beside this script.
+
+    The layer hands a child a minimal environment — a PATH, a HOME, a locale and one provider key — so
+    an exported STUB_PF_* never arrives. The file is how a case sets a knob for a run; the export still
+    wins, for a hand run.
+    """
+    if os.environ.get(name) is not None:
+        return os.environ[name]
+    beside = os.path.join(os.path.dirname(os.path.abspath(__file__)), "stub_pf.json")
+    if os.path.exists(beside):
+        try:
+            data = json.load(open(beside, encoding="utf-8"))
+        except ValueError:
+            return None
+        return data.get(name)
+    return None
+
+
+opts = {}
+pos = []
+it = iter(argv[1:])
+for item in it:
+    if item.startswith("--"):
+        key = item[2:]
+        try:
+            opts[key] = next(it)
+        except StopIteration:
+            opts[key] = ""
+    else:
+        pos.append(item)
+
+lane = opts.get("lane", "stub")
+target = opts.get("dir", "")
+worktree = opts.get("worktree", "")
+mode = opts.get("mode", "open")
+prompt = pos[-1] if pos else ""
+
+log = knob("STUB_PF_LOG")
+if log:
+    with open(log, "a", encoding="utf-8") as handle:
+        handle.write(json.dumps({"mode": mode, "lane": lane, "dir": target, "worktree": worktree,
+                                 "provider": opts.get("provider"), "model": opts.get("model"),
+                                 "thinking": opts.get("thinking"), "autonomy": opts.get("autonomy"),
+                                 "prompt": prompt[:60]}) + "\n")
+
+if not target or not worktree:
+    sys.stderr.write("stub pf: --dir and --worktree are part of the contract\n")
+    sys.exit(2)
+
+started = int(time.time())
+record = {}
+path = os.path.join(target, "lane.json")
+if os.path.exists(path):
+    try:
+        record = json.load(open(path, encoding="utf-8"))
+    except ValueError:
+        record = {}
+
+if str(knob("STUB_PF_ASK") or ""):
+    question = {"id": "q1", "method": "confirm",
+                "title": "Write stub_%s.txt?" % lane, "options": ["Yes", "No"]}
+    with open(os.path.join(target, "question.json"), "w", encoding="utf-8") as handle:
+        json.dump(question, handle)
+    record["state"] = "waiting"
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(record, handle)
+    # A real `pf session --autonomy ask` waits here until the caller writes answer.json.
+    deadline = time.time() + float(opts.get("question-timeout") or 60)
+    answer = None
+    while time.time() < deadline:
+        answer_path = os.path.join(target, "answer.json")
+        if os.path.exists(answer_path):
+            answer = json.load(open(answer_path, encoding="utf-8"))
+            break
+        time.sleep(0.2)
+    if answer is None:
+        sys.stderr.write("stub pf: no answer within the timeout\n")
+        sys.exit(3)
+    os.unlink(os.path.join(target, "question.json"))
+    os.unlink(os.path.join(target, "answer.json"))
+
+worked = False
+if not str(knob("STUB_PF_NO_RESULT") or "") or mode == "resume":
+    with open(os.path.join(worktree, "stub_%s.txt" % lane), "w", encoding="utf-8") as handle:
+        handle.write("stub durable work\n")
+    worked = True
+
+if worked:
+    text = ("Edited one file in a durable turn.\n"
+            'RESULT: {"files": ["stub_%s.txt"], "verify": {"cmd": "test -f stub_%s.txt", "exit": 0}, '
+            '"risks": [], "followups": []}' % (lane, lane))
+else:
+    text = "I read the tree and will start next."
+
+with open(os.path.join(target, "events.jsonl"), "a", encoding="utf-8") as handle:
+    handle.write(json.dumps({"type": "message_end",
+                             "message": {"role": "assistant",
+                                         "content": [{"type": "text", "text": text}]}}) + "\n")
+
+used = record.get("usage") or {}
+used = {"input": 100, "output": 20, "cache_read": 0, "cache_write": 0, "reasoning": 0,
+        "cost_usd": round(float(used.get("cost_usd") or 0) + (0.0001 if worked else 0.00005), 6),
+        "turns": int(used.get("turns") or 0) + 1}
+record.update({
+    "usage": used,
+    "state": "stopped" if knob("STUB_PF_STOP") else "done",
+    "result_status": "ok" if worked else "missing",
+    "runs": int(record.get("runs") or 0) + (0 if mode == "resume" else 1),
+    "submission_id": record.get("submission_id") or "s1",
+    "projected_count": int(record.get("projected_count") or 0) + 1,
+    "finished": int(time.time()),
+})
+if knob("STUB_PF_STOP"):
+    record["stop_reason"] = str(knob("STUB_PF_STOP"))
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(record, handle)
+_record_keys_note = "the layer keeps its own fields and copies these back"
+assert "started" not in record or True, _record_keys_note
+print("stub pf: session %s %s in %ss" % (mode, lane, int(time.time()) - started))

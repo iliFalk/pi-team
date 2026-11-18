@@ -37,8 +37,13 @@ them; the panel draws empty nodes.
 
 `pi-lane close` appends one line per lane to `$HERMES_HOME/lanes/closed.jsonl` and deletes the record, the
 worktree and the lane's pi session. That line therefore carries what would otherwise die: `usage`,
-`review_usage`, `cost_usd`, `result_status`, `review_p0`, `review_p1`, `autonomy` beside the merge facts.
-`pi-lane ledger` reads the last twenty receipts back, so a finished run can still be totalled.
+`review_usage`, `cost_usd`, `result_status`, `review_p0`, `review_p1`, `autonomy`, and the verdicts
+`holdout`, `mutation`, `acs_check`, beside the merge facts. `pi-lane ledger` reads the last twenty
+receipts back, so a finished run can still be totalled.
+
+The durable executor writes the same line: `pf close` carries the same eleven fields since the parity
+pass, so a run of either kind is totalled by the same reader. The parity contract, and which half owns
+which verb, is in `~/work/pi-factory/README.md` §Parity with pi-team.
 
 ## The eval store
 
@@ -163,6 +168,11 @@ then run `python3 runner/build.py`. The built file is what the backend runs, fro
 `python3 runner/build.py --check` fails when the built file is older than the parts, and it runs in the
 pre-ship list below. The parts hold: constants, store and records, text parsing, the critic, lane facts
 and blockers, the run loop, lifecycle verbs, the gate, reading verbs, opening a lane, and `main` last.
+
+The zero-dollar cases live in `runner/sandbox/`: `case-plan-gate.sh`, `case-spec.sh`, and
+`case-executor-pf.sh` — the last one drives `--executor pf` against a stub `pf` (argv contract, the
+fields copied back from the executor, the repair turn, a question and its answer, `stop_reason`,
+`--mode resume`). A change to the executor path is proven there, never with a paid lane.
 
 ## Checks
 
