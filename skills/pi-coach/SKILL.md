@@ -39,6 +39,7 @@ Depth lives beside this file, and each is read only when a step names it:
 | `references/pitfalls.md` | something does not behave, or a runner/route change is planned |
 | `references/specs.md` | the spec-graph and todos tools are wanted |
 | `references/pi-rpc-protocol.md` | the RPC wire format matters; probe is `scripts/probe-rpc-question.py` |
+| `references/executor-providers.md` | a lane must run on a provider only one half knows, or on a local server |
 
 ## Before the first lane
 
@@ -67,6 +68,12 @@ Two rules make that loading work, and both were learned from a lane that died wi
 - **One key present is not all keys present.** Never return early because some known key is already
   exported: a gateway exports the one key its own provider needs, so a lane for a second provider found
   `NVIDIA_API_KEY`, skipped the file, and started with nothing. The file is always read.
+- **A lane opened from a plain shell has no secret scope.** `agent.secret_scope.get_secret` needs the
+  `agent` package, which a shell outside a Hermes turn does not carry; the loader then returned no key and
+  `pi` answered `No API key found for opencode-go` while the key sat in `~/.hermes/.env`. Measured: two
+  lanes, 25 minutes each, with two events and no work. The loader now falls back to reading
+  `<HERMES_HOME>/.env` by name. After any lane that just sits there, read its `events.jsonl` first — a
+  provider error is the first line, and the record's `running` says nothing.
 - **Hermes and pi spell one key differently.** `OPENCODE_GO_API_KEY` in `.env` is `OPENCODE_API_KEY` to
   `pi`, so a complete environment still answers `credentials_not_configured`. Keep the alias table in
   the runner and apply it after every load.
@@ -289,6 +296,12 @@ pi-lane <lane> "<task>" --repo <path> --executor pf     # pi-durable through `pf
   fixes behind the shell. After any runner change: `python3 runner/build.py`, `install -m 755` the build
   into both live copies, compare `md5sum` of the three, restart `hermes-serve`, then check the route
   answers (`/api/plugins/pi-team/lanes` returning `401` means the mount is alive).
+- **The two halves read different provider catalogs.** `pi` reads `~/.pi/agent/models.json`; `pf` builds
+  its list from `builtinModels()` and sees nothing else, so `--provider <custom>` opens a lane whose model
+  never resolves (`Model … is not available`, `no_model`) while the same provider answers in `pi`. The fix
+  is a loader in `pf` that registers every provider of that file — code shape, the `ProviderAuth` nesting
+  trap and the model-id trap are in `references/executor-providers.md`. A local OpenAI-compatible server is
+  reachable this way and only this way.
 - **The plugin's Python and its desktop file are a fourth and fifth copy.** `plugin_api.py` and
   `plugin.js` in `~/.hermes/plugins/pi-team/` and `~/.hermes/desktop-plugins/pi-team/` fall behind the
   repository too. Sync the runner without asking — a stale runner is a defect. Leave the API and the
@@ -478,6 +491,13 @@ Every automatic answer is one line in `thread.jsonl` and adds to `auto_answers` 
 replaces a person: the caps, the critic at `hand`, the gate in the merged tree and `dry-merge`. With
 `auto` on, `pi-lane gate` and a clean `REVIEW` are the only things between a lane and the main branch.
 
+**The destructive matcher matches whole words, never substrings.** A substring list over the tool text
+refuses ordinary work: `tokenize.ts` contains `token`, `assert on rm ` matched a path, and one measured
+lane took ten `auto-refused` answers in a row and produced nothing while the provider was healthy. Match
+`DESTRUCTIVE_PATTERNS` on word boundaries, and treat credential words as destructive only in assignment
+shape (`api_key=`), or every file named after a token is refused. A refusal also voids the run's numbers:
+killed and reopened, the arm pays twice and its transcript no longer matches its bill.
+
 ## Lane: questions and the files
 
 A waiting lane blocks until `answer.json` appears: `{"id": "<from question.json>", "value": "<option exactly as pi sent it>"}`, or `{"id": …, "cancelled": true}` to skip. Only `select`, `confirm`,
@@ -556,8 +576,20 @@ repair rounds went with it.
 
 `pi-lane eval add <name> --task-file <path> --gate "<cmd>" [--seed <dir>]` stores a case: the task in
 full, the commands that decide pass, and an optional starting tree. `pi-lane eval run <name> --model M
---provider P` opens one lane on a fresh copy, runs the case's gates in that tree, and appends a row with
-wall time, tokens, money and every gate's exit code. `pi-lane eval table [name]` prints the rows.
+--provider P [--executor pi|pf]` opens one lane on a fresh copy, runs the case's gates in that tree, and
+appends a row with wall time, tokens, money and every gate's exit code. `pi-lane eval table [name]` prints
+the rows.
+
+- **The gate is a script inside the seed, not a command line.** Put `gates/check.sh` in the seed and
+  register `--gate "bash gates/check.sh"`: the same file then decides every arm, including an arm started
+  from a fresh clone, and a gate that needs an installed tool behaves the same on both. A gate command
+  written inline drifts between arms and its failure reads like a code defect.
+- **A case is a fixture, not a run.** Give it its own repository (`~/work/bench-<case>`) with its tests,
+  a contract file and a spec, and clone it per arm. A case that sits inside a real project measures that
+  project's history instead of the model.
+- **A slice that fits in three clean functions measures latency, not capability.** Two arms closed it with
+the same green gate and the same mutation score; the only difference was 714 s against 60 s. Raise the
+stakes with a seam between modules, state that outlives one call, or an edge the rules do not cover.
 
 Use it before claiming that a model, a brief or a prompt change helps: one task, one row per variant,
 the same gates. Rows are evidence; a bench table built by hand was wrong twice — once because the lane's
@@ -823,6 +855,11 @@ templates with it, and say how far the line count moved.
 - **A stale stub runner resurrects its record.** A killed sandbox lane that is still alive keeps rewriting
   `lane.json` by path, so the next case run reads `running` after a clean `done`. Kill the stub processes
   before wiping a sandbox `HERMES_HOME`, or the case answers for the previous run.
+
+- **Kill a server by its pid from the port, never by a pattern.** `pkill -f "PORT=3057"` also matches the
+  shell that is running the command, so the call dies with `SIGTERM` and the shell's own exit code hides
+  what happened. Read the pid with `ss -ltnp | grep ':3057'`, then `kill <pid>` — a pattern that appears in
+  your own command line is a pattern that kills you.
 
 The rest — runner edits, route testing, panel rendering, shipping to another machine — is in
 `references/pitfalls.md`.
