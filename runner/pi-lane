@@ -37,10 +37,26 @@ from typing import NoReturn
 
 DIALOG_METHODS = {"select", "confirm", "input", "editor"}
 # A confirmation that names one of these is refused without a person, even in autonomous mode.
-DESTRUCTIVE_WORDS = (
-    "rm -rf", "rm ", "delete", "drop table", "drop ", "force", "--hard", "push",
-    "truncate", "credential", "secret", "token", "password", "chmod 777", "sudo ",
+# Commands that must never run unattended, matched as whole words. The first list was plain
+# substrings, so `token` matched `src/text/tokenize.ts` and `rm ` matched any command that carried
+# those two letters: measured, one lane lost ten tool calls to false refusals while it wrote a file
+# called tokenize.ts. A credential word now has to look like an assignment.
+DESTRUCTIVE_PATTERNS = (
+    r"\brm\s+(-\w+\s+)*\S", r"\brmdir\b", r"\bdelete\b",
+    r"\bdrop\s+(table|database|collection)\b", r"\btruncate\b", r"--force\b", r"--hard\b",
+    r"\bgit\s+push\b", r"\bchmod\s+777\b", r"\bsudo\b",
+    r"\b(password|secret|api[_-]?key|token)\s*[:=]\s*[\"']?[\w\-]{8,}",
 )
+DESTRUCTIVE_RE = tuple(re.compile(pattern, re.IGNORECASE) for pattern in DESTRUCTIVE_PATTERNS)
+
+
+def destructive_word(text: str) -> str:
+    """The text that made a dialog destructive, or an empty string."""
+    for pattern in DESTRUCTIVE_RE:
+        hit = pattern.search(text or "")
+        if hit:
+            return hit.group(0)
+    return ""
 POLL_SECONDS = 0.3
 ENV_KEYS = (
     "NVIDIA_API_KEY",
@@ -159,12 +175,30 @@ def load_provider_key(provider: str) -> None:
     if not name or (os.environ.get(name) or "").strip():
         apply_aliases()
         return
+    value = ""
     try:
         from agent.secret_scope import get_secret
 
         value = (get_secret(name) or "").strip()
     except Exception:
         value = ""
+    if not value:
+        # The secret scope needs the `agent` package, which a plain shell does not carry: a lane opened
+        # from outside a Hermes turn then started `pi` with no key and answered "No API key found for
+        # opencode-go" while the key sat in the profile file. Measured 2026-11-18, two lanes lost 25
+        # minutes each. The file is read when the scope cannot answer.
+        env_file = hermes_home() / ".env"
+        try:
+            for line in env_file.read_text(encoding="utf-8", errors="replace").splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, raw = line.split("=", 1)
+                if key.strip() == name:
+                    value = raw.strip().strip('"').strip("'")
+                    break
+        except OSError:
+            value = ""
     if value:
         os.environ[name] = value
     apply_aliases()
@@ -690,7 +724,7 @@ def auto_answer(question: dict) -> tuple:
         pick = options[0] if options else ""
         return {"value": pick}, f"first option: {pick or '(none offered)'}"
     if method == "confirm":
-        if any(word in text for word in DESTRUCTIVE_WORDS):
+        if destructive_word(text):
             nope = next((o for o in options if o.strip().lower() in ("no", "cancel", "abort")), "")
             return {"value": nope or "No"}, "refused — the dialog names a destructive action"
         yes = next((o for o in options if o.strip().lower() in ("yes", "ok", "continue", "allow")), "")
@@ -2278,6 +2312,8 @@ def eval_run(argv: list) -> int:
     parser.add_argument("--thinking", default="low")
     parser.add_argument("--root", default=str(Path.home() / "work" / "eval"))
     parser.add_argument("--max-usd", type=float, default=0.0)
+    parser.add_argument("--executor", choices=("pi", "pf"), default="pi",
+                        help="which process runs the model turn; the case and its gates do not change")
     parser.add_argument("--keep", action="store_true", help="keep the lane record and its worktree")
     args = parser.parse_args(argv)
     cases = _eval_cases()
@@ -2304,7 +2340,7 @@ def eval_run(argv: list) -> int:
     lane = f"eval-{args.name}-{model_slug}"[:56]
     open_argv = [lane, str(case.get("task") or ""), "--repo", str(repo),
                  "--model", args.model, "--provider", args.provider, "--thinking", args.thinking,
-                 "--autonomy", "auto"]
+                 "--autonomy", "auto", "--executor", args.executor]
     if args.max_usd:
         open_argv += ["--max-usd", str(args.max_usd)]
     started = time.time()
@@ -2327,6 +2363,7 @@ def eval_run(argv: list) -> int:
         "model": args.model,
         "provider": args.provider,
         "thinking": args.thinking,
+        "executor": args.executor,
         "at": int(time.time()),
         "wall_seconds": wall,
         "tokens": {key: usage.get(key) for key in ("input", "output", "cache_read", "turns")},

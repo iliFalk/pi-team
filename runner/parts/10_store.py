@@ -31,12 +31,30 @@ def load_provider_key(provider: str) -> None:
     if not name or (os.environ.get(name) or "").strip():
         apply_aliases()
         return
+    value = ""
     try:
         from agent.secret_scope import get_secret
 
         value = (get_secret(name) or "").strip()
     except Exception:
         value = ""
+    if not value:
+        # The secret scope needs the `agent` package, which a plain shell does not carry: a lane opened
+        # from outside a Hermes turn then started `pi` with no key and answered "No API key found for
+        # opencode-go" while the key sat in the profile file. Measured 2026-11-18, two lanes lost 25
+        # minutes each. The file is read when the scope cannot answer.
+        env_file = hermes_home() / ".env"
+        try:
+            for line in env_file.read_text(encoding="utf-8", errors="replace").splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, raw = line.split("=", 1)
+                if key.strip() == name:
+                    value = raw.strip().strip('"').strip("'")
+                    break
+        except OSError:
+            value = ""
     if value:
         os.environ[name] = value
     apply_aliases()
